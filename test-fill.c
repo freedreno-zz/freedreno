@@ -29,8 +29,6 @@ void exit(int status);
 int printf(const char *,...);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
-//void free(void *ptr);
-//void *realloc(void *ptr, size_t size);
 
 /*****************************************************************************/
 
@@ -43,6 +41,17 @@ void *malloc(size_t size);
 		do { printf("ERROR: %s:%d: " fmt "\n", \
 				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
 
+#define CHK(x) do { \
+		C2D_STATUS status; \
+		DEBUG_MSG(">>> %s", #x); \
+		status = x; \
+		if (status) { \
+			ERROR_MSG("<<< %s: failed: %d", #x, status); \
+			exit(-1); \
+		} \
+		DEBUG_MSG("<<< %s: succeeded", #x); \
+	} while (0)
+
 typedef enum {
 	TRUE = 1,
 	FALSE = 0,
@@ -50,73 +59,63 @@ typedef enum {
 #define NULL (void *)0
 
 typedef struct {
-	int width, height, pitch;
+	C2D_RGB_SURFACE_DEF def;
+	int width, height, pitch, id;
 	void *ptr;
 } Pixmap, *PixmapPtr;
 
-C2D_STATUS
-c2d2_create_rgb_surface(PixmapPtr pixmap, unsigned int *id)
-{
-	C2D_RGB_SURFACE_DEF def = {
-			.format = C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA,
-			.width = pixmap->width,
-			.height = pixmap->height,
-			.buffer = pixmap->ptr,
-			.phys = NULL,
-			.stride = pixmap->pitch,
-	};
-
-	return c2dCreateSurface(id, C2D_SOURCE | C2D_TARGET,
-			C2D_SURFACE_RGB_HOST,
-			&def);
-}
-
 PixmapPtr create_pixmap(int width, int height)
 {
+	int pitch = width * 4;  // XXX probably need to round up??
+	C2D_RGB_SURFACE_DEF def = {
+			.format = C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA,
+			.width  = width,
+			.height = height,
+			.buffer = malloc(pitch * height), // XXX ???,
+			.phys = NULL,
+			.stride = pitch,
+	};
 	PixmapPtr pixmap = calloc(1, sizeof *pixmap);
 	pixmap->width  = width;
 	pixmap->height = height;
-	pixmap->pitch  = width * 4; // XXX probably need to round up??
-	pixmap->ptr    = malloc(pixmap->pitch * pixmap->height); // XXX ???
+	pixmap->pitch  = pitch;
+	pixmap->ptr    = def.buffer;
+	pixmap->def    = def;
+	CHK(c2dCreateSurface(&pixmap->id, C2D_SOURCE | C2D_TARGET,
+			C2D_SURFACE_RGB_HOST, &def));
+	DEBUG_MSG("created pixmap: %p %d", pixmap, pixmap->id);
 	return pixmap;
 }
 
 void dump_pixmap(PixmapPtr pixmap, char *filename)
 {
+	CHK(c2dReadSurface(pixmap->id, C2D_SURFACE_RGB_HOST, &pixmap->def, 0, 0));
 	wrap_bmp_dump(pixmap->ptr, pixmap->pitch * pixmap->height,
 			pixmap->width, pixmap->height, filename);
 }
 
 /*****************************************************************************/
 
-#define CHK(x) do { \
-		C2D_STATUS status = x; \
-		if (status) { \
-			ERROR_MSG("%s failed: %d", #x, status); \
-			return -1; \
-		} \
-		DEBUG_MSG("%s succeeded", #x); \
-	} while (0)
-
 
 int main(int argc, char **argv)
 {
 	PixmapPtr dest = create_pixmap(64, 64);
-	int dest_id;
 	C2D_RECT rect;
 	c2d_ts_handle curTimestamp;
 
 	dump_pixmap(dest, "before.bmp");
 
-	CHK(c2d2_create_rgb_surface(dest, &dest_id));
+	// create another dummy surface, just to see what calls are only
+	// done first time..
+	create_pixmap(64, 64);
 
 	rect.x = 0;
 	rect.y = 0;
 	rect.width = 64;
 	rect.height = 64;
 
-	CHK(c2dFillSurface(dest_id, 0xff556677, &rect));
-	CHK(c2dFlush(dest_id, &curTimestamp));
+	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
+	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
 	dump_pixmap(dest, "after.bmp");

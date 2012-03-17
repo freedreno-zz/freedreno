@@ -30,18 +30,24 @@
 
 #include <stdarg.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <pthread.h>
-#include <ctype.h>
 #include <errno.h>
 
 #include "kgsl_drm.h"
 #include "msm_kgsl.h"
+
+// don't use <stdio.h> from glibc..
+struct _IO_FILE;
+typedef struct _IO_FILE FILE;
+FILE *fopen(const char *path, const char *mode);
+int fscanf(FILE *stream, const char *format, ...);
+int printf(const char *format, ...);
 
 static void *libc_dl;
 
@@ -49,8 +55,7 @@ static int libc_dlopen(void)
 {
 	libc_dl = dlopen("libc.so", RTLD_LAZY);
 	if (!libc_dl) {
-		printf("Failed to dlopen %s: %s\n",
-		       "libc.so", dlerror());
+		printf("Failed to dlopen %s: %s\n", "libc.so", dlerror());
 		exit(-1);
 	}
 
@@ -80,9 +85,106 @@ static void * libc_dlsym(const char *name)
 	if (!orig_##func)				\
 		orig_##func = libc_dlsym(#func);	\
 
-static int kgsl_fd;
+struct device_info {
+	const char *name;
+	struct {
+		const char *name;
+	} ioctl_info[_IOC_NR(0xffffffff)];
+};
 
-static void dump(const char *file)
+#define IOCTL_INFO(n) \
+		[_IOC_NR(n)] = { .name = #n }
+
+struct device_info kgsl_3d0_info = {
+		.name = "kgsl-3d0",
+		.ioctl_info = {
+				IOCTL_INFO(IOCTL_KGSL_DEVICE_GETPROPERTY),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FREE),
+		},
+};
+
+// kgsl-2d => Z180 vector graphcis core.. not sure if it is interesting..
+struct device_info kgsl_2d0_info = {
+		.name = "kgsl-2d0",
+		.ioctl_info = {
+				// XXX
+		},
+};
+
+static int kgsl_3d0, kgsl_2d0;
+
+void
+hexdump(const void *data, int size)
+{
+	unsigned char *buf = (void *) data;
+	char alpha[17];
+	int i;
+
+	for (i = 0; i < size; i++) {
+		if (!(i % 16))
+			printf("\t\t%08X", (unsigned int) buf + i);
+
+		if (((void *) (buf + i)) < ((void *) data)) {
+			printf("   ");
+			alpha[i % 16] = '.';
+		} else {
+			printf(" %02X", buf[i]);
+
+			if (isprint(buf[i]) && (buf[i] < 0xA0))
+				alpha[i % 16] = buf[i];
+			else
+				alpha[i % 16] = '.';
+		}
+
+		if ((i % 16) == 15) {
+			alpha[16] = 0;
+			printf("\t|%s|\n", alpha);
+		}
+	}
+
+	if (i % 16) {
+		for (i %= 16; i < 16; i++) {
+			printf("   ");
+			alpha[i] = '.';
+
+			if (i == 15) {
+				alpha[16] = 0;
+				printf("\t|%s|\n", alpha);
+			}
+		}
+	}
+}
+
+
+static void dump_ioctl(struct device_info *info, int dir,
+		unsigned long int request, void *ptr, int ret)
+{
+	int nr = _IOC_NR(request);
+	int sz = _IOC_SIZE(request);
+	char c;
+	const char *name;
+
+	if (dir == _IOC_READ)
+		c = '<';
+	else
+		c = '>';
+
+	if (info->ioctl_info[nr].name)
+		name = info->ioctl_info[nr].name;
+	else
+		name = "<unknown>";
+
+	printf("%12s: %c %s (%08lx)", info->name, c, name, request);
+	if (dir == _IOC_READ)
+		printf(" => %d", ret);
+	printf("\n");
+
+	if (dir & _IOC_DIR(request))
+		hexdump(ptr, sz);
+}
+
+static void dumpfile(const char *file)
 {
 	char buf[1024];
 	int fd = open(file, 0);
@@ -99,17 +201,6 @@ int open(const char* path, int flags, ...)
 	int ret;
 	PROLOG(open);
 
-	if (!strcmp(path, "/dev/kgsl-3d0")) {
-		/* emulated */
-		ret = kgsl_fd = orig_open("/tmp/foo", O_CREAT, 0644);
-		printf("found kgsl: %d\n", kgsl_fd);
-		return ret;
-	} else if (!strcmp(path, "/dev/kgsl-2d0")) {
-		// ???
-	} else if (!strcmp(path, "/dev/pmem_gpu1")) {
-		// ???
-	}
-
 	if (flags & O_CREAT) {
 		va_list  args;
 
@@ -122,8 +213,18 @@ int open(const char* path, int flags, ...)
 		ret = orig_open(path, flags);
 	}
 
-	if (ret < 0 && strstr(path, "/dev/")) {
-		printf("missing device, path: %s\n", path);
+	if (!strcmp(path, "/dev/kgsl-3d0")) {
+		kgsl_3d0 = ret;
+		printf("found kgsl_3d0: %d\n", kgsl_3d0);
+	} else if (!strcmp(path, "/dev/kgsl-2d0")) {
+		kgsl_2d0 = ret;
+		printf("found kgsl_2d0: %d\n", kgsl_2d0);
+#if 0
+	} else if (!strcmp(path, "/dev/pmem_gpu1")) {
+		// ???
+#endif
+	} else if (strstr(path, "/dev/")) {
+		printf("#### missing device, path: %s\n", path);
 	}
 
 	return ret;
@@ -176,94 +277,94 @@ static long kgsl_ioctl_device_getproperty(void *data)
 	return result;
 }
 
-static long kgsl_ioctl_sharedmem_from_vmalloc(void *data)
+static int len_from_vma(unsigned int hostptr)
 {
-	struct kgsl_sharedmem_from_vmalloc *param = data;
+	long long addr, endaddr, offset, inode;
+	FILE *f;
+	int ret;
+
+	// TODO: only for debug..
+	if (0)
+		dumpfile("/proc/self/maps");
+
+	f = fopen("/proc/self/maps", "r");
+
+	do {
+		char c;
+		ret = fscanf(f, "%llx-%llx", &addr, &endaddr);
+		if (addr == hostptr)
+			return endaddr - addr;
+		/* find end of line.. we could do this more cleverly w/ glibc.. :-( */
+		while (((ret = fscanf(f, "%c", &c)) > 0) && (c != '\n'));
+	} while (ret > 0);
+	return -1;
+}
+
+static void kgsl_ioctl_sharedmem_from_vmalloc_pre(
+		struct kgsl_sharedmem_from_vmalloc *param)
+{
+	int len;
+
 	/* just make gpuaddr == hostptr.. should make it easy to track */
-	printf("flags=%08x, hostptr=%08x len=%d (?)\n",
-			param->flags, param->hostptr, param->gpuaddr);
-	/* note: if gpuaddr not specified, need to figure out length from
-	 * vma.. that is nasty!
-	 */
-//	dump("/proc/self/maps");
-//	int spin = 1;
-//	while (spin);
-	/*
-0x800008d0 in kgsl_ioctl_sharedmem_from_vmalloc (data=0xbe9ce1ec) at wrap.c:182
-182		while (spin);
-(gdb) bt
-#0  0x800008d0 in kgsl_ioctl_sharedmem_from_vmalloc (data=0xbe9ce1ec) at wrap.c:182
-#1  0x80000972 in kgsl_ioctl (request=3222014243, ptr=0xbe9ce1ec) at wrap.c:203
-#2  0x80000a24 in ioctl (fd=3, request=3222014243) at wrap.c:229
-#3  0x80204024 in ?? ()   <== libgsl.so on 1st call..
-Cannot access memory at address 0x0
-#4  0x80204024 in ?? ()
-Cannot access memory at address 0x0
---------
-00008000-00009000 r-xp 00000000 08:01 31180347   /home/robclark/src/blob/msm/test
-00010000-00011000 rw-p 00000000 08:01 31180347   /home/robclark/src/blob/msm/test
-01350000-01355000 rw-p 00000000 00:00 0          [heap]
-80000000-80001000 r-xp 00000000 08:01 31180348   /home/robclark/src/blob/msm/wrap.so
-80001000-80008000 r-xp 00000000 00:00 0
-80008000-80009000 rw-p 00000000 08:01 31180348   /home/robclark/src/blob/msm/wrap.so
-80100000-8010a000 r-xp 00000000 08:01 85844672   /system/lib/libC2D2.so
-8010a000-8010b000 rw-p 0000a000 08:01 85844672   /system/lib/libC2D2.so
-80200000-8020a000 r-xp 00000000 08:01 85844834   /system/lib/libgsl.so
-8020a000-8020b000 rw-p 0000a000 08:01 85844834   /system/lib/libgsl.so
-80300000-8033d000 r-xp 00000000 08:01 85844767   /system/lib/libOpenVG.so
-8033d000-8033e000 rw-p 0003d000 08:01 85844767   /system/lib/libOpenVG.so
-9d100000-9d138000 r-xp 00000000 08:01 85844745   /system/lib/libstlport.so
-9d138000-9d13a000 rw-p 00038000 08:01 85844745   /system/lib/libstlport.so
-af900000-af90e000 r-xp 00000000 08:01 85844814   /system/lib/libcutils.so
-af90e000-af90f000 rw-p 0000e000 08:01 85844814   /system/lib/libcutils.so
-af90f000-af91e000 rw-p 00000000 00:00 0
-afa00000-afa03000 r-xp 00000000 08:01 85844806   /system/lib/liblog.so
-afa03000-afa04000 rw-p 00003000 08:01 85844806   /system/lib/liblog.so
-afb00000-afb16000 r-xp 00000000 08:01 85844808   /system/lib/libm.so
-afb16000-afb17000 rw-p 00016000 08:01 85844808   /system/lib/libm.so
-afc00000-afc01000 r-xp 00000000 08:01 85844673   /system/lib/libstdc++.so
-afc01000-afc02000 rw-p 00001000 08:01 85844673   /system/lib/libstdc++.so
-afd00000-afd41000 r-xp 00000000 08:01 85844741   /system/lib/libc.so
-afd41000-afd44000 rw-p 00041000 08:01 85844741   /system/lib/libc.so
-afd44000-afd4f000 rw-p 00000000 00:00 0
-b0001000-b0009000 r-xp 00001000 08:01 85844129   /system/bin/linker
-b0009000-b000a000 rw-p 00009000 08:01 85844129   /system/bin/linker
-b000a000-b0015000 rw-p 00000000 00:00 0
-b6ff6000-b6ff7000 rw-s 00000000 00:04 2241036    /dev/zero (deleted)
-b6ff7000-b6ff8000 r--p 00000000 00:00 0
-be9ae000-be9cf000 rw-p 00000000 00:00 0          [stack]
-ffff0000-ffff1000 r-xp 00000000 00:00 0          [vectors]
-
-	 */
-	param->gpuaddr = param->hostptr;
-	return 0;
+	printf("\t\tflags:\t\t%08x\n", param->flags);
+	printf("\t\thostptr:\t%08x\n", param->hostptr);
+	if (param->gpuaddr) {
+		len = param->gpuaddr;
+	} else {
+		/* note: if gpuaddr not specified, need to figure out length from
+		 * vma.. that is nasty!
+		 */
+		len = len_from_vma(param->hostptr);
+	}
+	printf("\t\tlen:\t\t%08x\n", len);
 }
 
-static long kgsl_ioctl_sharedmem_free(void *data)
+static void kgsl_ioctl_sharedmem_from_vmalloc_post(
+		struct kgsl_sharedmem_from_vmalloc *param)
 {
-	struct kgsl_sharedmem_free *param = data;
-	printf("gpuaddr=%08x\n", param->gpuaddr);
-	return 0;
+	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
 }
 
-int kgsl_ioctl(unsigned long int request, void *ptr)
+static void kgsl_ioctl_sharedmem_free(struct kgsl_sharedmem_free *param)
 {
-	printf("kgsl ioctl: %08lx\n", request);
+	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
+}
+
+void kgsl_3d0_ioctl_pre(unsigned long int request, void *ptr)
+{
+	dump_ioctl(&kgsl_3d0_info, _IOC_WRITE, request, ptr, 0);
 	switch(_IOC_NR(request)) {
-	case _IOC_NR(IOCTL_KGSL_DEVICE_GETPROPERTY):
-		printf("found: IOCTL_KGSL_DEVICE_GETPROPERTY(%p)\n", ptr);
-		return kgsl_ioctl_device_getproperty(ptr);
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
-		printf("found: IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC(%p)\n", ptr);
-		return kgsl_ioctl_sharedmem_from_vmalloc(ptr);
+		kgsl_ioctl_sharedmem_from_vmalloc_pre(ptr);
+		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FREE):
 		printf("found: IOCTL_KGSL_SHAREDMEM_FREE(%p)\n", ptr);
-		return kgsl_ioctl_sharedmem_free(ptr);
-	default:
-		printf("found ioctl: %08lx %p\n", request, ptr);
+		kgsl_ioctl_sharedmem_free(ptr);
 		break;
 	}
-	return -1;
+}
+
+void kgsl_3d0_ioctl_post(unsigned long int request, void *ptr, int ret)
+{
+	dump_ioctl(&kgsl_3d0_info, _IOC_READ, request, ptr, ret);
+	switch(_IOC_NR(request)) {
+	case _IOC_NR(IOCTL_KGSL_DEVICE_GETPROPERTY):
+		kgsl_ioctl_device_getproperty(ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
+		kgsl_ioctl_sharedmem_from_vmalloc_post(ptr);
+		break;
+	}
+}
+
+void kgsl_2d0_ioctl_pre(unsigned long int request, void *ptr)
+{
+	dump_ioctl(&kgsl_2d0_info, _IOC_WRITE, request, ptr, 0);
+}
+
+void kgsl_2d0_ioctl_post(unsigned long int request, void *ptr, int ret)
+{
+	dump_ioctl(&kgsl_2d0_info, _IOC_READ, request, ptr, ret);
 }
 
 int ioctl(int fd, unsigned long int request, ...)
@@ -271,25 +372,29 @@ int ioctl(int fd, unsigned long int request, ...)
 	int ioc_size = _IOC_SIZE(request);
 	int ret;
 	PROLOG(ioctl);
+	void *ptr;
 
 	if (ioc_size) {
 		va_list args;
-		void *ptr;
 
 		va_start(args, request);
 		ptr = va_arg(args, void *);
 		va_end(args);
-
-		if (fd == kgsl_fd)
-			ret = kgsl_ioctl(request, ptr);
-		else
-			ret = orig_ioctl(fd, request, ptr);
 	} else {
-		if (fd == kgsl_fd)
-			ret = kgsl_ioctl(request, NULL);
-		else
-			ret = orig_ioctl(fd, request);
+		ptr = NULL;
 	}
+
+	if (fd == kgsl_3d0)
+		kgsl_3d0_ioctl_pre(request, ptr);
+	else if (fd == kgsl_2d0)
+		kgsl_2d0_ioctl_pre(request, ptr);
+
+	ret = orig_ioctl(fd, request, ptr);
+
+	if (fd == kgsl_3d0)
+		kgsl_3d0_ioctl_post(request, ptr, ret);
+	else if (fd == kgsl_2d0)
+		kgsl_2d0_ioctl_post(request, ptr, ret);
 
 	return ret;
 }
