@@ -1,0 +1,5 @@
+test-fill
+*.so
+*.o
+*.swp
+*.bmp

@@ -104,6 +104,10 @@ int open(const char* path, int flags, ...)
 		ret = kgsl_fd = orig_open("/tmp/foo", O_CREAT, 0644);
 		printf("found kgsl: %d\n", kgsl_fd);
 		return ret;
+	} else if (!strcmp(path, "/dev/kgsl-2d0")) {
+		// ???
+	} else if (!strcmp(path, "/dev/pmem_gpu1")) {
+		// ???
 	}
 
 	if (flags & O_CREAT) {
@@ -116,6 +120,10 @@ int open(const char* path, int flags, ...)
 		ret = orig_open(path, flags, mode);
 	} else {
 		ret = orig_open(path, flags);
+	}
+
+	if (ret < 0 && strstr(path, "/dev/")) {
+		printf("missing device, path: %s\n", path);
 	}
 
 	return ret;
@@ -177,7 +185,7 @@ static long kgsl_ioctl_sharedmem_from_vmalloc(void *data)
 	/* note: if gpuaddr not specified, need to figure out length from
 	 * vma.. that is nasty!
 	 */
-	dump("/proc/self/maps");
+//	dump("/proc/self/maps");
 //	int spin = 1;
 //	while (spin);
 	/*
