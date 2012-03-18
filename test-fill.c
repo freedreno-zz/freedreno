@@ -35,11 +35,11 @@ void *malloc(size_t size);
 /* split some of the utils into common file.. */
 
 #define DEBUG_MSG(fmt, ...) \
-		do { printf("%s:%d: " fmt "\n", \
-				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+		do { printf(fmt " (%s:%d)\n", \
+				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 #define ERROR_MSG(fmt, ...) \
-		do { printf("ERROR: %s:%d: " fmt "\n", \
-				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+		do { printf("ERROR: " fmt " (%s:%d)\n", \
+				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 
 #define CHK(x) do { \
 		C2D_STATUS status; \

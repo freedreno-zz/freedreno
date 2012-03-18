@@ -41,6 +41,7 @@
 
 #include "kgsl_drm.h"
 #include "msm_kgsl.h"
+#include "android_pmem.h"
 
 // don't use <stdio.h> from glibc..
 struct _IO_FILE;
@@ -95,26 +96,88 @@ struct device_info {
 #define IOCTL_INFO(n) \
 		[_IOC_NR(n)] = { .name = #n }
 
-struct device_info kgsl_3d0_info = {
-		.name = "kgsl-3d0",
+static struct device_info kgsl_3d_info = {
+		.name = "kgsl-3d",
 		.ioctl_info = {
 				IOCTL_INFO(IOCTL_KGSL_DEVICE_GETPROPERTY),
-				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC),
+				IOCTL_INFO(IOCTL_KGSL_DEVICE_WAITTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS),
+				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_READTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_CREATE),
+				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_DESTROY),
+				IOCTL_INFO(IOCTL_KGSL_MAP_USER_MEM),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FROM_PMEM),
 				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FREE),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FLUSH_CACHE),
+				IOCTL_INFO(IOCTL_KGSL_GPUMEM_ALLOC),
+				IOCTL_INFO(IOCTL_KGSL_CFF_SYNCMEM),
+				IOCTL_INFO(IOCTL_KGSL_CFF_USER_EVENT),
+				IOCTL_INFO(IOCTL_KGSL_TIMESTAMP_EVENT),
+				/* kgsl-3d specific ioctls: */
+				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET),
 		},
 };
 
 // kgsl-2d => Z180 vector graphcis core.. not sure if it is interesting..
-struct device_info kgsl_2d0_info = {
-		.name = "kgsl-2d0",
+static struct device_info kgsl_2d_info = {
+		.name = "kgsl-2d",
 		.ioctl_info = {
-				// XXX
+				IOCTL_INFO(IOCTL_KGSL_DEVICE_GETPROPERTY),
+				IOCTL_INFO(IOCTL_KGSL_DEVICE_WAITTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS),
+				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_READTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_CREATE),
+				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_DESTROY),
+				IOCTL_INFO(IOCTL_KGSL_MAP_USER_MEM),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FROM_PMEM),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FREE),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC),
+				IOCTL_INFO(IOCTL_KGSL_SHAREDMEM_FLUSH_CACHE),
+				IOCTL_INFO(IOCTL_KGSL_GPUMEM_ALLOC),
+				IOCTL_INFO(IOCTL_KGSL_CFF_SYNCMEM),
+				IOCTL_INFO(IOCTL_KGSL_CFF_USER_EVENT),
+				IOCTL_INFO(IOCTL_KGSL_TIMESTAMP_EVENT),
+				/* no kgsl-2d specific ioctls, I don't think.. */
 		},
 };
 
-static int kgsl_3d0, kgsl_2d0;
+static struct device_info pmem_info = {
+		.name = "pmem-gpu",
+		.ioctl_info = {
+				IOCTL_INFO(PMEM_GET_PHYS),
+				IOCTL_INFO(PMEM_MAP),
+				IOCTL_INFO(PMEM_GET_SIZE),
+				IOCTL_INFO(PMEM_UNMAP),
+				IOCTL_INFO(PMEM_ALLOCATE),
+				IOCTL_INFO(PMEM_CONNECT),
+				IOCTL_INFO(PMEM_GET_TOTAL_SIZE),
+				IOCTL_INFO(HW3D_REVOKE_GPU),
+				IOCTL_INFO(HW3D_GRANT_GPU),
+				IOCTL_INFO(HW3D_WAIT_FOR_INTERRUPT),
+				IOCTL_INFO(PMEM_CLEAN_INV_CACHES),
+				IOCTL_INFO(PMEM_CLEAN_CACHES),
+				IOCTL_INFO(PMEM_INV_CACHES),
+				IOCTL_INFO(PMEM_GET_FREE_SPACE),
+				IOCTL_INFO(PMEM_ALLOCATE_ALIGNED),
+		},
+};
 
-void
+static int kgsl_3d0 = -1, kgsl_2d0 = -1, kgsl_2d1 = -1, pmem_gpu0 = -1, pmem_gpu1 = -1;
+
+
+static struct device_info * get_kgsl_info(int fd)
+{
+	if ((fd == kgsl_2d0) || (fd == kgsl_2d1))
+		return &kgsl_2d_info;
+	else if (fd == kgsl_3d0)
+		return &kgsl_3d_info;
+	return NULL;
+}
+
+static void
 hexdump(const void *data, int size)
 {
 	unsigned char *buf = (void *) data;
@@ -157,7 +220,7 @@ hexdump(const void *data, int size)
 }
 
 
-static void dump_ioctl(struct device_info *info, int dir,
+static void dump_ioctl(struct device_info *info, int dir, int fd,
 		unsigned long int request, void *ptr, int ret)
 {
 	int nr = _IOC_NR(request);
@@ -175,7 +238,7 @@ static void dump_ioctl(struct device_info *info, int dir,
 	else
 		name = "<unknown>";
 
-	printf("%12s: %c %s (%08lx)", info->name, c, name, request);
+	printf("%c [%4d] %8s: %s (%08lx)", c, fd, info->name, name, request);
 	if (dir == _IOC_READ)
 		printf(" => %d", ret);
 	printf("\n");
@@ -213,68 +276,125 @@ int open(const char* path, int flags, ...)
 		ret = orig_open(path, flags);
 	}
 
-	if (!strcmp(path, "/dev/kgsl-3d0")) {
-		kgsl_3d0 = ret;
-		printf("found kgsl_3d0: %d\n", kgsl_3d0);
-	} else if (!strcmp(path, "/dev/kgsl-2d0")) {
-		kgsl_2d0 = ret;
-		printf("found kgsl_2d0: %d\n", kgsl_2d0);
-#if 0
-	} else if (!strcmp(path, "/dev/pmem_gpu1")) {
-		// ???
-#endif
-	} else if (strstr(path, "/dev/")) {
-		printf("#### missing device, path: %s\n", path);
+	if (ret != -1) {
+		if (!strcmp(path, "/dev/kgsl-3d0")) {
+			kgsl_3d0 = ret;
+			printf("found kgsl_3d0: %d\n", kgsl_3d0);
+		} else if (!strcmp(path, "/dev/kgsl-2d0")) {
+			kgsl_2d0 = ret;
+			printf("found kgsl_2d0: %d\n", kgsl_2d0);
+		} else if (!strcmp(path, "/dev/kgsl-2d1")) {
+			kgsl_2d1 = ret;
+			printf("found kgsl_2d1: %d\n", kgsl_2d1);
+		} else if (!strcmp(path, "/dev/pmem_gpu0")) {
+			pmem_gpu0 = ret;
+			printf("found pmem_gpu0: %d\n", pmem_gpu0);
+		} else if (!strcmp(path, "/dev/pmem_gpu1")) {
+			pmem_gpu1 = ret;
+			printf("found pmem_gpu1: %d\n", pmem_gpu1);
+		} else if (strstr(path, "/dev/")) {
+			printf("#### missing device, path: %s: %d\n", path, ret);
+		}
 	}
 
 	return ret;
 }
 
-static long kgsl_ioctl_device_getproperty(void *data)
+static void kgsl_ioctl_ringbuffer_issueibcmds_pre(
+		struct kgsl_ringbuffer_issueibcmds *param)
 {
-	int result = 0;
-	struct kgsl_device_getproperty *param = data;
-	switch(param->type) {
-	case KGSL_PROP_VERSION: {
-		struct kgsl_version version;
+	int i;
+	struct kgsl_ibdesc *ibdesc;
+	printf("\t\tdrawctxt_id:\t%08x\n", param->drawctxt_id);
+	/*
+#define KGSL_CONTEXT_SAVE_GMEM	1
+#define KGSL_CONTEXT_NO_GMEM_ALLOC	2
+#define KGSL_CONTEXT_SUBMIT_IB_LIST	4
+#define KGSL_CONTEXT_CTX_SWITCH	8
+#define KGSL_CONTEXT_PREAMBLE	16
 
-		printf("KGSL_PROP_VERSION\n");
+#define Z180_STREAM_PACKET_CALL 0x7C000275   <-- seems to be always first 4 bytes..
 
-		if (param->sizebytes != sizeof(version)) {
-			result = -EINVAL;
-			break;
-		}
+if there isn't a context switch, skip the first PACKETSIZE_STATESTREAM words:
 
-		version.drv_major = KGSL_VERSION_MAJOR;
-		version.drv_minor = KGSL_VERSION_MINOR;
-		version.dev_major = 1;
-		version.dev_minor = 4;
+PACKETSIZE_STATE:
+	#define NUMTEXUNITS             4
+	#define TEXUNITREGCOUNT         25
+	#define VG_REGCOUNT             0x39
 
-		return 0;
+	#define PACKETSIZE_BEGIN        3
+	#define PACKETSIZE_G2DCOLOR     2
+	#define PACKETSIZE_TEXUNIT      (TEXUNITREGCOUNT * 2)
+	#define PACKETSIZE_REG          (VG_REGCOUNT * 2)
+	#define PACKETSIZE_STATE        (PACKETSIZE_TEXUNIT * NUMTEXUNITS + \
+					 PACKETSIZE_REG + PACKETSIZE_BEGIN + \
+					 PACKETSIZE_G2DCOLOR)
+
+		((25 * 2) * 4 + (0x39 * 2) + 3 + 2) =>
+		((25 * 2) * 4 + (57 * 2) + 3 + 2) =>
+		319
+
+PACKETSIZE_STATESTREAM:
+	#define PACKETSIZE_STATESTREAM  (ALIGN((PACKETSIZE_STATE * \
+					 sizeof(unsigned int)), 32) / \
+					 sizeof(unsigned int))
+
+	ALIGN((PACKETSIZE_STATE * sizeof(unsigned int)), 32) / sizeof(unsigned int) =>
+	1280 / 4 =>
+	320
+
+so the context, restored on context switch, is the first: 320 (0x140) words
+	*/
+	printf("\t\tflags:\t\t%08x\n", param->flags);
+	printf("\t\tnumibs:\t\t%08x\n", param->numibs);
+	printf("\t\tibdesc_addr:\t%08x\n", param->ibdesc_addr);
+	ibdesc = (struct kgsl_ibdesc *)param->ibdesc_addr;
+	for (i = 0; i < param->numibs; i++) {
+		// z180_cmdstream_issueibcmds or adreno_ringbuffer_issueibcmds
+		printf("\t\tibdesc[%d].ctrl:\t\t%08x\n", i, ibdesc[i].ctrl);
+		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, ibdesc[i].sizedwords);
+		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
+		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
+		hexdump(ibdesc[i].hostptr, ibdesc[i].sizedwords * sizeof(unsigned int));
 	}
-	case KGSL_PROP_MMU_ENABLE: {
-		printf("KGSL_PROP_MMU_ENABLE\n");
-		if (param->sizebytes != sizeof(int)) {
-			result = -EINVAL;
-			break;
-		}
-		*(int *)param->value = 1;
-		return 0;
-	}
-	case KGSL_PROP_INTERRUPT_WAITS: {
-		printf("KGSL_PROP_INTERRUPT_WAITS\n");
-		if (param->sizebytes != sizeof(int)) {
-			result = -EINVAL;
-			break;
-		}
-		*(int *)param->value = 1;
-		return 0;
-	}
-	default:
-		printf("unknown type: %d\n", param->type);
-		return -1;
-	}
-	return result;
+}
+
+static void kgsl_ioctl_ringbuffer_issueibcmds_post(
+		struct kgsl_ringbuffer_issueibcmds *param)
+{
+	printf("\t\ttimestamp:\t%08x\n", param->timestamp);
+}
+
+static void kgsl_ioctl_drawctxt_create_pre(
+		struct kgsl_drawctxt_create *param)
+{
+	printf("\t\tflags:\t\t%08x\n", param->flags);
+}
+
+static void kgsl_ioctl_drawctxt_create_post(
+		struct kgsl_drawctxt_create *param)
+{
+	printf("\t\tdrawctxt_id:\t%08x\n", param->drawctxt_id);
+}
+
+#define PROP_INFO(n) [n] = #n
+static const char *propnames[] = {
+		PROP_INFO(KGSL_PROP_DEVICE_INFO),
+		PROP_INFO(KGSL_PROP_DEVICE_SHADOW),
+		PROP_INFO(KGSL_PROP_DEVICE_POWER),
+		PROP_INFO(KGSL_PROP_SHMEM),
+		PROP_INFO(KGSL_PROP_SHMEM_APERTURES),
+		PROP_INFO(KGSL_PROP_MMU_ENABLE),
+		PROP_INFO(KGSL_PROP_INTERRUPT_WAITS),
+		PROP_INFO(KGSL_PROP_VERSION),
+		PROP_INFO(KGSL_PROP_GPU_RESET_STAT),
+};
+
+static void kgsl_ioctl_device_getproperty_post(
+		struct kgsl_device_getproperty *param)
+{
+	printf("\t\ttype:\t\t%08x (%s)\n", param->type, propnames[param->type]);
+	hexdump(param->value, param->sizebytes);
 }
 
 static int len_from_vma(unsigned int hostptr)
@@ -330,26 +450,37 @@ static void kgsl_ioctl_sharedmem_free(struct kgsl_sharedmem_free *param)
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
 }
 
-void kgsl_3d0_ioctl_pre(unsigned long int request, void *ptr)
+static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
-	dump_ioctl(&kgsl_3d0_info, _IOC_WRITE, request, ptr, 0);
+	dump_ioctl(get_kgsl_info(fd), _IOC_WRITE, fd, request, ptr, 0);
 	switch(_IOC_NR(request)) {
+	case _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS):
+		kgsl_ioctl_ringbuffer_issueibcmds_pre(ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_DRAWCTXT_CREATE):
+		kgsl_ioctl_drawctxt_create_pre(ptr);
+		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
 		kgsl_ioctl_sharedmem_from_vmalloc_pre(ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FREE):
-		printf("found: IOCTL_KGSL_SHAREDMEM_FREE(%p)\n", ptr);
 		kgsl_ioctl_sharedmem_free(ptr);
 		break;
 	}
 }
 
-void kgsl_3d0_ioctl_post(unsigned long int request, void *ptr, int ret)
+static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int ret)
 {
-	dump_ioctl(&kgsl_3d0_info, _IOC_READ, request, ptr, ret);
+	dump_ioctl(get_kgsl_info(fd), _IOC_READ, fd, request, ptr, ret);
 	switch(_IOC_NR(request)) {
+	case _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS):
+		kgsl_ioctl_ringbuffer_issueibcmds_post(ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_DRAWCTXT_CREATE):
+		kgsl_ioctl_drawctxt_create_post(ptr);
+		break;
 	case _IOC_NR(IOCTL_KGSL_DEVICE_GETPROPERTY):
-		kgsl_ioctl_device_getproperty(ptr);
+		kgsl_ioctl_device_getproperty_post(ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
 		kgsl_ioctl_sharedmem_from_vmalloc_post(ptr);
@@ -357,14 +488,14 @@ void kgsl_3d0_ioctl_post(unsigned long int request, void *ptr, int ret)
 	}
 }
 
-void kgsl_2d0_ioctl_pre(unsigned long int request, void *ptr)
+static void pmem_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
-	dump_ioctl(&kgsl_2d0_info, _IOC_WRITE, request, ptr, 0);
+	dump_ioctl(&pmem_info, _IOC_WRITE, fd, request, ptr, 0);
 }
 
-void kgsl_2d0_ioctl_post(unsigned long int request, void *ptr, int ret)
+static void pmem_ioctl_post(int fd, unsigned long int request, void *ptr, int ret)
 {
-	dump_ioctl(&kgsl_2d0_info, _IOC_READ, request, ptr, ret);
+	dump_ioctl(&pmem_info, _IOC_READ, fd, request, ptr, ret);
 }
 
 int ioctl(int fd, unsigned long int request, ...)
@@ -384,17 +515,21 @@ int ioctl(int fd, unsigned long int request, ...)
 		ptr = NULL;
 	}
 
-	if (fd == kgsl_3d0)
-		kgsl_3d0_ioctl_pre(request, ptr);
-	else if (fd == kgsl_2d0)
-		kgsl_2d0_ioctl_pre(request, ptr);
+	if (get_kgsl_info(fd))
+		kgsl_ioctl_pre(fd, request, ptr);
+	else if ((fd == pmem_gpu0) || (fd == pmem_gpu1))
+		pmem_ioctl_pre(fd, request, ptr);
+	else
+		printf("> [%4d]         : <unknown> (%08lx)", fd, request);
 
 	ret = orig_ioctl(fd, request, ptr);
 
-	if (fd == kgsl_3d0)
-		kgsl_3d0_ioctl_post(request, ptr, ret);
-	else if (fd == kgsl_2d0)
-		kgsl_2d0_ioctl_post(request, ptr, ret);
+	if (get_kgsl_info(fd))
+		kgsl_ioctl_post(fd, request, ptr, ret);
+	else if ((fd == pmem_gpu0) || (fd == pmem_gpu1))
+		pmem_ioctl_post(fd, request, ptr, ret);
+	else
+		printf("< [%4d]         : <unknown> (%08lx)", fd, request);
 
 	return ret;
 }
