@@ -1,0 +1,105 @@
+Notes on 2D cmd submission:
+
+The IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS ioctl contains a single ibdesc
+entry, with pointer to GPU addr.  The first 320 words restore context
+state, and are skipped if there has not been a context switch.
+
+There are two primary places that the 2D core reads commands.  The
+ringbuffer which is set up on kernel side, and essentially just
+contains jumps to buffers which contain actual rendering commands
+which are mapped by userspace (via IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC)
+and submitted via IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS.  The ringbuffer
+entry is setup to branch to user cmd buffer via addcmd():
+
+  Branch to cmd:
+    Z180_STREAM_PACKET_CALL  <-- 7c000275
+    gpuaddr of next user cmd
+    Z180_CALL_CMD | nextcnt  <-- 00001000 | nextcnt (nextcnt == 5 on non-ctx-switch restore)
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+
+Prior to this in the ringbuffer slot is a marker before n+1 branch-
+to-cmd, inserted by addmarker():
+
+    Z180_STREAM_PACKET       <-- 7c000176
+    Z180_MARKER_CMD | 5      <-- 00008005
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+    Z180_STREAM_PACKET       <-- 7c000176
+    5                        <-- 00000005 (length of first packet in cmd submitted from userspace??)
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+    ADDR_VGV3_LAST << 24     <-- 7f000000
+
+In z180_cmdstream_issueibcmds() the cmd field of next packet-call is
+fixed up to point back to the next ringbuffer entry (which starts with
+the marker packet).
+
+Each packet seems to contain the address (or 00000000 to not branch, ie.
+next packet follows in same buffer) and length of the following packet.
+
+  Ringbuffer Entry N
+     Marker
+     Stream Packet Call
+        cmd: user cmd gpuaddr (or ctxt restore[1]) --+
+        len: 5 (or 320 for ctxt restore[1])          |
+                                                     |
+                                  (if ctxt restore) / \ (else)
+  User Cmd N                                       /  |
+     Stream Packet Call - ctxt restore  <---------+   |
+        cmd: 00000000 (next cmd follows)              |
+        len: 5                                        |
+     Stream Packet Call - preamble (?)  <-------------+
+        cmd: 00000000 (next cmd follows)
+        len: length of actual rendering cmd
+     Stream Packet Call - rendering
+        cmd:  cmd/len set in z180_cmdstream_issueibcmds() to --+
+        len:  to point back to next ringbuffer entry           |
+                                                               |
+  Ringbuffer Entry N+1                                         |
+     Marker                <-----------------------------------+
+     Stream Packet Call
+        ... and so on ...
+
+The marker for ringbuffer entry n+1 is setup on issueibcmds ioctl #N.
+
+
+[1] first 320 words of buffer submitted in issueibcmds is skipped if
+    not context switch, it seems to restore the state of the core.
+
+Dump of preamble (?) plus render packet for solid fill to 64x64 surface:
+ 0, 0, 64, 64 color:ff556677
+ gpuaddr still 6615a000
+
+00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 0x1a == 26, if this is the
+00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx      size of next packet, then:
+00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
+00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
+00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
+00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
+00000570  ff 01 00 7c ;77 66 55 ff; 03 00 00 fe>>00 00 00 7f  <-- ff556677 is fill color
+00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
+00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+
+A second fill added, this time:
+ 1st fill: 0, 0, 64, 64  color:ff556677
+ 2nd fill: 27, 24, 10 (37), 16 (40) color:ff223344
+ gpuaddr is still 6615a000
+
+00000500  75 02 00 7c  00 00 00 00 <30 00 00 00> 34 01 00 7c
+00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx
+00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
+00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
+00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
+00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
+00000570  ff 01 00 7c ;77 66 55 ff; 00 00 00 0c  00 00 00 11  <-- ff556677 is 1st fill color
+00000580  00 00 03 d0  40 00 08 d2  08 70 00 01  00 01 00 7c
+00000590 ,00 a0 15 66, d3 01 00 7c ,00 a0 15 66, d1 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+000005a0  08 70 00 40  00 00 00 d5  1b 50 02 08  18 80 02 09
+000005b0  09 00 00 0f  09 00 00 0f  09 00 00 0f  00 00 00 0e
+000005c0  18 00 1b f0  10 00 0a f1  ff 01 00 7c ;44 33 22 ff; <-- ff223344 is 2nd fill color
+000005d0  03 00 00 fe>>00 00 00 7f  00 00 00 7f  aa aa aa aa
+000005e0  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
