@@ -418,18 +418,67 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
 		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
 		if (is2d && (ibdesc[i].sizedwords > PACKETSIZE_STATESTREAM)) {
+			unsigned int len, *ptr;
 			/* note: kernel side seems to expect param->timestamp to
 			 * contain same thing as ibdesc[0].hostptr ... this seems to
 			 * be what actually gets read from on kernel side.  Maybe a
 			 * legacy thing??
+			 * Update: this seems to be needed so z180_cmdstream_issueibcmds()
+			 * can patch up the cmdstream to jump back to the next ringbuffer
+			 * entry.
 			 */
 			printf("\t\tcontext:\n");
 			hexdump(ibdesc[i].hostptr, PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+			/*
+00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 0x1a == 26, if this is the
+00000510  00 00 00 00<<75 02 00 7c  00 50 6a 40  40 91 00 00      size of next packet, then:
+00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
+00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
+00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
+00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
+00000570  ff 01 00 7c ,77 66 55 ff, 03 00 00 fe>>00 00 00 7f  <-- 0xff556677 is fill color
+00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
+00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+			 *
+			 * Another random packet to test the length field theory:
+			 *
+00000500  75 02 00 7c  00 00 00 00 <38 00 00 00> 34 01 00 7c  <-- 0x38 == 56
+00000510  00 00 00 00<<75 02 00 7c ,00 c0 4b 40  40 91 00 00, <-- these two words get fixed up on kernel side with:
+00000520  29 03 00 7c  00 a0 01 66  00 c0 01 66  00 60 02 66      3c 80 01 66  05 90 00 00
+00000530  00 00 00 11  00 f0 ff 10  ff ff ff 10  04 04 00 0d      see two kgsl_sharedmem_writel() calls in
+00000540  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2      z180_cmdstream_issueibcmds()
+00000550  08 70 00 01  00 01 00 7c  00 e0 15 66  d3 01 00 7c      This seems to cause the core to branch back
+00000560  00 e0 15 66  d1 01 00 7c  08 70 00 40  00 00 00 d5      to ringbuffer addr
+00000570  00 00 00 0c  00 f0 03 08  00 f0 03 09  0a 02 00 7c
+00000580  00 00 00 ff  00 00 00 ff  00 00 00 11  00 00 00 d0
+00000590  d1 03 00 7c  08 70 00 40  40 00 08 00  00 a0 15 66
+000005a0  00 00 00 d5  00 00 00 d0  02 00 00 0f  02 00 00 0f
+000005b0  02 00 00 0f  0a 00 00 0f  00 00 00 d0  0a 00 00 0f
+000005c0  0a 00 00 0f  0a 00 00 0f  02 00 00 0e  00 00 00 f0
+000005d0  40 00 40 f1  00 00 00 f2  00 00 00 d0  00 00 00 d0
+000005e0  00 00 00 d0  00 00 00 d0  00 00 00 d0  00 00 00 d0
+000005f0  03 00 00 fe>>00 00 00 7f  00 00 00 7f  aa aa aa aa  <-- again, two 7f000000's after end of predicted length
+00000600  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+			 *
+			 * It seems like the 3rd word into the cmd, we can read the
+			 * length of what seems to be the 2nd packet (which is the
+			 * part that contains the interesting stuff)
+			 *
+			 * Note: these are OR'd with the length field, so I guess the
+			 * length (in words) is probably just the low 12 bits:
+#define Z180_CALL_CMD     0x1000
+#define Z180_MARKER_CMD   0x8000
+#define Z180_STREAM_END_CMD 0x9000
+			 */
 			printf("\t\tcmd:\n");
-			hexdump(ibdesc[i].hostptr + PACKETSIZE_STATESTREAM * sizeof(unsigned int),
-					(ibdesc[i].sizedwords - PACKETSIZE_STATESTREAM) * sizeof(unsigned int));
+			ptr = (unsigned int *)(ibdesc[i].hostptr + PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+			len = ptr[2] & 0xfff;
+			// 5 is length of first packet, 2 for the two 7f000000's
+			hexdump(ptr, (len + 5 + 2) * sizeof(unsigned int));
+			// dump out full buffer in case I need to go back and check
+			// if I missed something..
 			dump_buffer(ibdesc[i].gpuaddr);
-// XXX need to dump more.. how much more??  dunno..
 		} else {
 			if (is2d)
 				printf("\t\tWARNING: INVALID CONTEXT!\n");
@@ -633,20 +682,6 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_pre(int fd,
 		 *     660aa000: - same contents across all dumps (all 00's and aa's)
 		 *     660b4000: - same contents across all dumps (all 00's and aa's)
 		 *   (possibly these are just used for more advanced operations, or 3d only?)
-		 *
-		 * Note:
-		 * #define Z180_PACKET_SIZE 15
-		 *
-00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 1a == 26, if this is the
-00000510  00 00 00 00<<75 02 00 7c  00 50 6a 40  40 91 00 00      size of next packet, then:
-00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
-00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
-00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
-00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
-00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
-00000570  ff 01 00 7c ,77 66 55 ff, 03 00 00 fe>>00 00 00 7f  <-- 0xff556677 is fill color
-00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
-00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
 		 *
 		 */
 
