@@ -112,6 +112,14 @@ void test_fill(int w, int h)
 
 	// note: look for pattern 0xff556677 in memory to find cmdstream:
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
+
+	// second blit.. fill a sub-rect in center of surface:
+	rect.x = (w - 10) / 2;
+	rect.y = (h - 16) / 2;
+	rect.width = 10;
+	rect.height = 16;
+	CHK(c2dFillSurface(dest->id, 0xff223344, &rect));
+
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
@@ -123,10 +131,10 @@ int main(int argc, char **argv)
 	DEBUG_MSG("Test fill 64, 64");
 	test_fill(64, 64);
 
-	// for now, two same sized blits.. once I think I know where
-	// the cmdstream is then I'll try varying dimenions (and color?)
-	DEBUG_MSG("Test fill 64, 64");
-	test_fill(64, 64);
+	DEBUG_MSG("Test fill 128, 256");
+	test_fill(128, 256);
+
+	return 0;
 }
 
 void _start(int argc, char **argv)

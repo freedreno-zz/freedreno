@@ -431,15 +431,36 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 			hexdump(ibdesc[i].hostptr, PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 			/*
 00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 0x1a == 26, if this is the
-00000510  00 00 00 00<<75 02 00 7c  00 50 6a 40  40 91 00 00      size of next packet, then:
+00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx      size of next packet, then:
 00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
 00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
 00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
 00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
 00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
-00000570  ff 01 00 7c ,77 66 55 ff, 03 00 00 fe>>00 00 00 7f  <-- 0xff556677 is fill color
+00000570  ff 01 00 7c ;77 66 55 ff; 03 00 00 fe>>00 00 00 7f  <-- ff556677 is fill color
 00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
 00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+			 *
+			 * A second fill added, this time:
+			 *  1st fill: 0, 0, 64, 64 - 0xff556677
+			 *  2nd fill: 27, 24, 10 (37), 16 (40) - 0xff223344
+			 *  gpuaddr is still 6615a000
+			 *
+00000500  75 02 00 7c  00 00 00 00 <30 00 00 00> 34 01 00 7c
+00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx
+00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
+00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
+00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
+00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
+00000570  ff 01 00 7c ;77 66 55 ff; 00 00 00 0c  00 00 00 11  <-- ff556677 is 1st fill color
+00000580  00 00 03 d0  40 00 08 d2  08 70 00 01  00 01 00 7c
+00000590 ,00 a0 15 66, d3 01 00 7c ,00 a0 15 66, d1 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+000005a0  08 70 00 40  00 00 00 d5  1b 50 02 08  18 80 02 09
+000005b0  09 00 00 0f  09 00 00 0f  09 00 00 0f  00 00 00 0e
+000005c0  18 00 1b f0  10 00 0a f1  ff 01 00 7c ;44 33 22 ff; <-- ff223344 is 2nd fill color
+000005d0  03 00 00 fe>>00 00 00 7f  00 00 00 7f  aa aa aa aa
+000005e0  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
 			 *
 			 * Another random packet to test the length field theory:
 			 *
