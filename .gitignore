@@ -3,3 +3,4 @@ test-fill
 *.o
 *.swp
 *.bmp
+00*

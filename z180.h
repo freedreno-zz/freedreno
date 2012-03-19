@@ -1,0 +1,120 @@
+/* Copyright (c) 2002,2007-2012, Code Aurora Forum. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+#ifndef Z180_H_
+#define Z180_H_
+
+#define ALIGN(_v, _d) (((_v) + ((_d) - 1)) & ~((_d) - 1))
+
+#define DRIVER_VERSION_MAJOR   3
+#define DRIVER_VERSION_MINOR   1
+
+#define Z180_DEVICE(device) \
+		KGSL_CONTAINER_OF(device, struct z180_device, dev)
+
+#define GSL_VGC_INT_MASK \
+	 (REG_VGC_IRQSTATUS__MH_MASK | \
+	  REG_VGC_IRQSTATUS__G2D_MASK | \
+	  REG_VGC_IRQSTATUS__FIFO_MASK)
+
+#define VGV3_NEXTCMD_JUMP        0x01
+
+#define VGV3_NEXTCMD_NEXTCMD_FSHIFT 12
+#define VGV3_NEXTCMD_NEXTCMD_FMASK 0x7
+
+#define VGV3_CONTROL_MARKADD_FSHIFT 0
+#define VGV3_CONTROL_MARKADD_FMASK 0xfff
+
+#define Z180_PACKET_SIZE 15
+#define Z180_MARKER_SIZE 10
+#define Z180_CALL_CMD     0x1000
+#define Z180_MARKER_CMD   0x8000
+#define Z180_STREAM_END_CMD 0x9000
+#define Z180_STREAM_PACKET 0x7C000176
+#define Z180_STREAM_PACKET_CALL 0x7C000275
+#define Z180_PACKET_COUNT 8
+#define Z180_RB_SIZE (Z180_PACKET_SIZE*Z180_PACKET_COUNT \
+			  *sizeof(uint32_t))
+
+#define NUMTEXUNITS             4
+#define TEXUNITREGCOUNT         25
+#define VG_REGCOUNT             0x39
+
+#define PACKETSIZE_BEGIN        3
+#define PACKETSIZE_G2DCOLOR     2
+#define PACKETSIZE_TEXUNIT      (TEXUNITREGCOUNT * 2)  // 25 * 2 => 50
+#define PACKETSIZE_REG          (VG_REGCOUNT * 2)      // 57 * 2 => 114
+#define PACKETSIZE_STATE        (PACKETSIZE_TEXUNIT * NUMTEXUNITS + \
+				 PACKETSIZE_REG + PACKETSIZE_BEGIN + \
+				 PACKETSIZE_G2DCOLOR)
+#define PACKETSIZE_STATESTREAM  (ALIGN((PACKETSIZE_STATE * \
+				 sizeof(unsigned int)), 32) / \
+				 sizeof(unsigned int))
+
+/* PACKETSIZE_STATE:
+ *   PACKETSIZE_TEXUNIT * NUMTEXUNITS +
+ *        25 * 2 * 4 => 50 * 4 => 200
+ *   PACKETSIZE_REG + PACKETSIZE_BEGIN +
+ *        0x39 * 2 + 3 => 57 * 2 + 3 => 117
+ *   PACKETSIZE_G2DCOLOR
+ *        2
+ */
+
+#define Z180_INVALID_CONTEXT UINT_MAX
+
+/* z180 MH arbiter config*/
+#define Z180_CFG_MHARB \
+	(0x10 \
+		| (0 << MH_ARBITER_CONFIG__SAME_PAGE_GRANULARITY__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__L1_ARB_ENABLE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__L1_ARB_HOLD_ENABLE__SHIFT) \
+		| (0 << MH_ARBITER_CONFIG__L2_ARB_CONTROL__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__PAGE_SIZE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__TC_REORDER_ENABLE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__TC_ARB_HOLD_ENABLE__SHIFT) \
+		| (0 << MH_ARBITER_CONFIG__IN_FLIGHT_LIMIT_ENABLE__SHIFT) \
+		| (0x8 << MH_ARBITER_CONFIG__IN_FLIGHT_LIMIT__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__CP_CLNT_ENABLE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__VGT_CLNT_ENABLE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__TC_CLNT_ENABLE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__RB_CLNT_ENABLE__SHIFT) \
+		| (1 << MH_ARBITER_CONFIG__PA_CLNT_ENABLE__SHIFT))
+
+#define Z180_TIMESTAMP_EPSILON 20000
+#define Z180_IDLE_COUNT_MAX 1000000
+
+enum z180_cmdwindow_type {
+	Z180_CMDWINDOW_2D = 0x00000000,
+	Z180_CMDWINDOW_MMU = 0x00000002,
+};
+
+#define Z180_CMDWINDOW_TARGET_MASK		0x000000FF
+#define Z180_CMDWINDOW_ADDR_MASK		0x00FFFF00
+#define Z180_CMDWINDOW_TARGET_SHIFT		0
+#define Z180_CMDWINDOW_ADDR_SHIFT		8
+
+#define Z180_MMU_CONFIG					     \
+	(0x01							     \
+	| (MMU_CONFIG << MH_MMU_CONFIG__RB_W_CLNT_BEHAVIOR__SHIFT)   \
+	| (MMU_CONFIG << MH_MMU_CONFIG__CP_W_CLNT_BEHAVIOR__SHIFT)   \
+	| (MMU_CONFIG << MH_MMU_CONFIG__CP_R0_CLNT_BEHAVIOR__SHIFT)  \
+	| (MMU_CONFIG << MH_MMU_CONFIG__CP_R1_CLNT_BEHAVIOR__SHIFT)  \
+	| (MMU_CONFIG << MH_MMU_CONFIG__CP_R2_CLNT_BEHAVIOR__SHIFT)  \
+	| (MMU_CONFIG << MH_MMU_CONFIG__CP_R3_CLNT_BEHAVIOR__SHIFT)  \
+	| (MMU_CONFIG << MH_MMU_CONFIG__CP_R4_CLNT_BEHAVIOR__SHIFT)  \
+	| (MMU_CONFIG << MH_MMU_CONFIG__VGT_R0_CLNT_BEHAVIOR__SHIFT) \
+	| (MMU_CONFIG << MH_MMU_CONFIG__VGT_R1_CLNT_BEHAVIOR__SHIFT) \
+	| (MMU_CONFIG << MH_MMU_CONFIG__TC_R_CLNT_BEHAVIOR__SHIFT)   \
+	| (MMU_CONFIG << MH_MMU_CONFIG__PA_W_CLNT_BEHAVIOR__SHIFT))
+
+
+#endif /* Z180_H_ */

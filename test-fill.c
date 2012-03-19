@@ -97,30 +97,36 @@ void dump_pixmap(PixmapPtr pixmap, char *filename)
 /*****************************************************************************/
 
 
-int main(int argc, char **argv)
+void test_fill(int w, int h)
 {
-	PixmapPtr dest = create_pixmap(64, 64);
+	PixmapPtr dest = create_pixmap(w, h);
 	C2D_RECT rect;
 	c2d_ts_handle curTimestamp;
 
 	dump_pixmap(dest, "before.bmp");
 
-	// create another dummy surface, just to see what calls are only
-	// done first time..
-	create_pixmap(64, 64);
-
 	rect.x = 0;
 	rect.y = 0;
-	rect.width = 64;
-	rect.height = 64;
+	rect.width = w;
+	rect.height = h;
 
+	// note: look for pattern 0xff556677 in memory to find cmdstream:
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
 	dump_pixmap(dest, "after.bmp");
+}
 
-	return 0;
+int main(int argc, char **argv)
+{
+	DEBUG_MSG("Test fill 64, 64");
+	test_fill(64, 64);
+
+	// for now, two same sized blits.. once I think I know where
+	// the cmdstream is then I'll try varying dimenions (and color?)
+	DEBUG_MSG("Test fill 64, 64");
+	test_fill(64, 64);
 }
 
 void _start(int argc, char **argv)

@@ -42,6 +42,8 @@
 #include "kgsl_drm.h"
 #include "msm_kgsl.h"
 #include "android_pmem.h"
+#include "z180.h"
+#include "list.h"
 
 // don't use <stdio.h> from glibc..
 struct _IO_FILE;
@@ -49,6 +51,7 @@ typedef struct _IO_FILE FILE;
 FILE *fopen(const char *path, const char *mode);
 int fscanf(FILE *stream, const char *format, ...);
 int printf(const char *format, ...);
+int sprintf(char *str, const char *format, ...);
 
 static void *libc_dl;
 
@@ -186,7 +189,9 @@ hexdump(const void *data, int size)
 
 	for (i = 0; i < size; i++) {
 		if (!(i % 16))
-			printf("\t\t%08X", (unsigned int) buf + i);
+			printf("\t\t\t%08X", (unsigned int) buf + i);
+		if (!(i % 4))
+			printf(" ");
 
 		if (((void *) (buf + i)) < ((void *) data)) {
 			printf("   ");
@@ -258,6 +263,60 @@ static void dumpfile(const char *file)
 	close(fd);
 }
 
+struct buffer {
+	void *hostptr;
+	unsigned int gpuaddr, flags, len;
+	struct list node;
+};
+
+LIST_HEAD(buffers_of_interest);
+
+static struct buffer * register_buffer(void *hostptr, unsigned int flags, unsigned int len)
+{
+	struct buffer *buf = calloc(1, sizeof *buf);
+	buf->hostptr = hostptr;
+	buf->flags = flags;
+	buf->len = len;
+	list_add(&buf->node, &buffers_of_interest);
+	return buf;
+}
+
+static struct buffer * find_buffer(void *hostptr, unsigned int gpuaddr)
+{
+	struct buffer *buf;
+	list_for_each_entry(buf, &buffers_of_interest, node)
+		if ((buf->hostptr == hostptr) || (buf->gpuaddr == gpuaddr))
+			return buf;
+	return NULL;
+}
+
+static void unregister_buffer(unsigned int gpuaddr)
+{
+	struct buffer *buf = find_buffer((void *)-1, gpuaddr);
+	if (buf) {
+		list_del(&buf->node);
+		free(buf);
+	}
+}
+
+static void dump_buffer(unsigned int gpuaddr)
+{
+	static int cnt = 0;
+	struct buffer *buf = find_buffer((void *)-1, gpuaddr);
+	if (buf) {
+		char filename[32];
+		int fd;
+		sprintf(filename, "%04d-%08x", cnt, buf->gpuaddr);
+		printf("\t\tdumping: %s\n", filename);
+		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+		write(fd, buf->hostptr, buf->len);
+		close(fd);
+		cnt++;
+	}
+}
+
+/*****************************************************************************/
+
 int open(const char* path, int flags, ...)
 {
 	mode_t mode = 0;
@@ -300,13 +359,16 @@ int open(const char* path, int flags, ...)
 	return ret;
 }
 
-static void kgsl_ioctl_ringbuffer_issueibcmds_pre(
+static void kgsl_ioctl_ringbuffer_issueibcmds_pre(int fd,
 		struct kgsl_ringbuffer_issueibcmds *param)
 {
+	int is2d = get_kgsl_info(fd) == &kgsl_2d_info;
 	int i;
 	struct kgsl_ibdesc *ibdesc;
 	printf("\t\tdrawctxt_id:\t%08x\n", param->drawctxt_id);
 	/*
+For z180_cmdstream_issueibcmds():
+
 #define KGSL_CONTEXT_SAVE_GMEM	1
 #define KGSL_CONTEXT_NO_GMEM_ALLOC	2
 #define KGSL_CONTEXT_SUBMIT_IB_LIST	4
@@ -335,13 +397,13 @@ PACKETSIZE_STATE:
 		319
 
 PACKETSIZE_STATESTREAM:
-	#define PACKETSIZE_STATESTREAM  (ALIGN((PACKETSIZE_STATE * \
+	#define x  (ALIGN((PACKETSIZE_STATE * \
 					 sizeof(unsigned int)), 32) / \
 					 sizeof(unsigned int))
 
 	ALIGN((PACKETSIZE_STATE * sizeof(unsigned int)), 32) / sizeof(unsigned int) =>
 	1280 / 4 =>
-	320
+	320 => 0x140
 
 so the context, restored on context switch, is the first: 320 (0x140) words
 	*/
@@ -355,23 +417,54 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, ibdesc[i].sizedwords);
 		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
 		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
-		hexdump(ibdesc[i].hostptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+		if (is2d && (ibdesc[i].sizedwords > PACKETSIZE_STATESTREAM)) {
+			/* note: kernel side seems to expect param->timestamp to
+			 * contain same thing as ibdesc[0].hostptr ... this seems to
+			 * be what actually gets read from on kernel side.  Maybe a
+			 * legacy thing??
+			 */
+			printf("\t\tcontext:\n");
+			hexdump(ibdesc[i].hostptr, PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+			printf("\t\tcmd:\n");
+			hexdump(ibdesc[i].hostptr + PACKETSIZE_STATESTREAM * sizeof(unsigned int),
+					(ibdesc[i].sizedwords - PACKETSIZE_STATESTREAM) * sizeof(unsigned int));
+			dump_buffer(ibdesc[i].gpuaddr);
+// XXX need to dump more.. how much more??  dunno..
+		} else {
+			if (is2d)
+				printf("\t\tWARNING: INVALID CONTEXT!\n");
+			hexdump(ibdesc[i].hostptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+		}
 	}
 }
 
-static void kgsl_ioctl_ringbuffer_issueibcmds_post(
+static void kgsl_ioctl_ringbuffer_issueibcmds_post(int fd,
 		struct kgsl_ringbuffer_issueibcmds *param)
 {
+	int is2d = get_kgsl_info(fd) == &kgsl_2d_info;
+	int i;
+	struct kgsl_ibdesc *ibdesc;
+
 	printf("\t\ttimestamp:\t%08x\n", param->timestamp);
+
+	ibdesc = (struct kgsl_ibdesc *)param->ibdesc_addr;
+	for (i = 0; i < param->numibs; i++) {
+		if (is2d && (ibdesc[i].sizedwords > PACKETSIZE_STATE)) {
+			// XXX I think it is writing nextaddr just passed the end of of param->timestamp +
+			// ibdesc[0].sizedwords.. ?? 12 bytes..
+			printf("\t\tnext:\n");
+			hexdump(ibdesc[i].hostptr + ibdesc[i].sizedwords * sizeof(unsigned int), 12);
+		}
+	}
 }
 
-static void kgsl_ioctl_drawctxt_create_pre(
+static void kgsl_ioctl_drawctxt_create_pre(int fd,
 		struct kgsl_drawctxt_create *param)
 {
 	printf("\t\tflags:\t\t%08x\n", param->flags);
 }
 
-static void kgsl_ioctl_drawctxt_create_post(
+static void kgsl_ioctl_drawctxt_create_post(int fd,
 		struct kgsl_drawctxt_create *param)
 {
 	printf("\t\tdrawctxt_id:\t%08x\n", param->drawctxt_id);
@@ -390,7 +483,7 @@ static const char *propnames[] = {
 		PROP_INFO(KGSL_PROP_GPU_RESET_STAT),
 };
 
-static void kgsl_ioctl_device_getproperty_post(
+static void kgsl_ioctl_device_getproperty_post(int fd,
 		struct kgsl_device_getproperty *param)
 {
 	printf("\t\ttype:\t\t%08x (%s)\n", param->type, propnames[param->type]);
@@ -420,7 +513,7 @@ static int len_from_vma(unsigned int hostptr)
 	return -1;
 }
 
-static void kgsl_ioctl_sharedmem_from_vmalloc_pre(
+static void kgsl_ioctl_sharedmem_from_vmalloc_pre(int fd,
 		struct kgsl_sharedmem_from_vmalloc *param)
 {
 	int len;
@@ -435,19 +528,156 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_pre(
 		 * vma.. that is nasty!
 		 */
 		len = len_from_vma(param->hostptr);
+
+		/* for 2d/z180, all of the 0x5000 length buffers seem to be what
+		 * will be passed back in IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS cmds
+		 *
+		 * Additional buffers that seem to be something other than RGB
+		 * surfaces with lengths:
+		 *
+		 *   0x00001000
+		 *   0x00009000
+		 *   0x00081000
+		 *   0x00001000
+		 *   0x00009000
+		 *   0x00081000
+		 *
+		 * These are created before the sequence of 6 0x5000 len bufs
+		 * on the first c2dCreateSurface() call (which seems to be
+		 * triggering some initialization).
+		 *
+		 * Possibly sets of two due to having both kgsl-2d0 and kgsl-2d1?
+		 * But the 0x5000 buffers passed in to ISSUEIBCMDS are round-
+		 * robin'd even though all ISSUEIBCMDS go to kgsl-2d1..
+		 *
+		 * gpu addresses seem to be consistent from run to run.. (at least
+		 * as long as sequence of c2d calls doesn't change)  Currently:
+		 *
+		 *   00001000 - 6601a000-6601b000
+		 *   00009000 - 6601c000-66025000
+		 *   00081000 - 66026000-660a7000
+		 *
+		 *   00001000 - 660a8000-660a9000
+		 *   00009000 - 660aa000-660b3000
+		 *   00081000 - 660b4000-66135000
+		 *
+		 *   00005000 - 66136000-6613b000
+		 *   00005000 - 6613c000-66141000
+		 *   00005000 - 66142000-66147000
+		 *   00005000 - 66148000-6614d000
+		 *   00005000 - 6614e000-66153000
+		 *   00005000 - 66154000-66159000
+		 *
+		 * Hmm, interesting that each mapping ends up with a page between..
+		 *
+		 * Last buffer allocated is the surface (64x64x4bpp -> 0x4000):
+		 *   00004000 - 6615a000-6615e000
+		 *
+		 * Then for c2dReadSurface() another surface is created (no longer
+		 * with extra page in between!?):
+		 *   00004000 - 6615e000-66162000
+		 *
+		 *     4053C000  75 02 00 7C  00 00 00 00  05 00 05 00  29 01 00 7C    |u..|........)..||
+		 *     4053C010 <00 A0 01 66> 2A 01 00 7C <00 C0 01 66> 2B 01 00 7C    |...f*..|...f+..||
+		 *     4053C020 <00 60 02 66> 0F 01 00 7C  0A 00 00 00  08 01 00 7C    |.`.f...|.......||
+		 *     4053C030  00 F0 03 00  09 01 00 7C  00 F0 03 00  00 01 00 7C    |.......|.......||
+		 *     4053C040 <00 E0 15 66> 01 01 00 7C  08 70 00 00  10 01 00 7C    |...f...|.p.....||
+		 *     4053C050  FF FF FF 00  D0 01 00 7C  00 00 00 00  D4 01 00 7C    |.......|.......||
+		 *     4053C060  00 00 00 00  0C 01 00 7C  00 00 00 00  0E 01 00 7C    |.......|.......||
+		 *     4053C070  02 00 00 00  0D 01 00 7C  04 04 00 00  0B 01 00 7C    |.......|.......||
+		 *     4053C080  00 00 00 FF  0A 01 00 7C  00 00 00 FF  11 01 00 7C    |.......|.......||
+		 *     4053C090  00 00 00 00  14 01 00 7C  00 00 00 00  15 01 00 7C    |.......|.......||
+		 *     4053C0A0  00 00 00 00  16 01 00 7C  00 00 00 00  17 01 00 7C    |.......|.......||
+		 *     4053C0B0  00 00 00 00  18 01 00 7C  00 00 00 00  19 01 00 7C    |.......|.......||
+		 *     4053C0C0  00 00 00 00  1A 01 00 7C  00 00 00 00  1B 01 00 7C    |.......|.......||
+		 *     4053C0D0  00 00 00 00  1C 01 00 7C  00 00 00 00  1D 01 00 7C    |.......|.......||
+		 *     4053C0E0  00 00 00 00  1E 01 00 7C  00 00 00 00  1F 01 00 7C    |.......|.......||
+		 *     4053C0F0  00 00 00 00  24 01 00 7C  00 00 00 00  25 01 00 7C    |....$..|....%..||
+		 *     4053C100  00 00 00 00  27 01 00 7C  00 00 00 00  28 01 00 7C    |....'..|....(..||
+		 *     4053C110  00 00 00 00  5E 01 00 7B  00 00 00 00  61 01 00 7B    |....^..{....a..{|
+		 *     4053C120  00 00 00 00  65 01 00 7B  00 00 00 00  66 01 00 7B    |....e..{....f..{|
+		 *     4053C130  00 00 00 00  6E 01 00 7B  00 00 00 00  6F 01 00 7C    |....n..{....o..||
+		 *     4053C140  00 00 00 00  65 01 00 7B  00 00 00 00  54 01 00 7B    |....e..{....T..{|
+		 *     4053C150  00 00 00 00  55 01 00 7B  00 00 00 00  53 01 00 7B    |....U..{....S..{|
+		 *     4053C160  00 00 00 00  68 01 00 7B  00 00 00 00  60 01 00 7B    |....h..{....`..{|
+		 *     4053C170  00 00 00 00  50 01 00 7B  00 00 00 00  56 01 00 7B    |....P..{....V..{|
+		 *     4053C180  00 00 00 00  57 01 00 7B  00 00 00 00  58 01 00 7B    |....W..{....X..{|
+		 *     4053C190  00 00 00 00  59 01 00 7B  00 00 00 00  52 01 00 7B    |....Y..{....R..{|
+		 *     4053C1A0  00 00 00 00  51 01 00 7B  00 00 00 00  56 01 00 7B    |....Q..{....V..{|
+		 *     4053C1B0  00 00 00 00  7F 01 00 7C  00 00 00 00  7F 01 00 7C    |.......|.......||
+		 *     4053C1C0  00 00 00 00  7F 01 00 7C  00 00 00 00  7F 01 00 7C    |.......|.......||
+		 *     4053C1D0  00 00 00 00  00 00 00 7F  00 00 00 7F  29 01 00 7C    |............)..||
+		 *     4053C1E0 <00 80 0A 66> 2A 01 00 7C <00 A0 0A 66> 2B 01 00 7C    |...f*..|...f+..||
+		 *     4053C1F0 <00 40 0B 66> E2 01 00 7C  00 00 00 00  E3 01 00 7C    |.@.f...|.......||
+		 *     4053C200  00 00 00 00  E4 01 00 7C  00 00 00 00  E5 01 00 7C    |.......|.......||
+		 *     4053C210  00 00 00 00  E6 01 00 7C  00 00 00 00  E7 01 00 7C    |.......|.......||
+		 *     4053C220  00 00 00 00  C0 01 00 7C  00 00 00 00  C1 01 00 7C    |.......|.......||
+		 *     4053C230  00 00 00 00  C2 01 00 7C  00 00 00 00  C3 01 00 7C    |.......|.......||
+		 *     4053C240  00 00 00 00  C4 01 00 7C  00 00 00 00  C5 01 00 7C    |.......|.......||
+		 *
+		 * Some addresses seen in the state info (first 0x140 words of
+		 * ISSUEIBCMDS):
+		 *     00 A0 01 66 -> 6601a000  <-- 1st 0x1000 buffer
+		 *     00 C0 01 66 -> 6601c000  <-- 1st 0x9000 buffer
+		 *     00 60 02 66 -> 66026000  <-- 1st 0x81000 buffer
+		 *     00 E0 15 66 -> 6615e000  <-- previous read surface (but already free'd at this point!)
+		 *     00 80 0A 66 -> 660a8000  <-- 2nd 0x1000 buffer
+		 *     00 A0 0A 66 -> 660aa000  <-- 2nd 0x9000 buffer
+		 *     00 40 0B 66 -> 660b4000  <-- 2nd 0x81000 buffer
+		 *
+		 * From dumps of these memories before every ISSUEIBCMDS:
+		 *     6601a000: - same contents across all dumps (all 00's and aa's)
+		 *     6601c000: - same contents across all dumps (all 00's and aa's)
+		 *     66026000: - same contents across all dumps (all 00's and aa's)
+		 *     660a8000: - same contents across all dumps (all 00's and aa's)
+		 *     660aa000: - same contents across all dumps (all 00's and aa's)
+		 *     660b4000: - same contents across all dumps (all 00's and aa's)
+		 *   (possibly these are just used for more advanced operations, or 3d only?)
+		 *
+		 * Note:
+		 * #define Z180_PACKET_SIZE 15
+		 *
+00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 1a == 26, if this is the
+00000510  00 00 00 00<<75 02 00 7c  00 50 6a 40  40 91 00 00      size of next packet, then:
+00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
+00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
+00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
+00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
+00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
+00000570  ff 01 00 7c ,77 66 55 ff, 03 00 00 fe>>00 00 00 7f  <-- 0xff556677 is fill color
+00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
+00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+		 *
+		 */
+
+		/* these buffer sizes are interesting for 2d.. not sure about 3d.. */
+		switch(len) {
+		case 0x5000:
+//		case 0x1000:
+//		case 0x9000:
+//		case 0x81000:
+			/* register buffer of interest */
+			register_buffer((void *)param->hostptr, param->flags, len);
+			break;
+		}
 	}
 	printf("\t\tlen:\t\t%08x\n", len);
 }
 
-static void kgsl_ioctl_sharedmem_from_vmalloc_post(
+static void kgsl_ioctl_sharedmem_from_vmalloc_post(int fd,
 		struct kgsl_sharedmem_from_vmalloc *param)
 {
+	struct buffer *buf = find_buffer((void *)param->hostptr, 0);
+	if (buf)
+		buf->gpuaddr = param->gpuaddr;
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
 }
 
-static void kgsl_ioctl_sharedmem_free(struct kgsl_sharedmem_free *param)
+static void kgsl_ioctl_sharedmem_free_pre(int fd,
+		struct kgsl_sharedmem_free *param)
 {
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
+	unregister_buffer(param->gpuaddr);
 }
 
 static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
@@ -455,16 +685,16 @@ static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 	dump_ioctl(get_kgsl_info(fd), _IOC_WRITE, fd, request, ptr, 0);
 	switch(_IOC_NR(request)) {
 	case _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS):
-		kgsl_ioctl_ringbuffer_issueibcmds_pre(ptr);
+		kgsl_ioctl_ringbuffer_issueibcmds_pre(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_DRAWCTXT_CREATE):
-		kgsl_ioctl_drawctxt_create_pre(ptr);
+		kgsl_ioctl_drawctxt_create_pre(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
-		kgsl_ioctl_sharedmem_from_vmalloc_pre(ptr);
+		kgsl_ioctl_sharedmem_from_vmalloc_pre(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FREE):
-		kgsl_ioctl_sharedmem_free(ptr);
+		kgsl_ioctl_sharedmem_free_pre(fd, ptr);
 		break;
 	}
 }
@@ -474,16 +704,16 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 	dump_ioctl(get_kgsl_info(fd), _IOC_READ, fd, request, ptr, ret);
 	switch(_IOC_NR(request)) {
 	case _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS):
-		kgsl_ioctl_ringbuffer_issueibcmds_post(ptr);
+		kgsl_ioctl_ringbuffer_issueibcmds_post(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_DRAWCTXT_CREATE):
-		kgsl_ioctl_drawctxt_create_post(ptr);
+		kgsl_ioctl_drawctxt_create_post(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_DEVICE_GETPROPERTY):
-		kgsl_ioctl_device_getproperty_post(ptr);
+		kgsl_ioctl_device_getproperty_post(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
-		kgsl_ioctl_sharedmem_from_vmalloc_post(ptr);
+		kgsl_ioctl_sharedmem_from_vmalloc_post(fd, ptr);
 		break;
 	}
 }
