@@ -306,7 +306,7 @@ static void dump_buffer(unsigned int gpuaddr)
 	if (buf) {
 		char filename[32];
 		int fd;
-		sprintf(filename, "%04d-%08x", cnt, buf->gpuaddr);
+		sprintf(filename, "%04d-%08x.dat", cnt, buf->gpuaddr);
 		printf("\t\tdumping: %s\n", filename);
 		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 		write(fd, buf->hostptr, buf->len);

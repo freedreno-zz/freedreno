@@ -1,5 +1,5 @@
 
-TESTS = test-fill
+TESTS = test-fill test-copy
 UTILS = bmp.o
 
 CFLAGS = 
@@ -8,7 +8,7 @@ LFLAGS = -L /system/lib -lC2D2 -lgsl -llog -lOpenVG -lcutils -lstdc++ -lstlport 
 all: libwrap.so $(UTILS) $(TESTS)
 
 clean:
-	rm -f *.bmp *.so *.o $(TESTS)
+	rm -f *.bmp *.dat *.so *.o $(TESTS)
 
 %.o: %.c
 	gcc -g -c -fPIC $(LFLAGS) $< -o $@

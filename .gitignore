@@ -1,4 +1,5 @@
 test-fill
+test-copy
 *.so
 *.o
 *.swp

@@ -23,44 +23,65 @@
 
 #include "test-util.h"
 
-void test_fill(uint32_t w, uint32_t h, uint32_t format)
+#define DEFAULT_BLIT_MASK (C2D_SOURCE_RECT_BIT | C2D_TARGET_RECT_BIT |	\
+			   C2D_NO_PIXEL_ALPHA_BIT | C2D_NO_BILINEAR_BIT | \
+			   C2D_NO_ANTIALIASING_BIT | C2D_ALPHA_BLEND_NONE)
+
+void test_copy(uint32_t w, uint32_t h, uint32_t format)
 {
-	PixmapPtr dest;
+	PixmapPtr src, dest;
+	C2D_OBJECT blit = {};
 	C2D_RECT rect;
 	c2d_ts_handle curTimestamp;
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	DEBUG_MSG("fill: %04dx%04dx-%08x", w, h, format);
+	DEBUG_MSG("copy: %04dx%04dx-%08x", w, h, format);
 
 	dest = create_pixmap(w, h, format);
+	src  = create_pixmap(13, 17, format);
 
 	rect.x = 0;
 	rect.y = 0;
 	rect.width = w;
 	rect.height = h;
-
-	// note: look for pattern 0xff556677 in memory to find cmdstream:
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
-
-	// second blit.. fill a sub-rect in center of surface:
-	rect.x = (w - 10) / 2;
-	rect.y = (h - 16) / 2;
-	rect.width = 10;
-	rect.height = 16;
-	CHK(c2dFillSurface(dest->id, 0xff223344, &rect));
-
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
-	dump_pixmap(dest, "fill-%04dx%04d-%08x.bmp", w, h, format);
+	rect.x = 0;
+	rect.y = 0;
+	rect.width = 13;
+	rect.height = 17;
+	CHK(c2dFillSurface(src->id, 0xff223344, &rect));
+	CHK(c2dFlush(src->id, &curTimestamp));
+	CHK(c2dWaitTimestamp(curTimestamp));
+
+	blit.surface_id = src->id;
+	blit.config_mask = DEFAULT_BLIT_MASK;
+	blit.next = NULL;
+
+	blit.source_rect.x = FIXED(0);
+	blit.source_rect.y = FIXED(0);
+	blit.source_rect.width = FIXED(13);
+	blit.source_rect.height = FIXED(17);
+
+	blit.target_rect.x = FIXED((w - 13) / 2);
+	blit.target_rect.y = FIXED((h - 17) / 2);
+	blit.target_rect.width = FIXED(13);
+	blit.target_rect.height = FIXED(17);
+	CHK(c2dDraw(dest->id, 0, NULL, 0, 0, &blit, 1));
+	CHK(c2dFlush(dest->id, &curTimestamp));
+	CHK(c2dWaitTimestamp(curTimestamp));
+
+	dump_pixmap(dest, "copy-%04dx%04d-%08x.bmp", w, h, format);
 }
 
 int main(int argc, char **argv)
 {
-	test_fill(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(64, 64, C2D_COLOR_FORMAT_8888_ARGB);
-	test_fill(64, 64, C2D_COLOR_FORMAT_565_RGB);
+	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+//	test_copy(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+//	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB);
+//	test_copy(64, 64, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;
 }

@@ -83,10 +83,11 @@ Dump of preamble (?) plus render packet for solid fill to 64x64 surface:
 00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
 00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
 
-A second fill added, this time:
- 1st fill: 0, 0, 64, 64  color:ff556677
- 2nd fill: 27, 24, 10 (37), 16 (40) color:ff223344
- gpuaddr is still 6615a000
+A set of two fills to 64x64 surface:
+ 1st fill: x=0,  y=0,  w=64, h=64 color:ff556677
+ 2nd fill: x=27, y=24, w=10, h=16 color:ff223344
+                     (x2=37 y2=40)
+ gpuaddr is 6615a000
 
 00000500  75 02 00 7c  00 00 00 00 <30 00 00 00> 34 01 00 7c
 00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx
@@ -103,3 +104,30 @@ A second fill added, this time:
 000005c0  18 00 1b f0  10 00 0a f1  ff 01 00 7c ;44 33 22 ff; <-- ff223344 is 2nd fill color
 000005d0  03 00 00 fe>>00 00 00 7f  00 00 00 7f  aa aa aa aa
 000005e0  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+
+
+Hmm, a lot of:  xx 01 00 7c
+
+
+Another set of two fills to 128x256 surface:
+ 1st fill: x=0,  y=0,   w=128, h=256 color:ff556677
+ 2nd fill: x=59, y=120, w=10,  h=16 color:ff223344
+                      (x2=69  y2=136)
+ gpuaddr is 6615e000
+
+00000500  75 02 00 7c  00 00 00 00  30 00 00 00  34 01 00 7c
+00000510  00 00 00 00  75 02 00 7c  00 70 55 40  40 91 00 00
+00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  80 00 20 d2
+00000530  10 70 00 01  00 01 00 7c  00 e0 15 66  d3 01 00 7c
+00000540  00 e0 15 66  d1 01 00 7c  10 70 00 40  00 00 00 d5
+00000550  00 00 08 08  00 00 10 09  08 00 00 0f  08 00 00 0f
+00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  00 01 80 f1
+00000570  ff 01 00 7c  77 66 55 ff  00 00 00 0c  00 00 00 11
+00000580  00 00 03 d0  80 00 20 d2  10 70 00 01  00 01 00 7c
+00000590  00 e0 15 66  d3 01 00 7c  00 e0 15 66  d1 01 00 7c
+000005a0  10 70 00 40  00 00 00 d5  3b 50 04 08  78 80 08 09
+000005b0  09 00 00 0f  09 00 00 0f  09 00 00 0f  00 00 00 0e
+000005c0  78 00 3b f0  10 00 0a f1  ff 01 00 7c  44 33 22 ff
+000005d0  03 00 00 fe  00 00 00 7f  00 00 00 7f  aa aa aa aa
+000005e0  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
+
