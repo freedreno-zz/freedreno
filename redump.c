@@ -35,7 +35,12 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 static const uint32_t patterns[] = {
+		/* these should be ordered by most inclusive pattern, ie. most 'f's */
 		0xffffffff,
+		0xffffff00,
+		0xffff00ff,
+		0xff00ffff,
+		0x00ffffff,
 		0xffff0000,
 		0x0000ffff,
 		0xff000000,
@@ -54,15 +59,16 @@ static const uint32_t gpuaddr_colors[] = {
 };
 
 struct context {
-	int   fd;
-	void *buf;          /* current row buffer */
-	int   sz;           /* current row buffer size */
-	uint32_t gpuaddrs[32];
-	int   ngpuaddrs;
+	int       fd;
+	uint32_t *buf;           /* current row buffer */
+	int       sz;            /* current row buffer size */
+	uint32_t  gpuaddrs[32];
+	int       ngpuaddrs;
 };
 
 struct context ctxts[32];
 int nctxts;
+typedef int offsets_t[ARRAY_SIZE(ctxts)];
 
 static void handle_string(struct context *ctx)
 {
@@ -71,7 +77,7 @@ static void handle_string(struct context *ctx)
 
 static void handle_gpuaddr(struct context *ctx)
 {
-	uint32_t gpuaddr = *(uint32_t *)(ctx->buf);
+	uint32_t gpuaddr = *ctx->buf;
 	printf("<font color=\"#%06x\"><b>%08x</b></font>",
 			gpuaddr_colors[ctx->ngpuaddrs], gpuaddr);
 	ctx->gpuaddrs[ctx->ngpuaddrs++] = gpuaddr;
@@ -86,14 +92,14 @@ static int find_gpuaddr(struct context *ctx, uint32_t dword)
 	return -1;
 }
 
-static int find_pattern(struct context *ctx, uint32_t dword, int i)
+static int find_pattern(uint32_t dword, int i, offsets_t offsets)
 {
 	int j, k;
 	for (j = 0; j < ARRAY_SIZE(patterns); j++) {
 		int found = 1;
 		uint32_t pattern = patterns[j];
 		for (k = 0; k < nctxts; k++) {
-			uint32_t other_dword = ((uint32_t *)ctxts[k].buf)[i];
+			uint32_t other_dword = ctxts[k].buf[i - offsets[k]];
 			if ((dword & pattern) != (other_dword & pattern)) {
 				found = 0;
 				break;
@@ -105,14 +111,108 @@ static int find_pattern(struct context *ctx, uint32_t dword, int i)
 	return -1;
 }
 
+static int find_rank(int i, offsets_t offsets)
+{
+	int j, k, rank = 0;
+	uint32_t dword;
+
+	/* check if we are past the end: */
+	for (k = 0; k < nctxts; k++)
+		if (i >= (ctxts[k].sz/ 4 + offsets[k]))
+			return 0;
+
+	dword = ctxts[0].buf[i - offsets[0]];
+
+	j = find_gpuaddr(&ctxts[0], dword);
+	if (j >= 0) {
+		/* highest rank, if all are gpuaddr: */
+		rank = ARRAY_SIZE(patterns);
+		for (k = 0; k < nctxts; k++) {
+			struct context *ctx = &ctxts[k];
+			if (j != find_gpuaddr(ctx, ctx->buf[i - offsets[k]])) {
+				rank = 0;
+				break;
+			}
+		}
+	} else {
+		/* followed by pattern match.. in order of priority */
+		j = find_pattern(dword, i, offsets);
+		if (j >= 0)
+			rank = ARRAY_SIZE(patterns) - 1 - j;
+	}
+
+// maybe we should include the next couple dwords in the search.. although
+// probably don't want to include up until the end because later skipped
+// dwords would probably throw things off..
+	return rank + find_rank(i + 1, offsets) / 2;
+//	return rank;  // ???
+}
+
+static void adjust_offsets(struct context *ctx, int i, offsets_t offsets)
+{
+	int k;
+	int max_sz = 0, rank, new_rank;
+	offsets_t new_offsets;
+
+	for (k = 0; k < nctxts; k++)
+		if (ctxts[k].sz > max_sz)
+			max_sz = ctxts[k].sz;
+
+	rank = find_rank(i, offsets);
+
+	/* see if we can achieve a better rank by inserting a skipped dword..
+	 * so far I don't see more than a single optional dword in sequence,
+	 * but if there is possibility for more then I might need to adjust
+	 * this:
+	 */
+	memcpy(new_offsets, offsets, sizeof(offsets_t));
+	for (k = 0; k < nctxts; k++) {
+fprintf(stderr, "%d: sz=%d, off=%d, max=%d\n", k, ctxts[k].sz, offsets[k], max_sz);
+		if ((ctxts[k].sz/4 + offsets[k]) < max_sz/4) {
+			new_offsets[k] += 1;
+			new_rank = find_rank(i, new_offsets);
+fprintf(stderr, "%08x: new_rank=%d, rank=%d\n", ctx->buf[i], new_rank, rank);
+			if (new_rank > rank) {
+fprintf(stderr, "keep it!\n");
+				/* keep this */
+				rank = new_rank;
+				memcpy(offsets, new_offsets, sizeof(offsets_t));
+			} else {
+				/* discard this */
+				new_offsets[k] -= 1;
+			}
+		}
+	}
+}
+
 static void handle_hexdump(struct context *ctx)
 {
 	uint32_t *dwords = ctx->buf;
 	int i, j, k;
+	offsets_t offsets = {0};
+	int offset = 0;
+	int idx = -1;
+
+	/* figure out idx: */
+	for (k = 0; k < nctxts; k++) {
+		if (&ctxts[k] == ctx) {
+			idx = k;
+			break;
+		}
+	}
 
 	for (i = 0; i < ctx->sz/4; i++) {
 		int found = 0;
-		uint32_t dword = dwords[i];
+		uint32_t dword;
+
+		/* adjust offsets for fuzzy matching: */
+		adjust_offsets(ctx, i + offset, offsets);
+		j = offsets[idx] - offset;
+		while (j--)
+			printf("<font face=\"monospace\" color=\"#000000\">........</font><br>");
+		offset = offsets[idx];
+
+		dword = dwords[i];
 
 		/* check for gpu address: */
 		j = find_gpuaddr(ctx, dword);
@@ -126,7 +226,7 @@ static void handle_hexdump(struct context *ctx)
 		// TODO
 
 		/* check for similarity with other ctxts: */
-		j = find_pattern(ctx, dword, i);
+		j = find_pattern(dword, i + offset, offsets);
 		if (j >= 0) {
 			uint32_t mask = 0xff000000;
 			uint32_t shift = 24;
@@ -199,7 +299,11 @@ int main(int argc, char **argv)
 					row_type = type;
 
 				if (type == row_type) {
-					ctx->buf = malloc(ctx->sz + 1);
+					/* allocate  bit extra, because there could be some optional
+					 * words in the cmdstreams, and they might not all be the
+					 * same size..
+					 */
+					ctx->buf = calloc(1, ctx->sz + 1 + 20);
 					read(ctx->fd, ctx->buf, ctx->sz);
 					((char *)ctx->buf)[ctx->sz] = '\0';
 				} else {
