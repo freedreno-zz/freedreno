@@ -23,9 +23,6 @@
 
 /* bits and pieces borrowed from lima project.. concept is the same, wrap
  * various syscalls and log what happens
- * (although to start with I haven't got running hw so I'll just try to fake
- * the ioctls and see if I can figure out what the driver is trying to do..
- * let's see how far I get with that)
  */
 
 #include <stdarg.h>
@@ -44,6 +41,7 @@
 #include "android_pmem.h"
 #include "z180.h"
 #include "list.h"
+#include "redump.h"
 
 // don't use <stdio.h> from glibc..
 struct _IO_FILE;
@@ -52,6 +50,41 @@ FILE *fopen(const char *path, const char *mode);
 int fscanf(FILE *stream, const char *format, ...);
 int printf(const char *format, ...);
 int sprintf(char *str, const char *format, ...);
+
+int fd = -1;
+
+void rd_start(const char *name, const char *fmt, ...)
+{
+	char buf[256];
+	static int cnt = 0;
+	va_list  args;
+
+	sprintf(buf, "%s-%04d.rd", name, cnt++);
+
+	fd = open(buf, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+
+	va_start(args, fmt);
+	vsprintf(buf, fmt, args);
+	va_end(args);
+
+	rd_write_section(RD_TEST, buf, strlen(buf));
+}
+
+void rd_end(void)
+{
+	close(fd);
+	fd = -1;
+}
+
+void rd_write_section(enum rd_sect_type type, void *buf, int sz)
+{
+	if (fd == -1)
+		return;
+	write(fd, &type, sizeof(type));
+	write(fd, &sz, 4);
+	write(fd, buf, sz);
+}
+
 
 static void *libc_dl;
 
@@ -428,7 +461,10 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 			 * entry.
 			 */
 			printf("\t\tcontext:\n");
-			hexdump(ibdesc[i].hostptr, PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+			hexdump(ibdesc[i].hostptr,
+					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+			rd_write_section(RD_CONTEXT, ibdesc[i].hostptr,
+					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 			/*
 00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 0x1a == 26, if this is the
 00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx      size of next packet, then:
@@ -493,10 +529,13 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 #define Z180_STREAM_END_CMD 0x9000
 			 */
 			printf("\t\tcmd:\n");
-			ptr = (unsigned int *)(ibdesc[i].hostptr + PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+			ptr = (unsigned int *)(ibdesc[i].hostptr +
+					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 			len = ptr[2] & 0xfff;
 			// 5 is length of first packet, 2 for the two 7f000000's
 			hexdump(ptr, (len + 5 + 2) * sizeof(unsigned int));
+			rd_write_section(RD_CMDSTREAM, ptr,
+					(len + 5 + 2) * sizeof(unsigned int));
 			// dump out full buffer in case I need to go back and check
 			// if I missed something..
 			dump_buffer(ibdesc[i].gpuaddr);
@@ -727,6 +766,7 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_post(int fd,
 	if (buf)
 		buf->gpuaddr = param->gpuaddr;
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
+	rd_write_section(RD_GPUADDR, &param->gpuaddr, 4);
 }
 
 static void kgsl_ioctl_sharedmem_free_pre(int fd,

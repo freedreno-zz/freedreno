@@ -1,3 +1,4 @@
+redump
 test-fill
 test-copy
 *.so
@@ -6,3 +7,5 @@ test-copy
 *.bmp
 *.log
 00*
+*.rd
+*.html

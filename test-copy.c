@@ -35,7 +35,8 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 	c2d_ts_handle curTimestamp;
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	DEBUG_MSG("copy: %04dx%04dx-%08x", w, h, format);
+	DEBUG_MSG("copy: %04dx%04d-%08x", w, h, format);
+	rd_start("copy", "%dx%d format:%08x", w, h, format);
 
 	dest = create_pixmap(w, h, format);
 	src  = create_pixmap(13, 17, format);
@@ -73,15 +74,23 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
+	rd_end();
+
 	dump_pixmap(dest, "copy-%04dx%04d-%08x.bmp", w, h, format);
 }
 
 int main(int argc, char **argv)
 {
+	/* create dummy pixmap to get initialization out of the way */
+	c2d_ts_handle curTimestamp;
+	PixmapPtr tmp = create_pixmap(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	CHK(c2dFlush(tmp->id, &curTimestamp));
+	CHK(c2dWaitTimestamp(curTimestamp));
+
 	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-//	test_copy(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-//	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB);
-//	test_copy(64, 64, C2D_COLOR_FORMAT_565_RGB);
+	test_copy(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB);
+	test_copy(64, 64, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;
 }

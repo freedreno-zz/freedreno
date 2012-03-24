@@ -27,12 +27,14 @@
 #include <stdarg.h>
 #include "c2d2.h"
 #include "bmp.h"
+#include "redump.h"
 
 typedef long unsigned int size_t;
 void exit(int status);
 int printf(const char *,...);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
+size_t strlen(const char *s);
 
 /*****************************************************************************/
 
@@ -50,6 +52,7 @@ void *malloc(size_t size);
 #define CHK(x) do { \
 		C2D_STATUS status; \
 		DEBUG_MSG(">>> %s", #x); \
+		rd_write_section(RD_CMD, #x, strlen(#x)); \
 		status = x; \
 		if (status) { \
 			ERROR_MSG("<<< %s: failed: %d", #x, status); \

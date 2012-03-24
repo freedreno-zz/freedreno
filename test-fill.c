@@ -30,7 +30,7 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 	c2d_ts_handle curTimestamp;
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	DEBUG_MSG("fill: %04dx%04dx-%08x", w, h, format);
+	DEBUG_MSG("fill: %04dx%04d-%08x", w, h, format);
 
 	dest = create_pixmap(w, h, format);
 
