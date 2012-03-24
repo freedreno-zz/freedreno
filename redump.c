@@ -49,6 +49,13 @@ static const uint32_t patterns[] = {
 		0x000000ff,
 };
 
+static const struct {
+	uint32_t val, mask, color;
+} known_patterns[] = {
+		{ 0x7c000275, 0xffffffff, 0xdd0000 },
+		{ 0x7c000100, 0xffffff00, 0x990099 },
+};
+
 static const uint32_t gpuaddr_colors[] = {
 		0x00ff0000,
 		0x0000ff00,
@@ -136,6 +143,7 @@ static int find_rank(int i, offsets_t offsets)
 		}
 	} else {
 		/* followed by pattern match.. in order of priority */
+		/* TODO we need some fuzziness for partial match here.. */
 		j = find_pattern(dword, i, offsets);
 		if (j >= 0)
 			rank = ARRAY_SIZE(patterns) - 1 - j;
@@ -167,13 +175,10 @@ static void adjust_offsets(struct context *ctx, int i, offsets_t offsets)
 	 */
 	memcpy(new_offsets, offsets, sizeof(offsets_t));
 	for (k = 0; k < nctxts; k++) {
-fprintf(stderr, "%d: sz=%d, off=%d, max=%d\n", k, ctxts[k].sz, offsets[k], max_sz);
 		if ((ctxts[k].sz/4 + offsets[k]) < max_sz/4) {
 			new_offsets[k] += 1;
 			new_rank = find_rank(i, new_offsets);
-fprintf(stderr, "%08x: new_rank=%d, rank=%d\n", ctx->buf[i], new_rank, rank);
 			if (new_rank > rank) {
-fprintf(stderr, "keep it!\n");
 				/* keep this */
 				rank = new_rank;
 				memcpy(offsets, new_offsets, sizeof(offsets_t));
@@ -228,10 +233,19 @@ static void handle_hexdump(struct context *ctx)
 		/* check for similarity with other ctxts: */
 		j = find_pattern(dword, i + offset, offsets);
 		if (j >= 0) {
-			uint32_t mask = 0xff000000;
+			uint32_t mask = 0xff000000, known_mask = 0;
 			uint32_t shift = 24;
+			uint32_t pattern = patterns[j];
+			for (j = 0; j < ARRAY_SIZE(known_patterns); j++) {
+				if (known_patterns[j].val == (dword & known_patterns[j].mask)) {
+					known_mask = known_patterns[j].mask;
+					break;
+				}
+			}
 			for (k = 0; k < 4; k++, mask >>= 8, shift -= 8) {
-				uint32_t color = (patterns[j] & mask) ? 0x0000ff : 0x000000;
+				uint32_t color = (pattern & mask) ? 0x0000ff : 0x000000;
+				if (mask & known_mask)
+					color = known_patterns[j].color;
 				printf("<font face=\"monospace\" color=\"#%06x\">%02x</font>",
 						color, (dword & mask) >> shift);
 			}
