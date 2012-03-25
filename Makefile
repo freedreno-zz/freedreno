@@ -2,7 +2,7 @@
 TESTS = test-fill test-copy
 UTILS = bmp.o
 
-CFLAGS = 
+CFLAGS = -Iincludes
 LFLAGS = -L /system/lib -lC2D2 -lgsl -llog -lOpenVG -lcutils -lstdc++ -lstlport -ldl -lc
 
 all: libwrap.so $(UTILS) $(TESTS) redump
@@ -11,10 +11,10 @@ clean:
 	rm -f *.bmp *.dat *.so *.o *.rd *.html *.log redump $(TESTS)
 
 %.o: %.c
-	gcc -g -c -fPIC $(LFLAGS) $< -o $@
+	gcc -g -c -fPIC $(CFLAGS) $(LFLAGS) $< -o $@
 
-lib%.so: %.o
-	ld -shared -nostdlib --dynamic-linker /system/bin/linker -rpath /system/lib -L /system/lib -ldl -lc $< -o $@
+libwrap.so: wrap-util.o wrap-syscall.o
+	ld -shared -nostdlib --dynamic-linker /system/bin/linker -rpath /system/lib -L /system/lib -ldl -lc $^ -o $@
 
 test-%: test-%.o $(UTILS)
 	ld -nostdlib --entry=_start --dynamic-linker /system/bin/linker -rpath /system/lib $(LFLAGS) $^ -o $@

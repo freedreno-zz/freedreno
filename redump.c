@@ -84,9 +84,10 @@ static void handle_string(struct context *ctx)
 
 static void handle_gpuaddr(struct context *ctx)
 {
-	uint32_t gpuaddr = *ctx->buf;
-	printf("<font color=\"#%06x\"><b>%08x</b></font>",
+	uint32_t gpuaddr = ctx->buf[0];
+	printf("<font color=\"#%06x\"><b>%08x</b></font><br>",
 			gpuaddr_colors[ctx->ngpuaddrs], gpuaddr);
+	printf("(len: %x)", ctx->buf[1]);
 	ctx->gpuaddrs[ctx->ngpuaddrs++] = gpuaddr;
 }
 

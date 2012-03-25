@@ -21,27 +21,42 @@
  * SOFTWARE.
  */
 
-#ifndef REDUMP_H_
-#define REDUMP_H_
+#ifndef WRAP_H_
+#define WRAP_H_
 
-enum rd_sect_type {
-	RD_NONE,
-	RD_TEST,
-	RD_CMD,
-	RD_GPUADDR,
-	RD_CONTEXT,
-	RD_CMDSTREAM,
-};
 
-void rd_start(const char *name, const char *fmt, ...) __attribute__((weak));
-void rd_end(void) __attribute__((weak));
-void rd_write_section(enum rd_sect_type type, void *buf, int sz) __attribute__((weak));
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <pthread.h>
+#include <errno.h>
 
-/* for code that should run with and without libwrap, use the following
- * macros which check if the fxns are present before calling
- */
-#define RD_START(n,f,...)        do { if (rd_start) rd_start(n,f,##__VA_ARGS__); } while (0)
-#define RD_END()                 do { if (rd_end) rd_end(); } while (0)
-#define RD_WRITE_SECTION(t,b,s)  do { if (rd_write_section) rd_write_section(t,b,s); } while (0)
+#include "kgsl_drm.h"
+#include "msm_kgsl.h"
+#include "android_pmem.h"
+#include "z180.h"
+#include "list.h"
+#include "redump.h"
 
-#endif /* REDUMP_H_ */
+// don't use <stdio.h> from glibc..
+struct _IO_FILE;
+typedef struct _IO_FILE FILE;
+FILE *fopen(const char *path, const char *mode);
+int fscanf(FILE *stream, const char *format, ...);
+int printf(const char *format, ...);
+int sprintf(char *str, const char *format, ...);
+
+void * libc_dlsym(const char *name);
+
+#define PROLOG(func) 					\
+	static typeof(func) *orig_##func = NULL;	\
+	if (!orig_##func)				\
+		orig_##func = libc_dlsym(#func);	\
+
+
+#endif /* WRAP_H_ */

@@ -25,102 +25,8 @@
  * various syscalls and log what happens
  */
 
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <dlfcn.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <pthread.h>
-#include <errno.h>
+#include "wrap.h"
 
-#include "kgsl_drm.h"
-#include "msm_kgsl.h"
-#include "android_pmem.h"
-#include "z180.h"
-#include "list.h"
-#include "redump.h"
-
-// don't use <stdio.h> from glibc..
-struct _IO_FILE;
-typedef struct _IO_FILE FILE;
-FILE *fopen(const char *path, const char *mode);
-int fscanf(FILE *stream, const char *format, ...);
-int printf(const char *format, ...);
-int sprintf(char *str, const char *format, ...);
-
-int fd = -1;
-
-void rd_start(const char *name, const char *fmt, ...)
-{
-	char buf[256];
-	static int cnt = 0;
-	va_list  args;
-
-	sprintf(buf, "%s-%04d.rd", name, cnt++);
-
-	fd = open(buf, O_WRONLY| O_TRUNC | O_CREAT, 0644);
-
-	va_start(args, fmt);
-	vsprintf(buf, fmt, args);
-	va_end(args);
-
-	rd_write_section(RD_TEST, buf, strlen(buf));
-}
-
-void rd_end(void)
-{
-	close(fd);
-	fd = -1;
-}
-
-void rd_write_section(enum rd_sect_type type, void *buf, int sz)
-{
-	if (fd == -1)
-		return;
-	write(fd, &type, sizeof(type));
-	write(fd, &sz, 4);
-	write(fd, buf, sz);
-}
-
-
-static void *libc_dl;
-
-static int libc_dlopen(void)
-{
-	libc_dl = dlopen("libc.so", RTLD_LAZY);
-	if (!libc_dl) {
-		printf("Failed to dlopen %s: %s\n", "libc.so", dlerror());
-		exit(-1);
-	}
-
-	return 0;
-}
-
-static void * libc_dlsym(const char *name)
-{
-	void *func;
-
-	if (!libc_dl)
-		libc_dlopen();
-
-	func = dlsym(libc_dl, name);
-
-	if (!func) {
-		printf("Failed to find %s in %s: %s\n",
-		       name, "libc.so", dlerror());
-		exit(-1);
-	}
-
-	return func;
-}
-
-#define PROLOG(func) 					\
-	static typeof(func) *orig_##func = NULL;	\
-	if (!orig_##func)				\
-		orig_##func = libc_dlsym(#func);	\
 
 struct device_info {
 	const char *name;
@@ -465,79 +371,18 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 			rd_write_section(RD_CONTEXT, ibdesc[i].hostptr,
 					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
-			/*
-00000500  75 02 00 7c  00 00 00 00 <1a 00 00 00> 34 01 00 7c  <-- 0x1a == 26, if this is the
-00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx      size of next packet, then:
-00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
-00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
-00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
-00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
-00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
-00000570  ff 01 00 7c ;77 66 55 ff; 03 00 00 fe>>00 00 00 7f  <-- ff556677 is fill color
-00000580  00 00 00 7f  aa aa aa aa  aa aa aa aa  aa aa aa aa
-00000590  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
-			 *
-			 * A second fill added, this time:
-			 *  1st fill: 0, 0, 64, 64 - 0xff556677
-			 *  2nd fill: 27, 24, 10 (37), 16 (40) - 0xff223344
-			 *  gpuaddr is still 6615a000
-			 *
-00000500  75 02 00 7c  00 00 00 00 <30 00 00 00> 34 01 00 7c
-00000510  00 00 00 00<<75 02 00 7c  xx xx xx xx  xx xx xx xx
-00000520  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2
-00000530  08 70 00 01  00 01 00 7c ,00 a0 15 66, d3 01 00 7c  <-- 6615a000 is dst surface gpuaddr
-00000540 ,00 a0 15 66, d1 01 00 7c  08 70 00 40  00 00 00 d5
-00000550  00 00 04 08  00 00 04 09  08 00 00 0f  08 00 00 0f
-00000560  09 00 00 0f  00 00 00 0e  00 00 00 f0  40 00 40 f1
-00000570  ff 01 00 7c ;77 66 55 ff; 00 00 00 0c  00 00 00 11  <-- ff556677 is 1st fill color
-00000580  00 00 03 d0  40 00 08 d2  08 70 00 01  00 01 00 7c
-00000590 ,00 a0 15 66, d3 01 00 7c ,00 a0 15 66, d1 01 00 7c  <-- 6615a000 is dst surface gpuaddr
-000005a0  08 70 00 40  00 00 00 d5  1b 50 02 08  18 80 02 09
-000005b0  09 00 00 0f  09 00 00 0f  09 00 00 0f  00 00 00 0e
-000005c0  18 00 1b f0  10 00 0a f1  ff 01 00 7c ;44 33 22 ff; <-- ff223344 is 2nd fill color
-000005d0  03 00 00 fe>>00 00 00 7f  00 00 00 7f  aa aa aa aa
-000005e0  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
-			 *
-			 * Another random packet to test the length field theory:
-			 *
-00000500  75 02 00 7c  00 00 00 00 <38 00 00 00> 34 01 00 7c  <-- 0x38 == 56
-00000510  00 00 00 00<<75 02 00 7c ,00 c0 4b 40  40 91 00 00, <-- these two words get fixed up on kernel side with:
-00000520  29 03 00 7c  00 a0 01 66  00 c0 01 66  00 60 02 66      3c 80 01 66  05 90 00 00
-00000530  00 00 00 11  00 f0 ff 10  ff ff ff 10  04 04 00 0d      see two kgsl_sharedmem_writel() calls in
-00000540  00 00 00 0c  00 00 00 11  00 00 03 d0  40 00 08 d2      z180_cmdstream_issueibcmds()
-00000550  08 70 00 01  00 01 00 7c  00 e0 15 66  d3 01 00 7c      This seems to cause the core to branch back
-00000560  00 e0 15 66  d1 01 00 7c  08 70 00 40  00 00 00 d5      to ringbuffer addr
-00000570  00 00 00 0c  00 f0 03 08  00 f0 03 09  0a 02 00 7c
-00000580  00 00 00 ff  00 00 00 ff  00 00 00 11  00 00 00 d0
-00000590  d1 03 00 7c  08 70 00 40  40 00 08 00  00 a0 15 66
-000005a0  00 00 00 d5  00 00 00 d0  02 00 00 0f  02 00 00 0f
-000005b0  02 00 00 0f  0a 00 00 0f  00 00 00 d0  0a 00 00 0f
-000005c0  0a 00 00 0f  0a 00 00 0f  02 00 00 0e  00 00 00 f0
-000005d0  40 00 40 f1  00 00 00 f2  00 00 00 d0  00 00 00 d0
-000005e0  00 00 00 d0  00 00 00 d0  00 00 00 d0  00 00 00 d0
-000005f0  03 00 00 fe>>00 00 00 7f  00 00 00 7f  aa aa aa aa  <-- again, two 7f000000's after end of predicted length
-00000600  aa aa aa aa  aa aa aa aa  aa aa aa aa  aa aa aa aa
-			 *
-			 * It seems like the 3rd word into the cmd, we can read the
-			 * length of what seems to be the 2nd packet (which is the
-			 * part that contains the interesting stuff)
-			 *
-			 * Note: these are OR'd with the length field, so I guess the
-			 * length (in words) is probably just the low 12 bits:
-#define Z180_CALL_CMD     0x1000
-#define Z180_MARKER_CMD   0x8000
-#define Z180_STREAM_END_CMD 0x9000
-			 */
+
 			printf("\t\tcmd:\n");
 			ptr = (unsigned int *)(ibdesc[i].hostptr +
 					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 			len = ptr[2] & 0xfff;
-			// 5 is length of first packet, 2 for the two 7f000000's
+			/* 5 is length of first packet, 2 for the two 7f000000's */
 			hexdump(ptr, (len + 5 + 2) * sizeof(unsigned int));
 			rd_write_section(RD_CMDSTREAM, ptr,
 					(len + 5 + 2) * sizeof(unsigned int));
-			// dump out full buffer in case I need to go back and check
-			// if I missed something..
+			/* dump out full buffer in case I need to go back and check
+			 * if I missed something..
+			 */
 			dump_buffer(ibdesc[i].gpuaddr);
 		} else {
 			if (is2d)
@@ -550,21 +395,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 static void kgsl_ioctl_ringbuffer_issueibcmds_post(int fd,
 		struct kgsl_ringbuffer_issueibcmds *param)
 {
-	int is2d = get_kgsl_info(fd) == &kgsl_2d_info;
-	int i;
-	struct kgsl_ibdesc *ibdesc;
-
 	printf("\t\ttimestamp:\t%08x\n", param->timestamp);
-
-	ibdesc = (struct kgsl_ibdesc *)param->ibdesc_addr;
-	for (i = 0; i < param->numibs; i++) {
-		if (is2d && (ibdesc[i].sizedwords > PACKETSIZE_STATE)) {
-			// XXX I think it is writing nextaddr just passed the end of of param->timestamp +
-			// ibdesc[0].sizedwords.. ?? 12 bytes..
-			printf("\t\tnext:\n");
-			hexdump(ibdesc[i].hostptr + ibdesc[i].sizedwords * sizeof(unsigned int), 12);
-		}
-	}
 }
 
 static void kgsl_ioctl_drawctxt_create_pre(int fd,
@@ -763,10 +594,13 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_post(int fd,
 		struct kgsl_sharedmem_from_vmalloc *param)
 {
 	struct buffer *buf = find_buffer((void *)param->hostptr, 0);
+	uint32_t sect[2] = {
+			param->gpuaddr, len_from_vma(param->hostptr)
+	};
 	if (buf)
 		buf->gpuaddr = param->gpuaddr;
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
-	rd_write_section(RD_GPUADDR, &param->gpuaddr, 4);
+	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 }
 
 static void kgsl_ioctl_sharedmem_free_pre(int fd,

@@ -62,6 +62,19 @@ next packet follows in same buffer) and length of the following packet.
      Stream Packet Call
         ... and so on ...
 
+NOTEs:
+Len field is OR'd with:
+#define Z180_CALL_CMD     0x1000
+#define Z180_MARKER_CMD   0x8000
+#define Z180_STREAM_END_CMD 0x9000
+
+First dword is one ofs:
+#define Z180_STREAM_PACKET 0x7C000176
+#define Z180_STREAM_PACKET_CALL 0x7C000275
+
+And packet is terminated with some number of 7F000000's.. the
+number varies.. seems to usually be 2, but addmarker() uses 3..
+
 The marker for ringbuffer entry n+1 is setup on issueibcmds ioctl #N.
 
 

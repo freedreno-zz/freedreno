@@ -31,6 +31,7 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("fill: %04dx%04d-%08x", w, h, format);
+	RD_START("fill", "%04dx%04d-%08x", w, h, format);
 
 	dest = create_pixmap(w, h, format);
 
@@ -52,11 +53,19 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
+	RD_END();
+
 	dump_pixmap(dest, "fill-%04dx%04d-%08x.bmp", w, h, format);
 }
 
 int main(int argc, char **argv)
 {
+	/* create dummy pixmap to get initialization out of the way */
+	c2d_ts_handle curTimestamp;
+	PixmapPtr tmp = create_pixmap(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	CHK(c2dFlush(tmp->id, &curTimestamp));
+	CHK(c2dWaitTimestamp(curTimestamp));
+
 	test_fill(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_fill(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_fill(64, 64, C2D_COLOR_FORMAT_8888_ARGB);

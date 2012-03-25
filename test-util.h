@@ -52,7 +52,7 @@ size_t strlen(const char *s);
 #define CHK(x) do { \
 		C2D_STATUS status; \
 		DEBUG_MSG(">>> %s", #x); \
-		rd_write_section(RD_CMD, #x, strlen(#x)); \
+		RD_WRITE_SECTION(RD_CMD, #x, strlen(#x)); \
 		status = x; \
 		if (status) { \
 			ERROR_MSG("<<< %s: failed: %d", #x, status); \

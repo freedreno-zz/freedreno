@@ -21,27 +21,70 @@
  * SOFTWARE.
  */
 
-#ifndef REDUMP_H_
-#define REDUMP_H_
+#include "wrap.h"
 
-enum rd_sect_type {
-	RD_NONE,
-	RD_TEST,
-	RD_CMD,
-	RD_GPUADDR,
-	RD_CONTEXT,
-	RD_CMDSTREAM,
-};
+static int fd = -1;
 
-void rd_start(const char *name, const char *fmt, ...) __attribute__((weak));
-void rd_end(void) __attribute__((weak));
-void rd_write_section(enum rd_sect_type type, void *buf, int sz) __attribute__((weak));
+void rd_start(const char *name, const char *fmt, ...)
+{
+	char buf[256];
+	static int cnt = 0;
+	va_list  args;
 
-/* for code that should run with and without libwrap, use the following
- * macros which check if the fxns are present before calling
- */
-#define RD_START(n,f,...)        do { if (rd_start) rd_start(n,f,##__VA_ARGS__); } while (0)
-#define RD_END()                 do { if (rd_end) rd_end(); } while (0)
-#define RD_WRITE_SECTION(t,b,s)  do { if (rd_write_section) rd_write_section(t,b,s); } while (0)
+	sprintf(buf, "%s-%04d.rd", name, cnt++);
 
-#endif /* REDUMP_H_ */
+	fd = open(buf, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+
+	va_start(args, fmt);
+	vsprintf(buf, fmt, args);
+	va_end(args);
+
+	rd_write_section(RD_TEST, buf, strlen(buf));
+}
+
+void rd_end(void)
+{
+	close(fd);
+	fd = -1;
+}
+
+void rd_write_section(enum rd_sect_type type, void *buf, int sz)
+{
+	if (fd == -1)
+		return;
+	write(fd, &type, sizeof(type));
+	write(fd, &sz, 4);
+	write(fd, buf, sz);
+}
+
+
+static void *libc_dl;
+
+static int libc_dlopen(void)
+{
+	libc_dl = dlopen("libc.so", RTLD_LAZY);
+	if (!libc_dl) {
+		printf("Failed to dlopen %s: %s\n", "libc.so", dlerror());
+		exit(-1);
+	}
+
+	return 0;
+}
+
+void * libc_dlsym(const char *name)
+{
+	void *func;
+
+	if (!libc_dl)
+		libc_dlopen();
+
+	func = dlsym(libc_dl, name);
+
+	if (!func) {
+		printf("Failed to find %s in %s: %s\n",
+		       name, "libc.so", dlerror());
+		exit(-1);
+	}
+
+	return func;
+}

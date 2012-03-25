@@ -36,7 +36,7 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("copy: %04dx%04d-%08x", w, h, format);
-	rd_start("copy", "%dx%d format:%08x", w, h, format);
+	RD_START("copy", "%dx%d format:%08x", w, h, format);
 
 	dest = create_pixmap(w, h, format);
 	src  = create_pixmap(13, 17, format);
@@ -74,7 +74,7 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
-	rd_end();
+	RD_END();
 
 	dump_pixmap(dest, "copy-%04dx%04d-%08x.bmp", w, h, format);
 }
