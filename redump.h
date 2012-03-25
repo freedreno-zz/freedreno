@@ -26,11 +26,24 @@
 
 enum rd_sect_type {
 	RD_NONE,
-	RD_TEST,
-	RD_CMD,
-	RD_GPUADDR,
-	RD_CONTEXT,
-	RD_CMDSTREAM,
+	RD_TEST,       /* ascii text */
+	RD_CMD,        /* ascii text */
+	RD_GPUADDR,    /* u32 gpuaddr, u32 size */
+	RD_CONTEXT,    /* raw dump */
+	RD_CMDSTREAM,  /* raw dump */
+	RD_PARAM,      /* u32 param_type, u32 param_val, u32 bitlen */
+	RD_FLUSH,      /* empty, clear previous params */
+};
+
+/* RD_PARAM types: */
+enum rd_param_type {
+	RD_PARAM_SURFACE_WIDTH,
+	RD_PARAM_SURFACE_HEIGHT,
+	RD_PARAM_COLOR,
+	RD_PARAM_BLIT_X,
+	RD_PARAM_BLIT_Y,
+	RD_PARAM_BLIT_WIDTH,
+	RD_PARAM_BLIT_HEIGHT,
 };
 
 void rd_start(const char *name, const char *fmt, ...) __attribute__((weak));

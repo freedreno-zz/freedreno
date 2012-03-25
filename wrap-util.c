@@ -58,31 +58,34 @@ void rd_write_section(enum rd_sect_type type, void *buf, int sz)
 }
 
 
-static void *libc_dl;
-
-static int libc_dlopen(void)
+static void * _dlopen(const char *libname)
 {
-	libc_dl = dlopen("libc.so", RTLD_LAZY);
-	if (!libc_dl) {
-		printf("Failed to dlopen %s: %s\n", "libc.so", dlerror());
+	void *dl = dlopen(libname, RTLD_LAZY);
+	if (!dl) {
+		printf("Failed to dlopen %s: %s\n", libname, dlerror());
 		exit(-1);
 	}
-
-	return 0;
+	return dl;
 }
 
-void * libc_dlsym(const char *name)
+void * _dlsym_helper(const char *name)
 {
+	static void *libc_dl;
+	static void *libc2d2_dl;
 	void *func;
 
 	if (!libc_dl)
-		libc_dlopen();
+		libc_dl = _dlopen("libc.so");
+	if (!libc2d2_dl)
+		libc2d2_dl = _dlopen("libC2D2.so");
 
 	func = dlsym(libc_dl, name);
 
+	if (!func)
+		func = dlsym(libc2d2_dl, name);
+
 	if (!func) {
-		printf("Failed to find %s in %s: %s\n",
-		       name, "libc.so", dlerror());
+		printf("Failed to find %s: %s\n", name, dlerror());
 		exit(-1);
 	}
 

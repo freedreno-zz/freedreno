@@ -65,12 +65,49 @@ static const uint32_t gpuaddr_colors[] = {
 		0x000000cc,
 };
 
+static const uint32_t param_colors[] = {
+		0x00ff1111,
+		0x0011ff11,
+		0x001111ff,
+		0x00aa11aa,
+		0x00aaaa11,
+		0x0011aaaa,
+		0x00111111,
+		// XXX don't forget to update if more params added:
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+};
+
+static const char *param_names[] = {
+		"surface width",
+		"surface height",
+		"color",
+		"blit x",
+		"blit y",
+		"blit width",
+		"blit height",
+		// XXX don't forget to update if more params added:
+		"",
+		"",
+		"",
+		"",
+};
+
+struct param {
+	enum rd_param_type type;
+	uint32_t val, bitlen;
+};
+
 struct context {
 	int       fd;
 	uint32_t *buf;           /* current row buffer */
 	int       sz;            /* current row buffer size */
 	uint32_t  gpuaddrs[32];
 	int       ngpuaddrs;
+	struct param params[32];
+	int       nparams;
 };
 
 struct context ctxts[32];
@@ -150,11 +187,7 @@ static int find_rank(int i, offsets_t offsets)
 			rank = ARRAY_SIZE(patterns) - 1 - j;
 	}
 
-// maybe we should include the next couple dwords in the search.. although
-// probably don't want to include up until the end because later skipped
-// dwords would probably throw things off..
 	return rank + find_rank(i + 1, offsets) / 2;
-//	return rank;  // ???
 }
 
 static void adjust_offsets(struct context *ctx, int i, offsets_t offsets)
@@ -223,34 +256,64 @@ static void handle_hexdump(struct context *ctx)
 		/* check for gpu address: */
 		j = find_gpuaddr(ctx, dword);
 		if (j >= 0) {
-			printf("<font face=\"monospace\" color=\"#%06x\"><b>%08x</b></font><br>",
+			printf("<font face=\"monospace\"><font color=\"#%06x\"><b>%08x</b></font> (gpuaddr)</font><br>",
 					gpuaddr_colors[j], dword);
 			continue;
 		}
 
-		/* check for known/common patterns: */
-		// TODO
-
 		/* check for similarity with other ctxts: */
 		j = find_pattern(dword, i + offset, offsets);
 		if (j >= 0) {
-			uint32_t mask = 0xff000000, known_mask = 0;
+			uint32_t mask = 0xff000000, known_mask = 0, param_mask = 0;
 			uint32_t shift = 24;
+			uint32_t known_pattern_color = 0;
+			uint32_t param_color = 0;
 			uint32_t pattern = patterns[j];
+			const char *param_name = NULL;
+
 			for (j = 0; j < ARRAY_SIZE(known_patterns); j++) {
 				if (known_patterns[j].val == (dword & known_patterns[j].mask)) {
 					known_mask = known_patterns[j].mask;
+					known_pattern_color = known_patterns[j].color;
 					break;
 				}
 			}
+
+			// XXX this won't quite do it for multiple params packed
+			// in one dword..  also, for params less than 16 bit,
+			// we need to check high and low..
+			for (j = 0; j < ctx->nparams; j++) {
+				struct param *param = &ctx->params[j];
+				uint32_t m = (uint32_t)((uint64_t)(1 << param->bitlen) - 1);
+				/* ignore param vals of zero, to easy for false match: */
+				if (!param->val)
+					continue;
+				if ((dword & m) == param->val) {
+					param_mask  = m;
+					param_color = param_colors[param->type];
+					param_name  = param_names[param->type];
+				}
+			}
+
+			printf("<font face=\"monospace\">");
+
 			for (k = 0; k < 4; k++, mask >>= 8, shift -= 8) {
 				uint32_t color = (pattern & mask) ? 0x0000ff : 0x000000;
-				if (mask & known_mask)
-					color = known_patterns[j].color;
-				printf("<font face=\"monospace\" color=\"#%06x\">%02x</font>",
+				if (mask & param_mask) {
+					color = param_color;
+					printf("<b>");
+				} else if (mask & known_mask) {
+					color = known_pattern_color;
+				}
+				printf("<font color=\"#%06x\">%02x</font>",
 						color, (dword & mask) >> shift);
+				if (mask & param_mask) {
+					printf("</b>");
+				}
 			}
-			printf("<br>");
+			if (param_name)
+				printf(" (%s?)", param_name);
+			printf("</font><br>");
 			continue;
 		}
 
@@ -268,12 +331,31 @@ static void handle_cmdstream(struct context *ctx)
 	handle_hexdump(ctx);
 }
 
+static void handle_param(struct context *ctx)
+{
+	struct param *param = &ctx->params[ctx->nparams++];
+	param->type   = ctx->buf[0];
+	param->val    = ctx->buf[1];
+	param->bitlen = ctx->buf[2];
+	printf("%s<br>", param_names[param->type]);
+	printf("<font color=\"#%06x\"><b>%08x</b></font><br>",
+			param_colors[param->type], param->val);
+	printf("(bitlen: %d)", param->bitlen);
+}
+
+static void handle_flush(struct context *ctx)
+{
+	ctx->nparams = 0;
+}
+
 static void (*sect_handlers[])(struct context *ctx) = {
 	[RD_TEST] = handle_string,
 	[RD_CMD]  = handle_string,
 	[RD_GPUADDR] = handle_gpuaddr,
 	[RD_CONTEXT] = handle_context,
 	[RD_CMDSTREAM] = handle_cmdstream,
+	[RD_PARAM] = handle_param,
+	[RD_FLUSH] = handle_flush,
 };
 
 static const char *sect_names[] = {
@@ -282,6 +364,8 @@ static const char *sect_names[] = {
 		[RD_GPUADDR]   = "gpuaddr",
 		[RD_CONTEXT]   = "context",
 		[RD_CMDSTREAM] = "cmdstream",
+		[RD_PARAM]     = "param",
+		[RD_FLUSH]     = "flush",
 };
 
 int main(int argc, char **argv)

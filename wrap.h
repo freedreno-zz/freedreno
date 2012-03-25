@@ -51,12 +51,12 @@ int fscanf(FILE *stream, const char *format, ...);
 int printf(const char *format, ...);
 int sprintf(char *str, const char *format, ...);
 
-void * libc_dlsym(const char *name);
+void * _dlsym_helper(const char *name);
 
 #define PROLOG(func) 					\
 	static typeof(func) *orig_##func = NULL;	\
 	if (!orig_##func)				\
-		orig_##func = libc_dlsym(#func);	\
+		orig_##func = _dlsym_helper(#func);	\
 
 
 #endif /* WRAP_H_ */

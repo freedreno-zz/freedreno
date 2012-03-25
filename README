@@ -11,3 +11,9 @@ You can run the test apps with wrapper lib like:
 
 (run that as root or fix up permissions on /dev/kgsl-*)
 
+The redump utility can post process a set of .rd log files to
+generate a html table showing side-by-side comparisions of the
+cmdstream with params and gpuaddr's highlighted:
+
+  ./redump copy*.rd > copy.html
+

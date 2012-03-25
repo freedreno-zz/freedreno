@@ -13,7 +13,7 @@ clean:
 %.o: %.c
 	gcc -g -c -fPIC $(CFLAGS) $(LFLAGS) $< -o $@
 
-libwrap.so: wrap-util.o wrap-syscall.o
+libwrap.so: wrap-util.o wrap-syscall.o wrap-c2d2.o
 	ld -shared -nostdlib --dynamic-linker /system/bin/linker -rpath /system/lib -L /system/lib -ldl -lc $^ -o $@
 
 test-%: test-%.o $(UTILS)
@@ -21,4 +21,4 @@ test-%: test-%.o $(UTILS)
 
 # build redump normally.. it doesn't need to link against android libs
 redump: redump.c
-	gcc $^ -o $@
+	gcc -g $^ -o $@
