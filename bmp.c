@@ -23,6 +23,8 @@
  */
 /*
  * Quick 'n Dirty bitmap dumper, created by poking at a pre-existing .bmp.
+ *
+ * TODO: this doesn't really handle 16bpp..
  */
 #include <stdio.h>
 #include <unistd.h>
@@ -95,9 +97,9 @@ bmp_header_write(int fd, int width, int height)
 }
 
 void
-wrap_bmp_dump(char *buffer, int size, int width, int height, char *filename)
+wrap_bmp_dump(char *buffer, int width, int height, int pitch, char *filename)
 {
-	int fd;
+	int fd, i;
 
 	fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 	if (fd == -1) {
@@ -107,7 +109,11 @@ wrap_bmp_dump(char *buffer, int size, int width, int height, char *filename)
 
 	bmp_header_write(fd, width, height);
 
-	write(fd, buffer, width * height * 4);
+	// TODO support for other than 32bpp..
+	for (i = 0; i < height; i++) {
+		char *ptr = buffer + (i * pitch);
+		write(fd, ptr, width * 4);
+	}
 
 }
 

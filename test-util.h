@@ -47,7 +47,8 @@ size_t strlen(const char *s);
 		do { printf("ERROR: " fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 
-#define FIXED(v)  ((unsigned int) ((v) << 16))
+#define FIXED(v)   ((unsigned int) ((v) << 16))
+#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
 
 #define CHK(x) do { \
 		C2D_STATUS status; \
@@ -99,8 +100,7 @@ static int fmt_bpp[] = {
 
 static PixmapPtr create_pixmap(uint32_t w, uint32_t h, uint32_t format)
 {
-	// XXX probably need to round up??
-	int pitch = (w * fmt_bpp[format & 0xff]) / 8;
+	int pitch = ALIGN((w * fmt_bpp[format & 0xff]) / 8, 128);
 	C2D_RGB_SURFACE_DEF def = {
 			.format = format,
 			.width  = w,
@@ -132,8 +132,7 @@ static void dump_pixmap(PixmapPtr pixmap, char *fmt, ...)
 	va_end(args);
 
 	CHK(c2dReadSurface(pixmap->id, C2D_SURFACE_RGB_HOST, &pixmap->def, 0, 0));
-	wrap_bmp_dump(pixmap->ptr, pixmap->pitch * pixmap->height,
-			pixmap->width, pixmap->height, filename);
+	wrap_bmp_dump(pixmap->ptr, pixmap->width, pixmap->height, pixmap->pitch, filename);
 }
 
 
