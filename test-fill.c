@@ -35,10 +35,10 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 
 	dest = create_pixmap(w, h, format);
 
-	rect.x = 0;
-	rect.y = 0;
-	rect.width = w;
-	rect.height = h;
+	rect.x = 1;
+	rect.y = 2;
+	rect.width = w - 2;
+	rect.height = h - 3;
 
 	// note: look for pattern 0xff556677 in memory to find cmdstream:
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
@@ -66,10 +66,10 @@ int main(int argc, char **argv)
 	CHK(c2dFlush(tmp->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
-	test_fill(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(64, 64, C2D_COLOR_FORMAT_8888_ARGB);
-	test_fill(64, 64, C2D_COLOR_FORMAT_565_RGB);
+	test_fill(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
+	test_fill(61, 67, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;
 }

@@ -41,10 +41,10 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 	dest = create_pixmap(w, h, format);
 	src  = create_pixmap(13, 17, format);
 
-	rect.x = 0;
-	rect.y = 0;
-	rect.width = w;
-	rect.height = h;
+	rect.x = 1;
+	rect.y = 2;
+	rect.width = w - 2;
+	rect.height = h - 3;
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
@@ -61,10 +61,10 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 	blit.config_mask = DEFAULT_BLIT_MASK;
 	blit.next = NULL;
 
-	blit.source_rect.x = FIXED(0);
-	blit.source_rect.y = FIXED(0);
-	blit.source_rect.width = FIXED(13);
-	blit.source_rect.height = FIXED(17);
+	blit.source_rect.x = FIXED(1);
+	blit.source_rect.y = FIXED(2);
+	blit.source_rect.width = FIXED(13-1);
+	blit.source_rect.height = FIXED(17-2);
 
 	blit.target_rect.x = FIXED((w - 13) / 2);
 	blit.target_rect.y = FIXED((h - 17) / 2);
@@ -87,10 +87,10 @@ int main(int argc, char **argv)
 	CHK(c2dFlush(tmp->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
-	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_copy(128, 256, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_copy(64, 64, C2D_COLOR_FORMAT_8888_ARGB);
-	test_copy(64, 64, C2D_COLOR_FORMAT_565_RGB);
+	test_copy(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_copy(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_copy(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
+	test_copy(61, 67, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;
 }
