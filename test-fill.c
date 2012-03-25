@@ -42,6 +42,8 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 
 	// note: look for pattern 0xff556677 in memory to find cmdstream:
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
+	CHK(c2dFlush(dest->id, &curTimestamp));
+	CHK(c2dWaitTimestamp(curTimestamp));
 
 	// second blit.. fill a sub-rect in center of surface:
 	rect.x = (w - 10) / 2;
@@ -49,7 +51,6 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 	rect.width = 10;
 	rect.height = 16;
 	CHK(c2dFillSurface(dest->id, 0xff223344, &rect));
-
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
@@ -69,7 +70,7 @@ int main(int argc, char **argv)
 	test_fill(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_fill(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_fill(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
-	test_fill(61, 67, C2D_COLOR_FORMAT_565_RGB);
+	test_fill(59, 69, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;
 }

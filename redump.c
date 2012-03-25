@@ -33,6 +33,7 @@
 #include "redump.h"
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
 
 static const uint32_t patterns[] = {
 		/* these should be ordered by most inclusive pattern, ie. most 'f's */
@@ -264,12 +265,14 @@ static void handle_hexdump(struct context *ctx)
 		/* check for similarity with other ctxts: */
 		j = find_pattern(dword, i + offset, offsets);
 		if (j >= 0) {
-			uint32_t mask = 0xff000000, known_mask = 0, param_mask = 0;
+			uint32_t mask = 0xff000000, known_mask = 0;
 			uint32_t shift = 24;
 			uint32_t known_pattern_color = 0;
-			uint32_t param_color = 0;
 			uint32_t pattern = patterns[j];
-			const char *param_name = NULL;
+			uint32_t pmasks[4];
+			uint32_t pcolors[4];
+			const char *pnames[4];
+			int nparams = 0;
 
 			for (j = 0; j < ARRAY_SIZE(known_patterns); j++) {
 				if (known_patterns[j].val == (dword & known_patterns[j].mask)) {
@@ -284,35 +287,57 @@ static void handle_hexdump(struct context *ctx)
 			// we need to check high and low..
 			for (j = 0; j < ctx->nparams; j++) {
 				struct param *param = &ctx->params[j];
-				uint32_t m = (uint32_t)((uint64_t)(1 << param->bitlen) - 1);
+				int alignedlen = ALIGN(param->bitlen, 8);
+				uint64_t m = (uint64_t)(1 << param->bitlen) - 1;
+				uint32_t val = param->val;
 				/* ignore param vals of zero, to easy for false match: */
-				if (!param->val)
+				if (!val)
 					continue;
-				if ((dword & m) == param->val) {
-					param_mask  = m;
-					param_color = param_colors[param->type];
-					param_name  = param_names[param->type];
-				}
+				do {
+					if ((dword & m) == val) {
+						int n = nparams++;
+						pmasks[n]  = m;
+						pcolors[n] = param_colors[param->type];
+						pnames[n]  = param_names[param->type];
+						break;
+					}
+					m <<= alignedlen;
+					val <<= alignedlen;
+				} while (m & (uint64_t)0xffffffff);
 			}
 
 			printf("<font face=\"monospace\">");
 
 			for (k = 0; k < 4; k++, mask >>= 8, shift -= 8) {
 				uint32_t color = (pattern & mask) ? 0x0000ff : 0x000000;
-				if (mask & param_mask) {
-					color = param_color;
-					printf("<b>");
-				} else if (mask & known_mask) {
+				if (mask & known_mask) {
 					color = known_pattern_color;
+				}
+				for (j = 0; j < nparams; j++) {
+					if (mask & pmasks[j]) {
+						color = pcolors[j];
+						printf("<b>");
+						break;
+					}
 				}
 				printf("<font color=\"#%06x\">%02x</font>",
 						color, (dword & mask) >> shift);
-				if (mask & param_mask) {
-					printf("</b>");
+				for (j = 0; j < nparams; j++) {
+					if (mask & pmasks[j]) {
+						printf("</b>");
+						break;
+					}
 				}
 			}
-			if (param_name)
-				printf(" (%s?)", param_name);
+			if (nparams > 0) {
+				printf(" (");
+				for (j = 0; j < nparams; j++) {
+					if (j != 0)
+						printf(", ");
+					printf("%s", pnames[j]);
+				}
+				printf("?)");
+			}
 			printf("</font><br>");
 			continue;
 		}
