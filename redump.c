@@ -73,7 +73,7 @@ static const uint32_t param_colors[] = {
 		0x00aa11aa,
 		0x00aaaa11,
 		0x0011aaaa,
-		0x00111111,
+		0x00777777,
 		// XXX don't forget to update if more params added:
 		0x00ffffff,
 		0x00ffffff,
@@ -244,6 +244,13 @@ static void handle_hexdump(struct context *ctx)
 	for (i = 0; i < ctx->sz/4; i++) {
 		int found = 0;
 		uint32_t dword;
+		uint32_t pattern = 0;
+		uint32_t known_pattern = 0;
+		uint32_t known_pattern_color = 0;
+		uint32_t pmasks[4];
+		uint32_t pcolors[4];
+		const char *pnames[4];
+		int nparams = 0;
 
 		/* adjust offsets for fuzzy matching: */
 		adjust_offsets(ctx, i + offset, offsets);
@@ -264,55 +271,55 @@ static void handle_hexdump(struct context *ctx)
 
 		/* check for similarity with other ctxts: */
 		j = find_pattern(dword, i + offset, offsets);
-		if (j >= 0) {
-			uint32_t mask = 0xff000000, known_mask = 0;
-			uint32_t shift = 24;
-			uint32_t known_pattern_color = 0;
-			uint32_t pattern = patterns[j];
-			uint32_t pmasks[4];
-			uint32_t pcolors[4];
-			const char *pnames[4];
-			int nparams = 0;
+		if (j >= 0)
+			pattern = patterns[j];
 
-			for (j = 0; j < ARRAY_SIZE(known_patterns); j++) {
-				if (known_patterns[j].val == (dword & known_patterns[j].mask)) {
-					known_mask = known_patterns[j].mask;
-					known_pattern_color = known_patterns[j].color;
+		/* check for known patterns: */
+		for (j = 0; j < ARRAY_SIZE(known_patterns); j++) {
+			if (known_patterns[j].val == (dword & known_patterns[j].mask)) {
+				known_pattern = known_patterns[j].mask;
+				known_pattern_color = known_patterns[j].color;
+				break;
+			}
+		}
+
+		/* check for recognized params: */
+		for (j = 0; j < ctx->nparams; j++) {
+			struct param *param = &ctx->params[j];
+			int alignedlen = ALIGN(param->bitlen, 8);
+			uint64_t m = (uint64_t)(1 << param->bitlen) - 1;
+			uint32_t val = param->val;
+			/* ignore param vals of zero, to easy for false match: */
+			if (!val)
+				continue;
+			do {
+				if ((dword & m) == val) {
+					int n = nparams++;
+					pmasks[n]  = m;
+					pcolors[n] = param_colors[param->type];
+					pnames[n]  = param_names[param->type];
 					break;
 				}
-			}
+				m <<= alignedlen;
+				val <<= alignedlen;
+			} while (m & (uint64_t)0xffffffff);
+		}
 
-			// XXX this won't quite do it for multiple params packed
-			// in one dword..  also, for params less than 16 bit,
-			// we need to check high and low..
-			for (j = 0; j < ctx->nparams; j++) {
-				struct param *param = &ctx->params[j];
-				int alignedlen = ALIGN(param->bitlen, 8);
-				uint64_t m = (uint64_t)(1 << param->bitlen) - 1;
-				uint32_t val = param->val;
-				/* ignore param vals of zero, to easy for false match: */
-				if (!val)
-					continue;
-				do {
-					if ((dword & m) == val) {
-						int n = nparams++;
-						pmasks[n]  = m;
-						pcolors[n] = param_colors[param->type];
-						pnames[n]  = param_names[param->type];
-						break;
-					}
-					m <<= alignedlen;
-					val <<= alignedlen;
-				} while (m & (uint64_t)0xffffffff);
-			}
+		if (pattern || known_pattern || nparams) {
+			uint32_t mask = 0xff000000;
+			uint32_t shift = 24;
 
 			printf("<font face=\"monospace\">");
 
 			for (k = 0; k < 4; k++, mask >>= 8, shift -= 8) {
-				uint32_t color = (pattern & mask) ? 0x0000ff : 0x000000;
-				if (mask & known_mask) {
+				uint32_t color = 0;
+
+				if (pattern & mask)
+					color = 0x0000ff;
+
+				if (known_pattern & mask)
 					color = known_pattern_color;
-				}
+
 				for (j = 0; j < nparams; j++) {
 					if (mask & pmasks[j]) {
 						color = pcolors[j];
@@ -320,8 +327,10 @@ static void handle_hexdump(struct context *ctx)
 						break;
 					}
 				}
+
 				printf("<font color=\"#%06x\">%02x</font>",
 						color, (dword & mask) >> shift);
+
 				for (j = 0; j < nparams; j++) {
 					if (mask & pmasks[j]) {
 						printf("</b>");
@@ -366,6 +375,10 @@ static void handle_param(struct context *ctx)
 	printf("<font color=\"#%06x\"><b>%08x</b></font><br>",
 			param_colors[param->type], param->val);
 	printf("(bitlen: %d)", param->bitlen);
+	if (param->val >= (1 << param->bitlen)) {
+		fprintf(stderr, "invalid param: %08x (bitlen: %d)\n",
+				param->val, param->bitlen);
+	}
 }
 
 static void handle_flush(struct context *ctx)
