@@ -191,38 +191,43 @@ static int find_rank(int i, offsets_t offsets)
 	return rank + find_rank(i + 1, offsets) / 2;
 }
 
+static int adjust_offsets_recursive(struct context *ctx, int i,
+		offsets_t offsets, int n, int max_sz)
+{
+	int rank;
+
+	rank = find_rank(i, offsets);
+
+	if (n < nctxts) {
+		int new_rank;
+		offsets_t new_offsets;
+		memcpy(new_offsets, offsets, sizeof(offsets_t));
+
+		if ((ctxts[n].sz/4 + offsets[n]) < max_sz)
+			new_offsets[n] += 1;
+		new_rank = adjust_offsets_recursive(ctx, i, new_offsets, n+1, max_sz);
+		if (new_rank > rank) {
+			rank = new_rank;
+			memcpy(offsets, new_offsets, sizeof(offsets_t));
+		}
+	}
+
+	return rank;
+}
+
 static void adjust_offsets(struct context *ctx, int i, offsets_t offsets)
 {
 	int k;
-	int max_sz = 0, rank, new_rank;
-	offsets_t new_offsets;
+	int max_sz = 0;
 
 	for (k = 0; k < nctxts; k++)
 		if (ctxts[k].sz > max_sz)
 			max_sz = ctxts[k].sz;
 
-	rank = find_rank(i, offsets);
+	/* convert to dwords: */
+	max_sz /= 4;
 
-	/* see if we can achieve a better rank by inserting a skipped dword..
-	 * so far I don't see more than a single optional dword in sequence,
-	 * but if there is possibility for more then I might need to adjust
-	 * this:
-	 */
-	memcpy(new_offsets, offsets, sizeof(offsets_t));
-	for (k = 0; k < nctxts; k++) {
-		if ((ctxts[k].sz/4 + offsets[k]) < max_sz/4) {
-			new_offsets[k] += 1;
-			new_rank = find_rank(i, new_offsets);
-			if (new_rank > rank) {
-				/* keep this */
-				rank = new_rank;
-				memcpy(offsets, new_offsets, sizeof(offsets_t));
-			} else {
-				/* discard this */
-				new_offsets[k] -= 1;
-			}
-		}
-	}
+	adjust_offsets_recursive(ctx, i, offsets, 0, max_sz);
 }
 
 static void handle_hexdump(struct context *ctx)
