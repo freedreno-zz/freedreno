@@ -82,13 +82,13 @@ static const uint32_t param_colors[] = {
 };
 
 static const char *param_names[] = {
-		"surface width",
-		"surface height",
+		"sw",
+		"sh",
 		"color",
-		"blit x",
-		"blit y",
-		"blit width",
-		"blit height",
+		"bx",
+		"by",
+		"bw",
+		"bh",
 		// XXX don't forget to update if more params added:
 		"",
 		"",
