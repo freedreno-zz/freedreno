@@ -289,25 +289,27 @@ static void handle_hexdump(struct context *ctx)
 		}
 
 		/* check for recognized params: */
-		for (j = 0; j < ctx->nparams; j++) {
-			struct param *param = &ctx->params[j];
-			int alignedlen = ALIGN(param->bitlen, 8);
-			uint64_t m = (uint64_t)(1 << param->bitlen) - 1;
-			uint32_t val = param->val;
-			/* ignore param vals of zero, to easy for false match: */
-			if (!val)
-				continue;
-			do {
-				if ((dword & m) == val) {
-					int n = nparams++;
-					pmasks[n]  = m;
-					pcolors[n] = param_colors[param->type];
-					pnames[n]  = param_names[param->type];
-					break;
-				}
-				m <<= alignedlen;
-				val <<= alignedlen;
-			} while (m & (uint64_t)0xffffffff);
+		if (!known_pattern) {
+			for (j = 0; j < ctx->nparams; j++) {
+				struct param *param = &ctx->params[j];
+				int alignedlen = ALIGN(param->bitlen, 8);
+				uint64_t m = (uint64_t)(1 << param->bitlen) - 1;
+				uint32_t val = param->val;
+				/* ignore param vals of zero, to easy for false match: */
+				if (!val)
+					continue;
+				do {
+					if ((dword & m) == val) {
+						int n = nparams++;
+						pmasks[n]  = m;
+						pcolors[n] = param_colors[param->type];
+						pnames[n]  = param_names[param->type];
+						break;
+					}
+					m <<= alignedlen;
+					val <<= alignedlen;
+				} while (m & (uint64_t)0xffffffff);
+			}
 		}
 
 		if (pattern || known_pattern || nparams) {
