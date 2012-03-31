@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 	test_copy(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_copy(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_copy(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
-	test_copy(61, 67, C2D_COLOR_FORMAT_565_RGB);
+	test_copy(59, 69, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;
 }

@@ -28,10 +28,25 @@
 #include "wrap.h"
 #include "c2d2.h"
 
+
+/* note, from msm-exa.c:
+ *    /* Max blit extents that hw supports * /
+ *    pExa->maxX = 2048;
+ *    pExa->maxY = 2048;
+ */
+#define COORDLEN 11
+
 static void param(enum rd_param_type ptype, uint32_t val, uint32_t bitlen)
 {
 	uint32_t buf[3] = { ptype, val, bitlen };
 	rd_write_section(RD_PARAM, buf, sizeof(buf));
+}
+
+static void coord(enum rd_param_type ptype, uint32_t val)
+{
+	// XXX not sure about COORDLEN.. but less than 8 bits it seems to
+	// encode the param differently..
+	param(ptype, val, (val > 0xff) ? 16 : 8);
 }
 
 /* just needed so we don't have to link directly against libC2D2.so, which
@@ -64,14 +79,6 @@ C2D_STATUS c2dFillSurface(uint32_t surface_id, uint32_t fill_color, C2D_RECT *re
 	C2D_SURFACE_TYPE surface_type;
 	PROLOG(c2dFillSurface);
 
-	/* note, from msm-exa.c:
-	 *    /* Max blit extents that hw supports * /
-	 *    pExa->maxX = 2048;
-	 *    pExa->maxY = 2048;
-	 *
-	 * so figure that x/y/w/h are 11 bits..
-	 */
-
 	c2dQuerySurface(surface_id, &surface_bits, &surface_type, &width, &height, &format);
 
 	switch(format & 0xff) {
@@ -93,12 +100,12 @@ C2D_STATUS c2dFillSurface(uint32_t surface_id, uint32_t fill_color, C2D_RECT *re
 		format |= 0xff000000;
 
 	param(RD_PARAM_COLOR,          color,        32);
-	param(RD_PARAM_SURFACE_WIDTH,  width,        11);
-	param(RD_PARAM_SURFACE_HEIGHT, height,       11);
-	param(RD_PARAM_BLIT_X,         rect->x,      11);
-	param(RD_PARAM_BLIT_Y,         rect->y,      11);
-	param(RD_PARAM_BLIT_WIDTH,     rect->width,  11);
-	param(RD_PARAM_BLIT_HEIGHT,    rect->height, 11);
+	param(RD_PARAM_SURFACE_WIDTH,  width,        COORDLEN);
+	param(RD_PARAM_SURFACE_HEIGHT, height,       COORDLEN);
+	coord(RD_PARAM_BLIT_X,         rect->x);
+	coord(RD_PARAM_BLIT_Y,         rect->y);
+	coord(RD_PARAM_BLIT_WIDTH,     rect->width);
+	coord(RD_PARAM_BLIT_HEIGHT,    rect->height);
 
 	return orig_c2dFillSurface(surface_id, fill_color, rect);
 }
@@ -114,18 +121,18 @@ C2D_STATUS c2dDraw(uint32_t target_id,  uint32_t target_config, C2D_RECT *target
 
 	c2dQuerySurface(target_id, &surface_bits, &surface_type, &width, &height, &format);
 
-	param(RD_PARAM_SURFACE_WIDTH,  width,              11);
-	param(RD_PARAM_SURFACE_HEIGHT, height,             11);
+	param(RD_PARAM_SURFACE_WIDTH,  width,              COORDLEN);
+	param(RD_PARAM_SURFACE_HEIGHT, height,             COORDLEN);
 	rect = &objects_list->source_rect;
-	param(RD_PARAM_BLIT_X,         rect->x >> 16,      11);
-	param(RD_PARAM_BLIT_Y,         rect->y >> 16,      11);
-	param(RD_PARAM_BLIT_WIDTH,     rect->width >> 16,  11);
-	param(RD_PARAM_BLIT_HEIGHT,    rect->height >> 16, 11);
+	coord(RD_PARAM_BLIT_X,         rect->x >> 16);
+	coord(RD_PARAM_BLIT_Y,         rect->y >> 16);
+	coord(RD_PARAM_BLIT_WIDTH,     rect->width >> 16);
+	coord(RD_PARAM_BLIT_HEIGHT,    rect->height >> 16);
 	rect = &objects_list->target_rect;
-	param(RD_PARAM_BLIT_X,         rect->x >> 16,      11);
-	param(RD_PARAM_BLIT_Y,         rect->y >> 16,      11);
-	param(RD_PARAM_BLIT_WIDTH,     rect->width >> 16,  11);
-	param(RD_PARAM_BLIT_HEIGHT,    rect->height >> 16, 11);
+	coord(RD_PARAM_BLIT_X,         rect->x >> 16);
+	coord(RD_PARAM_BLIT_Y,         rect->y >> 16);
+	coord(RD_PARAM_BLIT_WIDTH,     rect->width >> 16);
+	coord(RD_PARAM_BLIT_HEIGHT,    rect->height >> 16);
 
 	return orig_c2dDraw(target_id, target_config, target_scissor, target_mask_id,
 			target_color_key, objects_list, num_objects);

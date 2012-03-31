@@ -31,7 +31,7 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("fill: %04dx%04d-%08x", w, h, format);
-	RD_START("fill", "%04dx%04d-%08x", w, h, format);
+	RD_START("fill", "%dx%d-%08x", w, h, format);
 
 	dest = create_pixmap(w, h, format);
 
@@ -71,6 +71,14 @@ int main(int argc, char **argv)
 	test_fill(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_fill(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
 	test_fill(59, 69, C2D_COLOR_FORMAT_565_RGB);
+	test_fill(21, 0x3ff, C2D_COLOR_FORMAT_8888_ARGB);
+	test_fill(0xff, 22, C2D_COLOR_FORMAT_8888_ARGB);
+
+	/* beyond 0x101, we get an extra dword.. probably means max x coord is 8 bits, and
+	 * after that there are extra words in the cmdstream..
+	 */
+	test_fill(0x101, 22, C2D_COLOR_FORMAT_8888_ARGB);
+	test_fill(0x102, 22, C2D_COLOR_FORMAT_8888_ARGB);
 
 	return 0;
 }
