@@ -35,10 +35,10 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 
 	dest = create_pixmap(w, h, format);
 
-	rect.x = 1;
-	rect.y = 2;
-	rect.width = w - 2;
-	rect.height = h - 3;
+	rect.x = 1 + (w / 64);
+	rect.y = 2 + (w / 32);
+	rect.width = w - 2 * rect.x;
+	rect.height = h - 2 * rect.y;
 
 	// note: look for pattern 0xff556677 in memory to find cmdstream:
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
@@ -68,17 +68,21 @@ int main(int argc, char **argv)
 	CHK(c2dWaitTimestamp(curTimestamp));
 
 	test_fill(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 	test_fill(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+/* for now, concentrate on xRGB:
 	test_fill(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
 	test_fill(59, 69, C2D_COLOR_FORMAT_565_RGB);
 	test_fill(21, 0x3ff, C2D_COLOR_FORMAT_8888_ARGB);
 	test_fill(0xff, 22, C2D_COLOR_FORMAT_8888_ARGB);
+*/
 
 	/* beyond 0x101, we get an extra dword.. probably means max x coord is 8 bits, and
 	 * after that there are extra words in the cmdstream..
 	 */
-	test_fill(0x101, 22, C2D_COLOR_FORMAT_8888_ARGB);
-	test_fill(0x102, 22, C2D_COLOR_FORMAT_8888_ARGB);
+	test_fill(0x101, 22, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(0x102, 22, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(1920, 1080, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
 
 	return 0;
 }
