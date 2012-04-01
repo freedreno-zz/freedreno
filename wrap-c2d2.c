@@ -49,17 +49,32 @@ static void coord(enum rd_param_type ptype, uint32_t val)
 	param(ptype, val, (val > 0xff) ? 16 : 8);
 }
 
-/* just needed so we don't have to link directly against libC2D2.so, which
- * would mess up the ioctl wrapping..
- */
-C2D_STATUS c2dQuerySurface(uint32_t surface_id, uint32_t *surface_bits,
-		C2D_SURFACE_TYPE *surface_type, uint32_t *width, uint32_t *height,
-		uint32_t *format)
+typedef struct {
+	C2D_SURFACE_TYPE surface_type;
+	uint32 surface_bits;
+	union {
+		C2D_RGB_SURFACE_DEF rgb;
+	} def;
+} Surface;
+
+static Surface surfaces[64];
+
+C2D_STATUS c2dCreateSurface(uint32 *surface_id, uint32 surface_bits,
+		C2D_SURFACE_TYPE surface_type, void *surface_definition)
 {
-	PROLOG(c2dQuerySurface);
-	return orig_c2dQuerySurface(surface_id, surface_bits,
-			surface_type, width, height, format);
+	C2D_STATUS ret;
+	PROLOG(c2dCreateSurface);
+	ret = orig_c2dCreateSurface(surface_id, surface_bits,
+			surface_type, surface_definition);
+	if (*surface_id >= ARRAY_SIZE(surfaces))
+		return C2D_STATUS_OUT_OF_MEMORY;
+	surfaces[*surface_id].surface_type = surface_type;
+	surfaces[*surface_id].surface_bits = surface_bits;
+	memcpy(&surfaces[*surface_id].def, surface_definition,
+			sizeof(surfaces[*surface_id].def));
+	return ret;
 }
+
 
 C2D_STATUS c2dFlush(uint32 target_id, c2d_ts_handle *timestamp)
 {
@@ -75,13 +90,11 @@ C2D_STATUS c2dFlush(uint32 target_id, c2d_ts_handle *timestamp)
 
 C2D_STATUS c2dFillSurface(uint32_t surface_id, uint32_t fill_color, C2D_RECT *rect)
 {
-	uint32_t surface_bits, width, height, format, color;
-	C2D_SURFACE_TYPE surface_type;
+	uint32_t color;
+	Surface *surf = &surfaces[surface_id];
 	PROLOG(c2dFillSurface);
 
-	c2dQuerySurface(surface_id, &surface_bits, &surface_type, &width, &height, &format);
-
-	switch(format & 0xff) {
+	switch(surf->def.rgb.format & 0xff) {
 	case C2D_COLOR_FORMAT_565_RGB:
 		color  = ((fill_color << 3) & 0xf8) | ((fill_color >> 2) & 0x07) |
 			((fill_color << 5) & 0xfc00)    | ((fill_color >> 1) & 0x300) |
@@ -92,16 +105,19 @@ C2D_STATUS c2dFillSurface(uint32_t surface_id, uint32_t fill_color, C2D_RECT *re
 		color = fill_color;
 		break;
 	default:
-		printf("error, unsupported format: %d\n", format & 0xff);
+		printf("error, unsupported format: %d\n", surf->def.rgb.format & 0xff);
 		exit(1);
 	}
 
-	if (format & C2D_FORMAT_DISABLE_ALPHA)
-		format |= 0xff000000;
+	if (surf->def.rgb.format & C2D_FORMAT_DISABLE_ALPHA)
+		color |= 0xff000000;
 
-	param(RD_PARAM_COLOR,          color,        32);
-	param(RD_PARAM_SURFACE_WIDTH,  width,        COORDLEN);
-	param(RD_PARAM_SURFACE_HEIGHT, height,       COORDLEN);
+	param(RD_PARAM_COLOR,          color, 32);
+	param(RD_PARAM_SURFACE_WIDTH,  surf->def.rgb.width,  COORDLEN);
+	param(RD_PARAM_SURFACE_HEIGHT, surf->def.rgb.height, COORDLEN);
+	// pitch appears to be in units of 8 pixels?  Or 32 bytes?  need to
+	// test with some other color formats to confirm..
+	param(RD_PARAM_SURFACE_PITCH,  surf->def.rgb.stride / 32, COORDLEN);
 	coord(RD_PARAM_BLIT_X,         rect->x);
 	coord(RD_PARAM_BLIT_Y,         rect->y);
 	coord(RD_PARAM_BLIT_WIDTH,     rect->width);
@@ -114,15 +130,25 @@ C2D_STATUS c2dDraw(uint32_t target_id,  uint32_t target_config, C2D_RECT *target
 		uint32_t target_mask_id, uint32_t target_color_key,
 		C2D_OBJECT *objects_list, uint32_t num_objects)
 {
-	uint32_t surface_bits, width, height, format, color;
 	C2D_SURFACE_TYPE surface_type;
 	C2D_RECT *rect;
+	Surface *surf;
 	PROLOG(c2dDraw);
 
-	c2dQuerySurface(target_id, &surface_bits, &surface_type, &width, &height, &format);
-
-	param(RD_PARAM_SURFACE_WIDTH,  width,              COORDLEN);
-	param(RD_PARAM_SURFACE_HEIGHT, height,             COORDLEN);
+	surf = &surfaces[target_id];
+	param(RD_PARAM_SURFACE_WIDTH,  surf->def.rgb.width,  COORDLEN);
+	param(RD_PARAM_SURFACE_HEIGHT, surf->def.rgb.height, COORDLEN);
+	param(RD_PARAM_SURFACE_PITCH,  surf->def.rgb.stride / 32, COORDLEN);
+	surf = &surfaces[objects_list->surface_id];
+	param(RD_PARAM_SURFACE_WIDTH,  surf->def.rgb.width,  COORDLEN);
+	param(RD_PARAM_SURFACE_HEIGHT, surf->def.rgb.height, COORDLEN);
+	param(RD_PARAM_SURFACE_PITCH,  surf->def.rgb.stride / 32, COORDLEN);
+	if (objects_list->mask_surface_id) {
+		surf = &surfaces[objects_list->mask_surface_id];
+		param(RD_PARAM_SURFACE_WIDTH,  surf->def.rgb.width,  COORDLEN);
+		param(RD_PARAM_SURFACE_HEIGHT, surf->def.rgb.height, COORDLEN);
+		param(RD_PARAM_SURFACE_PITCH,  surf->def.rgb.stride / 32, COORDLEN);
+	}
 	rect = &objects_list->source_rect;
 	coord(RD_PARAM_BLIT_X,         rect->x >> 16);
 	coord(RD_PARAM_BLIT_Y,         rect->y >> 16);

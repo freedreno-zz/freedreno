@@ -32,9 +32,6 @@
 
 #include "redump.h"
 
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
-
 static const uint32_t patterns[] = {
 		/* these should be ordered by most inclusive pattern, ie. most 'f's */
 		0xffffffff,
@@ -73,6 +70,9 @@ static const uint32_t param_colors[] = {
 		0x00aa11aa,
 		0x00aaaa11,
 		0x0011aaaa,
+		0x00884488,
+		0x00888844,
+		0x00448888,
 		0x00777777,
 		// XXX don't forget to update if more params added:
 		0x00ffffff,
@@ -84,6 +84,7 @@ static const uint32_t param_colors[] = {
 static const char *param_names[] = {
 		"sw",
 		"sh",
+		"pitch",
 		"color",
 		"bx",
 		"by",

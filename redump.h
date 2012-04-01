@@ -39,6 +39,7 @@ enum rd_sect_type {
 enum rd_param_type {
 	RD_PARAM_SURFACE_WIDTH,
 	RD_PARAM_SURFACE_HEIGHT,
+	RD_PARAM_SURFACE_PITCH,
 	RD_PARAM_COLOR,
 	RD_PARAM_BLIT_X,
 	RD_PARAM_BLIT_Y,
@@ -56,5 +57,11 @@ void rd_write_section(enum rd_sect_type type, void *buf, int sz) __attribute__((
 #define RD_START(n,f,...)        do { if (rd_start) rd_start(n,f,##__VA_ARGS__); } while (0)
 #define RD_END()                 do { if (rd_end) rd_end(); } while (0)
 #define RD_WRITE_SECTION(t,b,s)  do { if (rd_write_section) rd_write_section(t,b,s); } while (0)
+
+
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#undef ALIGN
+#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
+
 
 #endif /* REDUMP_H_ */
