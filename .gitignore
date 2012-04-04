@@ -1,6 +1,7 @@
 redump
 test-fill
 test-copy
+test-fb
 *.so
 *.o
 *.swp

@@ -25,11 +25,11 @@
 #define TEST_UTIL_H_
 
 #include <stdarg.h>
+#include <stddef.h>
 #include "c2d2.h"
 #include "bmp.h"
 #include "redump.h"
 
-typedef long unsigned int size_t;
 void exit(int status);
 int printf(const char *,...);
 void *calloc(size_t nmemb, size_t size);
@@ -66,7 +66,6 @@ typedef enum {
 	TRUE = 1,
 	FALSE = 0,
 } Bool;
-#define NULL (void *)0
 
 typedef struct {
 	C2D_RGB_SURFACE_DEF def;
@@ -98,6 +97,9 @@ static int fmt_bpp[] = {
 		[C2D_COLOR_FORMAT_8888_RGBA] = 32,
 };
 
+#define xRGB (C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA)
+#define ARGB C2D_COLOR_FORMAT_8888_ARGB
+
 static PixmapPtr create_pixmap(uint32_t w, uint32_t h, uint32_t format)
 {
 	int pitch = ALIGN((w * fmt_bpp[format & 0xff]) / 8, 128);
@@ -106,7 +108,7 @@ static PixmapPtr create_pixmap(uint32_t w, uint32_t h, uint32_t format)
 			.width  = w,
 			.height = h,
 			.buffer = malloc(pitch * h),
-			.phys = NULL,
+			.phys   = NULL,
 			.stride = pitch,
 	};
 	PixmapPtr pixmap = calloc(1, sizeof *pixmap);
@@ -118,6 +120,34 @@ static PixmapPtr create_pixmap(uint32_t w, uint32_t h, uint32_t format)
 	CHK(c2dCreateSurface(&pixmap->id, C2D_SOURCE | C2D_TARGET,
 			C2D_SURFACE_RGB_HOST, &def));
 	DEBUG_MSG("created pixmap: %p %d", pixmap, pixmap->id);
+	return pixmap;
+}
+
+static PixmapPtr create_pixmap_phys(uint32_t w, uint32_t h, uint32_t format,
+		unsigned long phys)
+{
+	int pitch = ALIGN((w * fmt_bpp[format & 0xff]) / 8, 128);
+	C2D_RGB_SURFACE_DEF def = {
+			.format = format,
+			.width  = w,
+			.height = h,
+			.buffer = (void *)1,
+			.phys   = (void *)phys,
+			.stride = pitch,
+	};
+	uint32_t sect[2] = {
+			phys, pitch * h,
+	};
+	PixmapPtr pixmap = calloc(1, sizeof *pixmap);
+	pixmap->width  = w;
+	pixmap->height = h;
+	pixmap->pitch  = pitch;
+	pixmap->ptr    = def.buffer;
+	pixmap->def    = def;
+	CHK(c2dCreateSurface(&pixmap->id, C2D_SOURCE | C2D_TARGET,
+			C2D_SURFACE_RGB_HOST | C2D_SURFACE_WITH_PHYS, &def));
+	DEBUG_MSG("created pixmap: %p %d", pixmap, pixmap->id);
+	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 	return pixmap;
 }
 

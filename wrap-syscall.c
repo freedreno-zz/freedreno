@@ -665,6 +665,9 @@ int ioctl(int fd, unsigned long int request, ...)
 	PROLOG(ioctl);
 	void *ptr;
 
+	// XXX fbdev doesn't appear to play by the rules:
+	ioc_size = 1;
+
 	if (ioc_size) {
 		va_list args;
 
@@ -680,7 +683,7 @@ int ioctl(int fd, unsigned long int request, ...)
 	else if ((fd == pmem_gpu0) || (fd == pmem_gpu1))
 		pmem_ioctl_pre(fd, request, ptr);
 	else
-		printf("> [%4d]         : <unknown> (%08lx)", fd, request);
+		printf("> [%4d]         : <unknown> (%08lx)\n", fd, request);
 
 	ret = orig_ioctl(fd, request, ptr);
 
@@ -689,7 +692,7 @@ int ioctl(int fd, unsigned long int request, ...)
 	else if ((fd == pmem_gpu0) || (fd == pmem_gpu1))
 		pmem_ioctl_post(fd, request, ptr, ret);
 	else
-		printf("< [%4d]         : <unknown> (%08lx)", fd, request);
+		printf("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, request, ret);
 
 	return ret;
 }
