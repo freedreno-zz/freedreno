@@ -122,6 +122,8 @@ C2D_STATUS c2dFillSurface(uint32_t surface_id, uint32_t fill_color, C2D_RECT *re
 	coord(RD_PARAM_BLIT_Y,         rect->y);
 	coord(RD_PARAM_BLIT_WIDTH,     rect->width);
 	coord(RD_PARAM_BLIT_HEIGHT,    rect->height);
+	coord(RD_PARAM_BLIT_X2,        rect->x + rect->width);
+	coord(RD_PARAM_BLIT_Y2,        rect->y + rect->height);
 
 	return orig_c2dFillSurface(surface_id, fill_color, rect);
 }
@@ -154,11 +156,15 @@ C2D_STATUS c2dDraw(uint32_t target_id,  uint32_t target_config, C2D_RECT *target
 	coord(RD_PARAM_BLIT_Y,         rect->y >> 16);
 	coord(RD_PARAM_BLIT_WIDTH,     rect->width >> 16);
 	coord(RD_PARAM_BLIT_HEIGHT,    rect->height >> 16);
+	coord(RD_PARAM_BLIT_X2,        (rect->x + rect->width) >> 16);
+	coord(RD_PARAM_BLIT_Y2,        (rect->y + rect->height) >> 16);
 	rect = &objects_list->target_rect;
 	coord(RD_PARAM_BLIT_X,         rect->x >> 16);
 	coord(RD_PARAM_BLIT_Y,         rect->y >> 16);
 	coord(RD_PARAM_BLIT_WIDTH,     rect->width >> 16);
 	coord(RD_PARAM_BLIT_HEIGHT,    rect->height >> 16);
+	coord(RD_PARAM_BLIT_X2,        (rect->x + rect->width) >> 16);
+	coord(RD_PARAM_BLIT_Y2,        (rect->y + rect->height) >> 16);
 
 	return orig_c2dDraw(target_id, target_config, target_scissor, target_mask_id,
 			target_color_key, objects_list, num_objects);

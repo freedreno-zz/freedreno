@@ -67,12 +67,15 @@ static const uint32_t param_colors[] = {
 		0x00ff1111,
 		0x0011ff11,
 		0x001111ff,
+		0x0011aaaa,
 		0x00aa11aa,
 		0x00aaaa11,
-		0x0011aaaa,
+		0x00448888,
 		0x00884488,
 		0x00888844,
-		0x00448888,
+		0x00557777,
+		0x00775577,
+		0x00777755,
 		0x00777777,
 		// XXX don't forget to update if more params added:
 		0x00ffffff,
@@ -90,6 +93,8 @@ static const char *param_names[] = {
 		"by",
 		"bw",
 		"bh",
+		"bx2",
+		"by2",
 		// XXX don't forget to update if more params added:
 		"",
 		"",
@@ -255,7 +260,7 @@ static void handle_hexdump(struct context *ctx)
 		uint32_t known_pattern_color = 0;
 		uint32_t pmasks[4];
 		uint32_t pcolors[4];
-		const char *pnames[4];
+		const char *pnames[32];
 		int nparams = 0;
 
 		/* adjust offsets for fuzzy matching: */
@@ -384,8 +389,8 @@ static void handle_param(struct context *ctx)
 			param_colors[param->type], param->val);
 	printf("(bitlen: %d)", param->bitlen);
 	if (param->val >= (1 << param->bitlen)) {
-		fprintf(stderr, "invalid param: %08x (bitlen: %d)\n",
-				param->val, param->bitlen);
+		fprintf(stderr, "invalid param: %08x (name: %s, bitlen: %d)\n",
+				param->val, param_names[param->type], param->bitlen);
 	}
 }
 
@@ -405,13 +410,13 @@ static void (*sect_handlers[])(struct context *ctx) = {
 };
 
 static const char *sect_names[] = {
-		[RD_TEST]      = "test",
-		[RD_CMD]       = "cmd",
-		[RD_GPUADDR]   = "gpuaddr",
-		[RD_CONTEXT]   = "context",
-		[RD_CMDSTREAM] = "cmdstream",
-		[RD_PARAM]     = "param",
-		[RD_FLUSH]     = "flush",
+	[RD_TEST]      = "test",
+	[RD_CMD]       = "cmd",
+	[RD_GPUADDR]   = "gpuaddr",
+	[RD_CONTEXT]   = "context",
+	[RD_CMDSTREAM] = "cmdstream",
+	[RD_PARAM]     = "param",
+	[RD_FLUSH]     = "flush",
 };
 
 int main(int argc, char **argv)

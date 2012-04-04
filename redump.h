@@ -45,6 +45,8 @@ enum rd_param_type {
 	RD_PARAM_BLIT_Y,
 	RD_PARAM_BLIT_WIDTH,
 	RD_PARAM_BLIT_HEIGHT,
+	RD_PARAM_BLIT_X2,      /* BLIT_X + BLIT_WIDTH */
+	RD_PARAM_BLIT_Y2,      /* BLIT_Y + BLIT_WIDTH */
 };
 
 void rd_start(const char *name, const char *fmt, ...) __attribute__((weak));
