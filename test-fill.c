@@ -63,13 +63,13 @@ int main(int argc, char **argv)
 {
 	/* create dummy pixmap to get initialization out of the way */
 	c2d_ts_handle curTimestamp;
-	PixmapPtr tmp = create_pixmap(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	PixmapPtr tmp = create_pixmap(64, 64, xRGB);
 	CHK(c2dFlush(tmp->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
-	test_fill(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(63, 65, xRGB);
+	test_fill(63, 65, xRGB);
+	test_fill(127, 260, xRGB);
 /* for now, concentrate on xRGB:
 	test_fill(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
 	test_fill(59, 69, C2D_COLOR_FORMAT_565_RGB);
@@ -80,9 +80,9 @@ int main(int argc, char **argv)
 	/* beyond 0x101, we get an extra dword.. probably means max x coord is 8 bits, and
 	 * after that there are extra words in the cmdstream..
 	 */
-	test_fill(0x101, 22, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(0x102, 22, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_fill(1920, 1080, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	test_fill(0x101, 22, xRGB);
+	test_fill(0x102, 22, xRGB);
+	test_fill(1920, 1080, xRGB);
 
 	return 0;
 }
