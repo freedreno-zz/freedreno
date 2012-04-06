@@ -82,6 +82,14 @@ static const uint32_t param_colors[] = {
 		0x00ffffff,
 		0x00ffffff,
 		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
+		0x00ffffff,
 };
 
 static const char *param_names[] = {
@@ -96,6 +104,14 @@ static const char *param_names[] = {
 		"bx2",
 		"by2",
 		// XXX don't forget to update if more params added:
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
 		"",
 		"",
 		"",
@@ -117,7 +133,7 @@ struct context {
 	int       nparams;
 };
 
-struct context ctxts[32];
+struct context ctxts[64];
 int nctxts;
 typedef int offsets_t[ARRAY_SIZE(ctxts)];
 
@@ -258,8 +274,8 @@ static void handle_hexdump(struct context *ctx)
 		uint32_t pattern = 0;
 		uint32_t known_pattern = 0;
 		uint32_t known_pattern_color = 0;
-		uint32_t pmasks[4];
-		uint32_t pcolors[4];
+		uint32_t pmasks[32];
+		uint32_t pcolors[32];
 		const char *pnames[32];
 		int nparams = 0;
 
@@ -427,7 +443,7 @@ int main(int argc, char **argv)
 		struct context *ctx = &ctxts[nctxts++];
 		ctx->fd = open(argv[i], O_RDONLY);
 		if (ctx->fd < 0) {
-			printf("could not open: %s\n", argv[i]);
+			fprintf(stderr, "could not open: %s\n", argv[i]);
 			return -1;
 		}
 	}
@@ -442,6 +458,7 @@ int main(int argc, char **argv)
 
 			ctx->sz = 0;
 			free(ctx->buf);
+			ctx->buf = NULL;
 
 			if ((read(ctx->fd, &type, sizeof(type)) > 0) &&
 					(read(ctx->fd, &ctx->sz, 4) > 0)) {
@@ -457,7 +474,7 @@ int main(int argc, char **argv)
 					read(ctx->fd, ctx->buf, ctx->sz);
 					((char *)ctx->buf)[ctx->sz] = '\0';
 				} else {
-					printf("unexpected type '%d', expected '%d'\n", type, row_type);
+					fprintf(stderr, "unexpected type '%d', expected '%d'\n", type, row_type);
 					return -1;
 				}
 			}

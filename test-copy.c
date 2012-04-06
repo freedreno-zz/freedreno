@@ -83,13 +83,13 @@ int main(int argc, char **argv)
 {
 	/* create dummy pixmap to get initialization out of the way */
 	c2d_ts_handle curTimestamp;
-	PixmapPtr tmp = create_pixmap(64, 64, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
+	PixmapPtr tmp = create_pixmap(64, 64, xRGB);
 	CHK(c2dFlush(tmp->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
-	test_copy(63, 65, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_copy(127, 260, C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA);
-	test_copy(62, 66, C2D_COLOR_FORMAT_8888_ARGB);
+	test_copy(63, 65, xRGB);
+	test_copy(127, 260, xRGB);
+	test_copy(62, 66, ARGB);
 	test_copy(59, 69, C2D_COLOR_FORMAT_565_RGB);
 
 	return 0;

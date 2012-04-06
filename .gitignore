@@ -8,6 +8,6 @@ test-fb
 *.swp
 *.bmp
 *.log
-00*
+*.dat
 *.rd
 *.html

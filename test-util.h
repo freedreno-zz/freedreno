@@ -34,6 +34,7 @@ void exit(int status);
 int printf(const char *,...);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
+void free(void *ptr);
 size_t strlen(const char *s);
 
 /*****************************************************************************/
@@ -99,6 +100,8 @@ static int fmt_bpp[] = {
 
 #define xRGB (C2D_COLOR_FORMAT_8888_ARGB | C2D_FORMAT_DISABLE_ALPHA)
 #define ARGB C2D_COLOR_FORMAT_8888_ARGB
+#define A8   C2D_COLOR_FORMAT_8_A
+#define U1   C2D_COLOR_FORMAT_1
 
 static PixmapPtr create_pixmap(uint32_t w, uint32_t h, uint32_t format)
 {
@@ -149,6 +152,15 @@ static PixmapPtr create_pixmap_phys(uint32_t w, uint32_t h, uint32_t format,
 	DEBUG_MSG("created pixmap: %p %d", pixmap, pixmap->id);
 	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 	return pixmap;
+}
+
+
+static void free_pixmap(PixmapPtr pix)
+{
+	CHK(c2dDestroySurface(pix->id));
+	if (pix->ptr != (void *)1)
+		free(pix->ptr);
+	free(pix);
 }
 
 static void dump_pixmap(PixmapPtr pixmap, char *fmt, ...)
