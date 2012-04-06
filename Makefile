@@ -1,5 +1,5 @@
 
-TESTS = test-fill test-fill2 test-copy test-fb
+TESTS = test-fill test-fill2 test-copy test-fb test-composite
 UTILS = bmp.o
 
 CFLAGS = -Iincludes
