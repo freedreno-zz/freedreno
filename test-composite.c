@@ -30,14 +30,14 @@ struct blend_mode {
 
 /* mapping xorg composite op to c2d2 config_mask bits: */
 static const struct blend_mode blend_modes[] = {
+		{ "PictOpSrc",			C2D_ALPHA_BLEND_SRC },
+		{ "PictOpIn",			C2D_ALPHA_BLEND_SRC_IN },
+		{ "PictOpOut",			C2D_ALPHA_BLEND_SRC_OUT },
 		{ "PictOpOver",			C2D_ALPHA_BLEND_SRC_OVER },
 		{ "PictOpOutReverse",	C2D_ALPHA_BLEND_DST_OUT },
 		{ "PictOpAdd",			C2D_ALPHA_BLEND_ADDITIVE },
-		{ "PictOpSrc",			C2D_ALPHA_BLEND_SRC },
 		{ "PictOpOverReverse",	C2D_ALPHA_BLEND_DST_OVER },
-		{ "PictOpIn",			C2D_ALPHA_BLEND_SRC_IN },
 		{ "PictOpInReverse",	C2D_ALPHA_BLEND_DST_IN },
-		{ "PictOpOut",			C2D_ALPHA_BLEND_SRC_OUT },
 		{ "PictOpAtop",			C2D_ALPHA_BLEND_SRC_ATOP },
 		{ "PictOpAtopReverse",	C2D_ALPHA_BLEND_DST_ATOP },
 		{ "PictOpXor",			C2D_ALPHA_BLEND_XOR },
@@ -125,8 +125,8 @@ int main(int argc, char **argv)
 	/* test composite ops: */
 	for (i = 0; i < ARRAY_SIZE(blend_modes); i++) {
 		test_composite("composite-op", &blend_modes[i],
-				&format_modes[0],
-				&format_modes[0], FALSE,
+				&format_modes[1],
+				&format_modes[1], FALSE,
 				NULL, FALSE);
 	}
 
@@ -136,7 +136,7 @@ int main(int argc, char **argv)
 		sprintf(name, "composite-dst-%s", format_modes[i].name);
 		for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 			// TODO add mask:
-			test_composite(name, &blend_modes[0],
+			test_composite(name, &blend_modes[4],
 					&format_modes[i],
 					&format_modes[j], FALSE,
 					NULL, FALSE);
@@ -149,7 +149,7 @@ int main(int argc, char **argv)
 		sprintf(name, "composite-src-%s", format_modes[i].name);
 		for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 			// TODO add mask:
-			test_composite(name, &blend_modes[0],
+			test_composite(name, &blend_modes[4],
 					&format_modes[j],
 					&format_modes[i], FALSE,
 					NULL, FALSE);
@@ -158,11 +158,11 @@ int main(int argc, char **argv)
 
 	/* test repeat: */
 	// TODO add mask:
-	test_composite("composite-repeat", &blend_modes[0],
+	test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0],
 			&format_modes[0], FALSE,
 			NULL, FALSE);
-	test_composite("composite-repeat", &blend_modes[0],
+	test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0],
 			&format_modes[0], TRUE,
 			NULL, FALSE);
