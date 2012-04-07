@@ -32,6 +32,7 @@
 
 void exit(int status);
 int printf(const char *,...);
+int sprintf(char *str, const char *format, ...);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
 void free(void *ptr);

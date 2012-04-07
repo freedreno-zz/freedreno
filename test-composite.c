@@ -65,7 +65,7 @@ void test_composite(const char *name, const struct blend_mode *blend,
 	PixmapPtr src, dest;
 	C2D_OBJECT blit = {};
 	c2d_ts_handle curTimestamp;
-	uint32_t w = 69, h = 72;
+	uint32_t sw = 17, sh = 19;
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("%s: op:%s src:%s (repeat:%d) dst:%s",
@@ -73,9 +73,9 @@ void test_composite(const char *name, const struct blend_mode *blend,
 	RD_START(name, "op:%s src:%s (repeat:%d) dst:%s",
 			blend->name, src_format->name, src_repeat, dst_format->name);
 
-	dest = create_pixmap(w, h, dst_format->format);
+	dest = create_pixmap(1033, 1077, dst_format->format);
 	src  = src_repeat ? create_pixmap(1, 1, src_format->format) :
-			create_pixmap(13, 17, src_format->format);
+			create_pixmap(sw, sh, src_format->format);
 
 	blit.surface_id = src->id;
 	blit.config_mask = DEFAULT_BLEND_MASK | blend->mode;
@@ -87,13 +87,13 @@ void test_composite(const char *name, const struct blend_mode *blend,
 
 	blit.source_rect.x = FIXED(1);
 	blit.source_rect.y = FIXED(2);
-	blit.source_rect.width = FIXED(13);
-	blit.source_rect.height = FIXED(17);
+	blit.source_rect.width = FIXED(sw - blit.source_rect.x - 1);
+	blit.source_rect.height = FIXED(sh - blit.source_rect.y - 2);
 
-	blit.target_rect.x = FIXED((w - 13) / 2);
-	blit.target_rect.y = FIXED((h - 17) / 2);
-	blit.target_rect.width = FIXED(13);
-	blit.target_rect.height = FIXED(17);
+	blit.target_rect.x = FIXED((dest->width - sw) / 2);
+	blit.target_rect.y = FIXED((dest->height - sh) / 2);
+	blit.target_rect.width = blit.source_rect.width;
+	blit.target_rect.height = blit.source_rect.height;
 	CHK(c2dDraw(dest->id, 0, NULL, 0, 0, &blit, 1));
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
