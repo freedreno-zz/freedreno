@@ -62,26 +62,61 @@ void test_composite(const char *name, const struct blend_mode *blend,
 		const struct format_mode *src_format, uint32_t src_repeat,
 		const struct format_mode *mask_format, uint32_t mask_repeat)
 {
-	PixmapPtr src, dest;
+	PixmapPtr src, dest, mask = NULL;
 	C2D_OBJECT blit = {};
 	c2d_ts_handle curTimestamp;
 	uint32_t sw = 17, sh = 19;
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	DEBUG_MSG("%s: op:%s src:%s (repeat:%d) dst:%s",
-			name, blend->name, src_format->name, src_repeat, dst_format->name);
-	RD_START(name, "op:%s src:%s (repeat:%d) dst:%s",
-			blend->name, src_format->name, src_repeat, dst_format->name);
+	DEBUG_MSG("%s: op:%s src:%s (repeat:%d) mask=%s (repeat:%d) dst:%s",
+			name, blend->name, src_format->name, src_repeat,
+			mask_format ? mask_format->name : "none", mask_repeat,
+			dst_format->name);
+	RD_START(name, "op:%s src:%s (repeat:%d) mask=%s (repeat:%d) dst:%s",
+			blend->name, src_format->name, src_repeat,
+			mask_format ? mask_format->name : "none", mask_repeat,
+			dst_format->name);
 
-	dest = create_pixmap(1033, 1077, dst_format->format);
-	src  = src_repeat ? create_pixmap(1, 1, src_format->format) :
-			create_pixmap(sw, sh, src_format->format);
-
-	blit.surface_id = src->id;
 	blit.config_mask = DEFAULT_BLEND_MASK | blend->mode;
 
-	if (!src_repeat)
-		blit.config_mask |= C2D_SOURCE_RECT_BIT;
+	dest = create_pixmap(1033, 1077, dst_format->format);
+
+	if (src_repeat) {
+		src  = create_pixmap(1, 1, src_format->format);
+		blit.config_mask |= C2D_SOURCE_TILE_BIT;
+	} else {
+		src = create_pixmap(sw, sh, src_format->format);
+	}
+
+	blit.config_mask |= C2D_SOURCE_RECT_BIT;
+	blit.surface_id = src->id;
+
+	if (mask_format) {
+		/* TODO not clear if mask repeat is really supported.. msm-exa-c2d2.c
+		 * seems to reject it but C2D_MASK_TILE_BIT??
+		 *
+		 * Also, for src format, msm-exa-c2d2.c seems to encode fgcolor (like
+		 * a solid fill) for repeats.. not really clear if TILE_BIT does what
+		 * we expect or not??
+		 *
+		 * Seems like libC2D2 doesn't actually give any way to specify the
+		 * maskX/maskY!!!  The previous c2d API does, so I'd have to assume
+		 * this is actually supported by the hardware and this is just C2D2
+		 * retardation
+		 */
+		if (mask_repeat) {
+			mask = create_pixmap(1, 1, mask_format->format);
+			blit.config_mask |= C2D_MASK_TILE_BIT;
+		} else {
+			mask = create_pixmap(sw, sh, mask_format->format);
+		}
+
+		blit.config_mask |= C2D_MASK_SURFACE_BIT;
+		blit.mask_surface_id = mask->id;
+	} else {
+		// TODO make redump not confused when one column has extra rows
+		mask = create_pixmap(1, 1, ARGB);
+	}
 
 	blit.next = NULL;
 
@@ -100,6 +135,8 @@ void test_composite(const char *name, const struct blend_mode *blend,
 
 	free_pixmap(src);
 	free_pixmap(dest);
+	if (mask)
+		free_pixmap(mask);
 
 	RD_END();
 
@@ -125,8 +162,8 @@ int main(int argc, char **argv)
 	/* test composite ops: */
 	for (i = 0; i < ARRAY_SIZE(blend_modes); i++) {
 		test_composite("composite-op", &blend_modes[i],
-				&format_modes[1],
-				&format_modes[1], FALSE,
+				&format_modes[2],
+				&format_modes[0], FALSE,
 				NULL, FALSE);
 	}
 
@@ -154,6 +191,18 @@ int main(int argc, char **argv)
 					&format_modes[i], FALSE,
 					NULL, FALSE);
 		}
+	}
+
+	/* test with/without mask: */
+	test_composite("composite-mask", &blend_modes[3],
+			&format_modes[0],
+			&format_modes[0], FALSE,
+			NULL, FALSE);
+	for (i = 0; i < ARRAY_SIZE(format_modes); i++) {
+		test_composite("composite-mask", &blend_modes[3],
+				&format_modes[0],
+				&format_modes[0], FALSE,
+				&format_modes[i], FALSE);
 	}
 
 	/* test repeat: */

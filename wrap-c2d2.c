@@ -145,12 +145,16 @@ C2D_STATUS c2dDraw(uint32_t target_id,  uint32_t target_config, C2D_RECT *target
 	param(RD_PARAM_SURFACE_WIDTH,  surf->def.rgb.width,  COORDLEN);
 	param(RD_PARAM_SURFACE_HEIGHT, surf->def.rgb.height, COORDLEN);
 	param(RD_PARAM_SURFACE_PITCH,  surf->def.rgb.stride / 32, COORDLEN);
+#if 0
+	// TODO need to make redump not confused by param diffs between columns
+	// (for ex, when comparing blits with/without mask)
 	if (objects_list->mask_surface_id) {
 		surf = &surfaces[objects_list->mask_surface_id];
 		param(RD_PARAM_SURFACE_WIDTH,  surf->def.rgb.width,  COORDLEN);
 		param(RD_PARAM_SURFACE_HEIGHT, surf->def.rgb.height, COORDLEN);
 		param(RD_PARAM_SURFACE_PITCH,  surf->def.rgb.stride / 32, COORDLEN);
 	}
+#endif
 	rect = &objects_list->source_rect;
 	coord(RD_PARAM_BLIT_X,         rect->x >> 16);
 	coord(RD_PARAM_BLIT_Y,         rect->y >> 16);
