@@ -4,7 +4,7 @@
 # right now:
 VPATH = tests-2d:tests-3d:util:wrap
 
-TESTS = test-fill test-fill2 test-copy test-fb test-composite test-composite2
+TESTS = test-fill test-fill2 test-copy test-fb test-composite test-composite2 test-multi
 UTILS = bmp.o
 
 CFLAGS = -Iincludes -Iutil

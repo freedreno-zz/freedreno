@@ -291,8 +291,8 @@ static void handle_hexdump(struct context *ctx)
 		/* check for gpu address: */
 		j = find_gpuaddr(ctx, dword);
 		if (j >= 0) {
-			printf("<font face=\"monospace\"><font color=\"#%06x\"><b>%08x</b></font> (gpuaddr)</font><br>",
-					gpuaddr_colors[j], dword);
+			printf("<font face=\"monospace\">%04x: <font color=\"#%06x\"><b>%08x</b></font> (gpuaddr)</font><br>",
+					i, gpuaddr_colors[j], dword);
 			continue;
 		}
 
@@ -338,7 +338,7 @@ static void handle_hexdump(struct context *ctx)
 			uint32_t mask = 0xff000000;
 			uint32_t shift = 24;
 
-			printf("<font face=\"monospace\">");
+			printf("<font face=\"monospace\">%04x: ", i);
 
 			for (k = 0; k < 4; k++, mask >>= 8, shift -= 8) {
 				uint32_t color = 0;
@@ -380,7 +380,7 @@ static void handle_hexdump(struct context *ctx)
 			continue;
 		}
 
-		printf("<font face=\"monospace\" color=\"#000000\">%08x</font><br>", dword);
+		printf("<font face=\"monospace\" color=\"#000000\">%04x: %08x</font><br>", i, dword);
 	}
 }
 

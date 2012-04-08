@@ -4,6 +4,7 @@ test-fill2
 test-copy
 test-composite
 test-composite2
+test-multi
 test-fb
 *.so
 *.o
