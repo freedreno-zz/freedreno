@@ -1,8 +1,13 @@
+# Note: this VPATH bit is just a hack to avoid mucking with the build
+# system after splitting the directory tree into various subdirs..
+# really need to clean this up but I've got better things to work on
+# right now:
+VPATH = tests-2d:tests-3d:util:wrap
 
 TESTS = test-fill test-fill2 test-copy test-fb test-composite test-composite2
 UTILS = bmp.o
 
-CFLAGS = -Iincludes
+CFLAGS = -Iincludes -Iutil
 LFLAGS = -L /system/lib -lC2D2 -lgsl -llog -lOpenVG -lcutils -lstdc++ -lstlport -ldl -lc
 
 all: libwrap.so $(UTILS) $(TESTS) redump
