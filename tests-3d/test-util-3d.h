@@ -114,4 +114,89 @@ get_display(void)
 	return display;
 }
 
+static GLuint
+get_program(const char *vertex_shader_source, const char *fragment_shader_source)
+{
+	GLuint vertex_shader, fragment_shader, program;
+	GLint ret;
+
+	ECHK(vertex_shader = glCreateShader(GL_VERTEX_SHADER));
+
+	GCHK(glShaderSource(vertex_shader, 1, &vertex_shader_source, NULL));
+	GCHK(glCompileShader(vertex_shader));
+
+	GCHK(glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &ret));
+	if (!ret) {
+		char *log;
+
+		ERROR_MSG("vertex shader compilation failed!:");
+		glGetShaderiv(vertex_shader, GL_INFO_LOG_LENGTH, &ret);
+
+		if (ret > 1) {
+			log = malloc(ret);
+			glGetShaderInfoLog(vertex_shader, ret, NULL, log);
+			printf("%s", log);
+		}
+		exit(-1);
+	}
+
+	DEBUG_MSG("Vertex shader compilation succeeded!");
+
+	ECHK(fragment_shader = glCreateShader(GL_FRAGMENT_SHADER));
+
+	GCHK(glShaderSource(fragment_shader, 1, &fragment_shader_source, NULL));
+	GCHK(glCompileShader(fragment_shader));
+
+	GCHK(glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &ret));
+	if (!ret) {
+		char *log;
+
+		ERROR_MSG("fragment shader compilation failed!:");
+		glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &ret);
+
+		if (ret > 1) {
+			log = malloc(ret);
+			glGetShaderInfoLog(fragment_shader, ret, NULL, log);
+			printf("%s", log);
+		}
+		exit(-1);
+	}
+
+	DEBUG_MSG("Fragment shader compilation succeeded!");
+
+	ECHK(program = glCreateProgram());
+
+	GCHK(glAttachShader(program, vertex_shader));
+	GCHK(glAttachShader(program, fragment_shader));
+
+	return program;
+}
+
+static void
+link_program(GLuint program)
+{
+	GLint ret;
+
+	GCHK(glLinkProgram(program));
+
+	GCHK(glGetProgramiv(program, GL_LINK_STATUS, &ret));
+	if (!ret) {
+		char *log;
+
+		ERROR_MSG("program linking failed!:");
+		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &ret);
+
+		if (ret > 1) {
+			log = malloc(ret);
+			glGetProgramInfoLog(program, ret, NULL, log);
+			printf("%s", log);
+		}
+		return;
+	}
+
+	DEBUG_MSG("program linking succeeded!");
+
+	GCHK(glUseProgram(program));
+}
+
 #endif /* TEST_UTIL_3D_H_ */

@@ -58,10 +58,7 @@ void test_triangle_quad(void)
 	EGLint num_config;
 	EGLContext context;
 	EGLSurface surface;
-	GLuint vertex_shader;
-	GLuint fragment_shader;
 	GLuint program;
-	GLint ret;
 	GLint width, height;
 	int uniform_location;
 	const char *vertex_shader_source =
@@ -116,77 +113,11 @@ void test_triangle_quad(void)
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	ECHK(vertex_shader = glCreateShader(GL_VERTEX_SHADER));
-
-	GCHK(glShaderSource(vertex_shader, 1, &vertex_shader_source, NULL));
-	GCHK(glCompileShader(vertex_shader));
-
-	GCHK(glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &ret));
-	if (!ret) {
-		char *log;
-
-		ERROR_MSG("vertex shader compilation failed!:");
-		glGetShaderiv(vertex_shader, GL_INFO_LOG_LENGTH, &ret);
-
-		if (ret > 1) {
-			log = malloc(ret);
-			glGetShaderInfoLog(vertex_shader, ret, NULL, log);
-			printf("%s", log);
-		}
-		return;
-	}
-
-	DEBUG_MSG("Vertex shader compilation succeeded!");
-
-	ECHK(fragment_shader = glCreateShader(GL_FRAGMENT_SHADER));
-
-	GCHK(glShaderSource(fragment_shader, 1, &fragment_shader_source, NULL));
-	GCHK(glCompileShader(fragment_shader));
-
-	GCHK(glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &ret));
-	if (!ret) {
-		char *log;
-
-		ERROR_MSG("fragment shader compilation failed!:");
-		glGetShaderiv(fragment_shader, GL_INFO_LOG_LENGTH, &ret);
-
-		if (ret > 1) {
-			log = malloc(ret);
-			glGetShaderInfoLog(fragment_shader, ret, NULL, log);
-			printf("%s", log);
-		}
-		return;
-	}
-
-	DEBUG_MSG("Fragment shader compilation succeeded!");
-
-	ECHK(program = glCreateProgram());
-
-	GCHK(glAttachShader(program, vertex_shader));
-	GCHK(glAttachShader(program, fragment_shader));
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
 	GCHK(glBindAttribLocation(program, 0, "aPosition"));
 
-	GCHK(glLinkProgram(program));
-
-	GCHK(glGetProgramiv(program, GL_LINK_STATUS, &ret));
-	if (!ret) {
-		char *log;
-
-		ERROR_MSG("program linking failed!:");
-		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &ret);
-
-		if (ret > 1) {
-			log = malloc(ret);
-			glGetProgramInfoLog(program, ret, NULL, log);
-			printf("%s", log);
-		}
-		return;
-	}
-
-	DEBUG_MSG("program linking succeeded!");
-
-	GCHK(glUseProgram(program));
+	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
 
