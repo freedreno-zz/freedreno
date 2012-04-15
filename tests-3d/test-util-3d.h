@@ -120,6 +120,9 @@ get_program(const char *vertex_shader_source, const char *fragment_shader_source
 	GLuint vertex_shader, fragment_shader, program;
 	GLint ret;
 
+	DEBUG_MSG("vertex shader:\n%s", vertex_shader_source);
+	DEBUG_MSG("fragment shader:\n%s", fragment_shader_source);
+
 	ECHK(vertex_shader = glCreateShader(GL_VERTEX_SHADER));
 
 	GCHK(glShaderSource(vertex_shader, 1, &vertex_shader_source, NULL));
@@ -172,10 +175,27 @@ get_program(const char *vertex_shader_source, const char *fragment_shader_source
 	return program;
 }
 
+/* ***** GL_OES_get_program_binary extension: ****************************** */
+/* Accepted by the <pname> parameter of GetProgramiv:
+ */
+#define GL_PROGRAM_BINARY_LENGTH_OES	0x8741
+/* Accepted by the <pname> parameter of GetBooleanv, GetIntegerv, and GetFloatv:
+ */
+#define GL_NUM_PROGRAM_BINARY_FORMATS_OES	0x87FE
+#define GL_PROGRAM_BINARY_FORMATS_OES	0x87FF
+
+void glGetProgramBinaryOES(GLuint program, GLsizei bufSize, GLsizei *length,
+		GLenum *binaryFormat, GLvoid *binary);
+void glProgramBinaryOES(GLuint program, GLenum binaryFormat,
+		const GLvoid *binary, GLint length);
+/* ************************************************************************* */
+
 static void
 link_program(GLuint program)
 {
-	GLint ret;
+	GLint ret, len;
+	GLenum binary_format;
+	void *binary;
 
 	GCHK(glLinkProgram(program));
 
@@ -191,12 +211,23 @@ link_program(GLuint program)
 			glGetProgramInfoLog(program, ret, NULL, log);
 			printf("%s", log);
 		}
-		return;
+		exit(-1);
 	}
 
 	DEBUG_MSG("program linking succeeded!");
 
 	GCHK(glUseProgram(program));
+
+	/* dump program binary: */
+	// TODO move this into wrap-gles.c .. just putting it here for now
+	// since I haven't created wrap-gles.c yet
+	GCHK(glGetProgramiv(program, GL_PROGRAM_BINARY_LENGTH_OES, &len));
+	binary = calloc(1, len);
+	GCHK(glGetProgramBinaryOES(program, len, &ret, &binary_format, binary));
+	DEBUG_MSG("program dump: len=%d, actual len=%d", len, ret);
+	HEXDUMP(binary, len);
+	RD_WRITE_SECTION(RD_PROGRAM, binary, len);
+	free(binary);
 }
 
 #endif /* TEST_UTIL_3D_H_ */

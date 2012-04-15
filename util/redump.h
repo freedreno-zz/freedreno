@@ -33,6 +33,7 @@ enum rd_sect_type {
 	RD_CMDSTREAM,  /* raw dump */
 	RD_PARAM,      /* u32 param_type, u32 param_val, u32 bitlen */
 	RD_FLUSH,      /* empty, clear previous params */
+	RD_PROGRAM,    /* shader program, raw dump */
 };
 
 /* RD_PARAM types: */
@@ -52,6 +53,7 @@ enum rd_param_type {
 void rd_start(const char *name, const char *fmt, ...) __attribute__((weak));
 void rd_end(void) __attribute__((weak));
 void rd_write_section(enum rd_sect_type type, void *buf, int sz) __attribute__((weak));
+void hexdump(const void *data, int size) __attribute__((weak));
 
 /* for code that should run with and without libwrap, use the following
  * macros which check if the fxns are present before calling
@@ -59,7 +61,7 @@ void rd_write_section(enum rd_sect_type type, void *buf, int sz) __attribute__((
 #define RD_START(n,f,...)        do { if (rd_start) rd_start(n,f,##__VA_ARGS__); } while (0)
 #define RD_END()                 do { if (rd_end) rd_end(); } while (0)
 #define RD_WRITE_SECTION(t,b,s)  do { if (rd_write_section) rd_write_section(t,b,s); } while (0)
-
+#define HEXDUMP(d,l)             do { if (hexdump) hexdump(d, l); } while (0)
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #undef ALIGN

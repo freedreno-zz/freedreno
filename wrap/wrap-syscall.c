@@ -119,7 +119,7 @@ static struct device_info * get_kgsl_info(int fd)
 	return NULL;
 }
 
-static void
+void
 hexdump(const void *data, int size)
 {
 	unsigned char *buf = (void *) data;
