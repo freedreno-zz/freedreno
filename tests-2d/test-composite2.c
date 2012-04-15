@@ -21,7 +21,7 @@
  * SOFTWARE.
  */
 
-#include "test-util.h"
+#include "test-util-2d.h"
 
 /* this is mainly just for reproducing specific blits, to compare cmdstream
  * to what EXA driver is generating

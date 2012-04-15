@@ -21,7 +21,7 @@
  * SOFTWARE.
  */
 
-#include "test-util.h"
+#include "test-util-2d.h"
 
 void test_fill(uint32_t w, uint32_t h, uint32_t format,
 		uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2)

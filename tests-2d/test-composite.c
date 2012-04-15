@@ -21,7 +21,7 @@
  * SOFTWARE.
  */
 
-#include "test-util.h"
+#include "test-util-2d.h"
 
 struct blend_mode {
 	const char *name;

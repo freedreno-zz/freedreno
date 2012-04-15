@@ -21,36 +21,14 @@
  * SOFTWARE.
  */
 
-#ifndef TEST_UTIL_H_
-#define TEST_UTIL_H_
+#ifndef TEST_UTIL_2D_H_
+#define TEST_UTIL_2D_H_
 
-#include <stdarg.h>
-#include <stddef.h>
-#include "c2d2.h"
-#include "bmp.h"
-#include "redump.h"
+#include "test-util-common.h"
 
-void exit(int status);
-int printf(const char *,...);
-int sprintf(char *str, const char *format, ...);
-void *calloc(size_t nmemb, size_t size);
-void *malloc(size_t size);
-void free(void *ptr);
-size_t strlen(const char *s);
+#include <c2d2.h>
 
 /*****************************************************************************/
-
-/* split some of the utils into common file.. */
-
-#define DEBUG_MSG(fmt, ...) \
-		do { printf(fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
-#define ERROR_MSG(fmt, ...) \
-		do { printf("ERROR: " fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
-
-#define FIXED(v)   ((unsigned int) ((v) << 16))
-#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
 
 #define CHK(x) do { \
 		C2D_STATUS status; \
@@ -179,4 +157,4 @@ static void dump_pixmap(PixmapPtr pixmap, char *fmt, ...)
 }
 
 
-#endif /* TEST_UTIL_H_ */
+#endif /* TEST_UTIL_2D_H_ */

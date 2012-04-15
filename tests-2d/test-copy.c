@@ -21,7 +21,7 @@
  * SOFTWARE.
  */
 
-#include "test-util.h"
+#include "test-util-2d.h"
 
 #define DEFAULT_BLIT_MASK (C2D_SOURCE_RECT_BIT | C2D_TARGET_RECT_BIT |	\
 			   C2D_NO_PIXEL_ALPHA_BIT | C2D_NO_BILINEAR_BIT | \
