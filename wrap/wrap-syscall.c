@@ -259,6 +259,12 @@ static void dump_buffer(unsigned int gpuaddr)
 	}
 }
 
+void dump_all_buffers(void)
+{
+	struct buffer *buf;
+	list_for_each_entry(buf, &buffers_of_interest, node)
+		dump_buffer(buf->gpuaddr);
+}
 /*****************************************************************************/
 
 int open(const char* path, int flags, ...)
@@ -397,8 +403,40 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 		} else {
 			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr);
 			if (buf && buf->hostptr) {
-				void *ptr = buf->hostptr + (ibdesc[i].gpuaddr - buf->gpuaddr);
+				uint32_t *ptr = buf->hostptr + (ibdesc[i].gpuaddr - buf->gpuaddr);
+				printf("\t\tcmd:\n");
 				hexdump(ptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+
+				if (0 /* verbose */) {
+					int j;
+					/* loop thru the cmdstream and dump any other buffer that is
+					 * pointed to in the cmdstream:
+					 */
+					for (j = 0; j < ibdesc[i].sizedwords; j++) {
+						uint32_t dword = ptr[j];
+						struct buffer *referenced_buf = find_buffer(NULL, dword);
+						if (referenced_buf) {
+							if (referenced_buf->hostptr) {
+								uint32_t off = (dword - referenced_buf->gpuaddr) & ~3;
+								uint32_t *referenced_ptr = referenced_buf->hostptr + off;
+								uint32_t len = buf->len - off;
+
+								/* it would be helpful to know the length.. simple
+								 * shader program dumps are under 2k, so...
+								 */
+								printf("\t\treferenced buffer: at offset %d: %08x (start=%08x, len=%d)\n",
+										j, dword, referenced_buf->gpuaddr, referenced_buf->len);
+								if (len > 2048)
+									len = 2048;
+								hexdump(referenced_ptr, len);
+							} else {
+								printf("\t\tunmapped referenced buffer: at offset %d: %08x (start=%08x, len=%d)\n",
+										j, dword, referenced_buf->gpuaddr, referenced_buf->len);
+							}
+						}
+					}
+					dump_all_buffers();
+				}
 			}
 		}
 	}
