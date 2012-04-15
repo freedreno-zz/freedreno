@@ -14,6 +14,7 @@ TESTS_2D = \
 	test-multi
 
 TESTS_3D = \
+	test-quad-flat \
 	test-triangle-quad
 
 TESTS = $(TESTS_2D) $(TESTS_3D)
