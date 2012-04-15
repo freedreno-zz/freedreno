@@ -4,11 +4,30 @@
 # right now:
 VPATH = tests-2d:tests-3d:util:wrap
 
-TESTS = test-fill test-fill2 test-copy test-fb test-composite test-composite2 test-multi
+TESTS_2D = \
+	test-fill \
+	test-fill2 \
+	test-copy \
+	test-fb \
+	test-composite \
+	test-composite2 \
+	test-multi
+
+TESTS_3D = \
+	test-triangle-quad
+
+TESTS = $(TESTS_2D) $(TESTS_3D)
 UTILS = bmp.o
 
 CFLAGS = -Iincludes -Iutil
-LFLAGS = -L /system/lib -lC2D2 -lgsl -llog -lOpenVG -lcutils -lstdc++ -lstlport -ldl -lc
+# Note: setup symlinks in /system/lib to the vendor specific .so's in
+# /system/lib/egl because android's dynamic linker can't seem to cope
+# with multiple -rpath's..
+# Possibly we don't need to link directly against gpu specific libs
+# but I was getting eglCreateContext() failing otherwise.
+LFLAGS_3D = -lEGL_adreno200 -lGLESv2_adreno200
+LFLAGS_2D = -lC2D2 -lOpenVG
+LFLAGS = -L /system/lib  $(LFLAGS_2D) $(LFLAGS_3D) -lgsl -llog -lcutils -lstdc++ -lstlport -ldl -lc
 
 all: libwrap.so $(UTILS) $(TESTS) redump
 

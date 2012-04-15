@@ -1,4 +1,4 @@
-redump
+# 2d tests:
 test-fill
 test-fill2
 test-copy
@@ -6,6 +6,12 @@ test-composite
 test-composite2
 test-multi
 test-fb
+
+# 3d tests:
+test-triangle-quad
+
+# misc:
+redump
 *.so
 *.o
 *.swp
