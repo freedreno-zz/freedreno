@@ -223,9 +223,14 @@ static struct buffer * register_buffer(void *hostptr, unsigned int flags, unsign
 static struct buffer * find_buffer(void *hostptr, unsigned int gpuaddr)
 {
 	struct buffer *buf;
-	list_for_each_entry(buf, &buffers_of_interest, node)
-		if ((buf->hostptr == hostptr) || (buf->gpuaddr == gpuaddr))
-			return buf;
+	list_for_each_entry(buf, &buffers_of_interest, node) {
+		if (hostptr)
+			if ((buf->hostptr <= hostptr) && (hostptr < (buf->hostptr + buf->len)))
+				return buf;
+		if (gpuaddr)
+			if ((buf->gpuaddr <= gpuaddr) && (gpuaddr < (buf->gpuaddr + buf->len)))
+				return buf;
+	}
 	return NULL;
 }
 
@@ -356,38 +361,45 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, ibdesc[i].sizedwords);
 		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
 		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
-		if (is2d && (ibdesc[i].sizedwords > PACKETSIZE_STATESTREAM)) {
-			unsigned int len, *ptr;
-			/* note: kernel side seems to expect param->timestamp to
-			 * contain same thing as ibdesc[0].hostptr ... this seems to
-			 * be what actually gets read from on kernel side.  Maybe a
-			 * legacy thing??
-			 * Update: this seems to be needed so z180_cmdstream_issueibcmds()
-			 * can patch up the cmdstream to jump back to the next ringbuffer
-			 * entry.
-			 */
-			printf("\t\tcontext:\n");
-			hexdump(ibdesc[i].hostptr,
-					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
-			rd_write_section(RD_CONTEXT, ibdesc[i].hostptr,
-					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+		if (is2d) {
+			if (ibdesc[i].sizedwords > PACKETSIZE_STATESTREAM) {
+				unsigned int len, *ptr;
+				/* note: kernel side seems to expect param->timestamp to
+				 * contain same thing as ibdesc[0].hostptr ... this seems to
+				 * be what actually gets read from on kernel side.  Maybe a
+				 * legacy thing??
+				 * Update: this seems to be needed so z180_cmdstream_issueibcmds()
+				 * can patch up the cmdstream to jump back to the next ringbuffer
+				 * entry.
+				 */
+				printf("\t\tcontext:\n");
+				hexdump(ibdesc[i].hostptr,
+						PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+				rd_write_section(RD_CONTEXT, ibdesc[i].hostptr,
+						PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 
-			printf("\t\tcmd:\n");
-			ptr = (unsigned int *)(ibdesc[i].hostptr +
-					PACKETSIZE_STATESTREAM * sizeof(unsigned int));
-			len = ptr[2] & 0xfff;
-			/* 5 is length of first packet, 2 for the two 7f000000's */
-			hexdump(ptr, (len + 5 + 2) * sizeof(unsigned int));
-			rd_write_section(RD_CMDSTREAM, ptr,
-					(len + 5 + 2) * sizeof(unsigned int));
-			/* dump out full buffer in case I need to go back and check
-			 * if I missed something..
-			 */
-			dump_buffer(ibdesc[i].gpuaddr);
-		} else {
-			if (is2d)
+				printf("\t\tcmd:\n");
+				ptr = (unsigned int *)(ibdesc[i].hostptr +
+						PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+				len = ptr[2] & 0xfff;
+				/* 5 is length of first packet, 2 for the two 7f000000's */
+				hexdump(ptr, (len + 5 + 2) * sizeof(unsigned int));
+				rd_write_section(RD_CMDSTREAM, ptr,
+						(len + 5 + 2) * sizeof(unsigned int));
+				/* dump out full buffer in case I need to go back and check
+				 * if I missed something..
+				 */
+				dump_buffer(ibdesc[i].gpuaddr);
+			} else {
 				printf("\t\tWARNING: INVALID CONTEXT!\n");
-			hexdump(ibdesc[i].hostptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+				hexdump(ibdesc[i].hostptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+			}
+		} else {
+			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr);
+			if (buf && buf->hostptr) {
+				void *ptr = buf->hostptr + (ibdesc[i].gpuaddr - buf->gpuaddr);
+				hexdump(ptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+			}
 		}
 	}
 }
@@ -610,6 +622,27 @@ static void kgsl_ioctl_sharedmem_free_pre(int fd,
 	unregister_buffer(param->gpuaddr);
 }
 
+static void kgsl_ioctl_gpumem_alloc_pre(int fd,
+		struct kgsl_gpumem_alloc *param)
+{
+	printf("\t\tflags:\t\t%08x\n", param->flags);
+	printf("\t\tsize:\t\t%08x\n", param->size);
+}
+
+static void kgsl_ioctl_gpumem_alloc_post(int fd,
+		struct kgsl_gpumem_alloc *param)
+{
+	struct buffer *buf;
+	uint32_t sect[2] = {
+			param->gpuaddr, param->size
+	};
+	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
+	printf("\t\tgpuaddr:\t%08lx\n", param->gpuaddr);
+	/* NOTE: host addr comes from mmap'ing w/ gpuaddr as offset */
+	buf = register_buffer(NULL, param->flags, param->size);
+	buf->gpuaddr = param->gpuaddr;
+}
+
 static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
 	dump_ioctl(get_kgsl_info(fd), _IOC_WRITE, fd, request, ptr, 0);
@@ -625,6 +658,9 @@ static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FREE):
 		kgsl_ioctl_sharedmem_free_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUMEM_ALLOC):
+		kgsl_ioctl_gpumem_alloc_pre(fd, ptr);
 		break;
 	}
 }
@@ -644,6 +680,9 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 		break;
 	case _IOC_NR(IOCTL_KGSL_SHAREDMEM_FROM_VMALLOC):
 		kgsl_ioctl_sharedmem_from_vmalloc_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUMEM_ALLOC):
+		kgsl_ioctl_gpumem_alloc_post(fd, ptr);
 		break;
 	}
 }
@@ -697,4 +736,24 @@ int ioctl(int fd, unsigned long int request, ...)
 	return ret;
 }
 
+void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+	void *ret;
+	PROLOG(mmap);
 
+	if (get_kgsl_info(fd)) {
+		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
+				fd, addr, length, prot, flags, offset);
+	}
+
+	ret = orig_mmap(addr, length, prot, flags, fd, offset);
+
+	if (get_kgsl_info(fd)) {
+		struct buffer *buf = find_buffer(NULL, offset);
+		if (buf)
+			buf->hostptr = ret;
+		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
+	}
+
+	return ret;
+}
