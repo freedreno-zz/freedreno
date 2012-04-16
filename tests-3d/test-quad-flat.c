@@ -60,17 +60,53 @@ void test_quad_flat(void)
 	GLuint program;
 	GLint width, height;
 	int uniform_location;
+#if 0
+	/* pre-compiled vertex shader program
+	*
+	*  attribute vec4  P;
+	*  void main(void)
+	*  {
+	*    gl_Position = P;
+	*  }
+	*/
+	#define GMEM2SYS_VTX_PGM_LEN	0x12
+
+	static unsigned int gmem2sys_vtx_pgm[GMEM2SYS_VTX_PGM_LEN] = {
+		0x00011003, 0x00001000, 0xc2000000, 0x00001004,
+		0x00001000, 0xc4000000, 0x00001005, 0x00002000,
+		0x00000000, 0x1cb81000, 0x00398a88, 0x00000003,
+		0x140f803e, 0x00000000, 0xe2010100, 0x14000000,
+		0x00000000, 0xe2000000
+	};
+#endif
 	const char *vertex_shader_source =
-		"precision mediump float;     \n"
 		"attribute vec4 aPosition;    \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
 		"    gl_Position = aPosition; \n"
 		"}                            \n";
+#if 0
+	/* pre-compiled fragment shader program
+	*
+	*  precision highp float;
+	*  uniform   vec4  clear_color;
+	*  void main(void)
+	*  {
+	*     gl_FragColor = clear_color;
+	*  }
+	*/
 
+	#define GMEM2SYS_FRAG_PGM_LEN	0x0c
+
+	static unsigned int gmem2sys_frag_pgm[GMEM2SYS_FRAG_PGM_LEN] = {
+		0x00000000, 0x1002c400, 0x10000000, 0x00001003,
+		0x00002000, 0x00000000, 0x140f8000, 0x00000000,
+		0x22000000, 0x14000000, 0x00000000, 0xe2000000
+	};
+#endif
 	const char *fragment_shader_source =
-		"precision mediump float;     \n"
+		"precision highp float;       \n"
 		"uniform vec4 uColor;         \n"
 		"                             \n"
 		"void main()                  \n"
@@ -127,6 +163,8 @@ void test_quad_flat(void)
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
 	GCHK(glFlush());
+
+	DUMP_ALL_BUFFERS();
 
 	ECHK(eglSwapBuffers(display, surface));
 
