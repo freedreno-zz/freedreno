@@ -94,6 +94,7 @@ void test_triangle_quad(void)
 
 
 	DEBUG_MSG("----------------------------------------------------------------");
+	RD_START("triangle-quad", "");
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -142,6 +143,8 @@ void test_triangle_quad(void)
 	ECHK(eglSwapBuffers(display, surface));
 
 	usleep(1000000);
+
+	RD_END();
 }
 
 int main(int argc, char *argv[])

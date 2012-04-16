@@ -34,6 +34,9 @@ enum rd_sect_type {
 	RD_PARAM,      /* u32 param_type, u32 param_val, u32 bitlen */
 	RD_FLUSH,      /* empty, clear previous params */
 	RD_PROGRAM,    /* shader program, raw dump */
+	RD_VERT_SHADER,
+	RD_FRAG_SHADER,
+	RD_BUFFER_CONTENTS
 };
 
 /* RD_PARAM types: */
@@ -52,7 +55,7 @@ enum rd_param_type {
 
 void rd_start(const char *name, const char *fmt, ...) __attribute__((weak));
 void rd_end(void) __attribute__((weak));
-void rd_write_section(enum rd_sect_type type, void *buf, int sz) __attribute__((weak));
+void rd_write_section(enum rd_sect_type type, const void *buf, int sz) __attribute__((weak));
 void hexdump(const void *data, int size) __attribute__((weak));
 void dump_all_buffers(void) __attribute__((weak));
 

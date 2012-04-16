@@ -309,6 +309,14 @@ int open(const char* path, int flags, ...)
 	return ret;
 }
 
+static void log_gpuaddr(uint32_t gpuaddr, uint32_t len)
+{
+	uint32_t sect[2] = {
+			gpuaddr, len
+	};
+	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
+}
+
 static void kgsl_ioctl_ringbuffer_issueibcmds_pre(int fd,
 		struct kgsl_ringbuffer_issueibcmds *param)
 {
@@ -403,40 +411,24 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 		} else {
 			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr);
 			if (buf && buf->hostptr) {
-				uint32_t *ptr = buf->hostptr + (ibdesc[i].gpuaddr - buf->gpuaddr);
+				struct buffer *other_buf;
+				uint32_t off = ibdesc[i].gpuaddr - buf->gpuaddr;
+				uint32_t *ptr = buf->hostptr + off;
+
 				printf("\t\tcmd:\n");
+
 				hexdump(ptr, ibdesc[i].sizedwords * sizeof(unsigned int));
 
-				if (0 /* verbose */) {
-					int j;
-					/* loop thru the cmdstream and dump any other buffer that is
-					 * pointed to in the cmdstream:
-					 */
-					for (j = 0; j < ibdesc[i].sizedwords; j++) {
-						uint32_t dword = ptr[j];
-						struct buffer *referenced_buf = find_buffer(NULL, dword);
-						if (referenced_buf) {
-							if (referenced_buf->hostptr) {
-								uint32_t off = (dword - referenced_buf->gpuaddr) & ~3;
-								uint32_t *referenced_ptr = referenced_buf->hostptr + off;
-								uint32_t len = buf->len - off;
-
-								/* it would be helpful to know the length.. simple
-								 * shader program dumps are under 2k, so...
-								 */
-								printf("\t\treferenced buffer: at offset %d: %08x (start=%08x, len=%d)\n",
-										j, dword, referenced_buf->gpuaddr, referenced_buf->len);
-								if (len > 2048)
-									len = 2048;
-								hexdump(referenced_ptr, len);
-							} else {
-								printf("\t\tunmapped referenced buffer: at offset %d: %08x (start=%08x, len=%d)\n",
-										j, dword, referenced_buf->gpuaddr, referenced_buf->len);
-							}
-						}
+				list_for_each_entry(other_buf, &buffers_of_interest, node) {
+					if (other_buf && other_buf->hostptr) {
+						log_gpuaddr(other_buf->gpuaddr, other_buf->len);
+						rd_write_section(RD_BUFFER_CONTENTS,
+								other_buf->hostptr, other_buf->len);
 					}
-					dump_all_buffers();
 				}
+
+				rd_write_section(RD_CMDSTREAM, ptr,
+						ibdesc[i].sizedwords * sizeof(unsigned int));
 			}
 		}
 	}
@@ -644,13 +636,10 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_post(int fd,
 		struct kgsl_sharedmem_from_vmalloc *param)
 {
 	struct buffer *buf = find_buffer((void *)param->hostptr, 0);
-	uint32_t sect[2] = {
-			param->gpuaddr, len_from_vma(param->hostptr)
-	};
+	log_gpuaddr(param->gpuaddr, len_from_vma(param->hostptr));
 	if (buf)
 		buf->gpuaddr = param->gpuaddr;
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
-	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 }
 
 static void kgsl_ioctl_sharedmem_free_pre(int fd,
@@ -671,10 +660,7 @@ static void kgsl_ioctl_gpumem_alloc_post(int fd,
 		struct kgsl_gpumem_alloc *param)
 {
 	struct buffer *buf;
-	uint32_t sect[2] = {
-			param->gpuaddr, param->size
-	};
-	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
+	log_gpuaddr(param->gpuaddr, param->size);
 	printf("\t\tgpuaddr:\t%08lx\n", param->gpuaddr);
 	/* NOTE: host addr comes from mmap'ing w/ gpuaddr as offset */
 	buf = register_buffer(NULL, param->flags, param->size);

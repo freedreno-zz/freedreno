@@ -48,7 +48,7 @@ void rd_end(void)
 	fd = -1;
 }
 
-void rd_write_section(enum rd_sect_type type, void *buf, int sz)
+void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
 {
 	if (fd == -1)
 		return;

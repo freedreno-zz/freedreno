@@ -123,6 +123,11 @@ get_program(const char *vertex_shader_source, const char *fragment_shader_source
 	DEBUG_MSG("vertex shader:\n%s", vertex_shader_source);
 	DEBUG_MSG("fragment shader:\n%s", fragment_shader_source);
 
+	RD_WRITE_SECTION(RD_VERT_SHADER,
+			vertex_shader_source, strlen(vertex_shader_source));
+	RD_WRITE_SECTION(RD_FRAG_SHADER,
+			fragment_shader_source, strlen(fragment_shader_source));
+
 	ECHK(vertex_shader = glCreateShader(GL_VERTEX_SHADER));
 
 	GCHK(glShaderSource(vertex_shader, 1, &vertex_shader_source, NULL));

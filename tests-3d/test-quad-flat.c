@@ -122,6 +122,8 @@ void test_quad_flat(void)
 	GLfloat quad_color[] = {1.0, 0.0, 0.0, 1.0 };
 
 	DEBUG_MSG("----------------------------------------------------------------");
+	RD_START("quad-flat", "");
+
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -169,6 +171,8 @@ void test_quad_flat(void)
 	ECHK(eglSwapBuffers(display, surface));
 
 	usleep(1000000);
+
+	RD_END();
 }
 
 int main(int argc, char *argv[])
