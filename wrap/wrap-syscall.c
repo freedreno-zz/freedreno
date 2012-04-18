@@ -128,7 +128,7 @@ hexdump(const void *data, int size)
 
 	for (i = 0; i < size; i++) {
 		if (!(i % 16))
-			printf("\t\t\t%08X", (unsigned int) buf + i);
+			printf("\t\t\t%08X", (unsigned int) i);
 		if (!(i % 4))
 			printf(" ");
 
@@ -136,7 +136,7 @@ hexdump(const void *data, int size)
 			printf("   ");
 			alpha[i % 16] = '.';
 		} else {
-			printf(" %02X", buf[i]);
+			printf(" %02x", buf[i]);
 
 			if (isprint(buf[i]) && (buf[i] < 0xA0))
 				alpha[i % 16] = buf[i];
@@ -161,6 +161,25 @@ hexdump(const void *data, int size)
 			}
 		}
 	}
+}
+
+
+void
+hexdump_dwords(const void *data, int sizedwords)
+{
+	uint32_t *buf = (void *) data;
+	int i;
+
+	for (i = 0; i < sizedwords; i++) {
+		if (!(i % 8))
+			printf("\t\t\t%08X:   ", (unsigned int) i*4);
+		printf(" %08x", buf[i]);
+		if ((i % 8) == 7)
+			printf("\n");
+	}
+
+	if (i % 8)
+		printf("\n");
 }
 
 
@@ -387,8 +406,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 				 * entry.
 				 */
 				printf("\t\tcontext:\n");
-				hexdump(ibdesc[i].hostptr,
-						PACKETSIZE_STATESTREAM * sizeof(unsigned int));
+				hexdump_dwords(ibdesc[i].hostptr, PACKETSIZE_STATESTREAM);
 				rd_write_section(RD_CONTEXT, ibdesc[i].hostptr,
 						PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 
@@ -397,7 +415,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 						PACKETSIZE_STATESTREAM * sizeof(unsigned int));
 				len = ptr[2] & 0xfff;
 				/* 5 is length of first packet, 2 for the two 7f000000's */
-				hexdump(ptr, (len + 5 + 2) * sizeof(unsigned int));
+				hexdump_dwords(ptr, len + 5 + 2);
 				rd_write_section(RD_CMDSTREAM, ptr,
 						(len + 5 + 2) * sizeof(unsigned int));
 				/* dump out full buffer in case I need to go back and check
@@ -406,7 +424,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 				dump_buffer(ibdesc[i].gpuaddr);
 			} else {
 				printf("\t\tWARNING: INVALID CONTEXT!\n");
-				hexdump(ibdesc[i].hostptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+				hexdump_dwords(ibdesc[i].hostptr, ibdesc[i].sizedwords);
 			}
 		} else {
 			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr);
@@ -417,7 +435,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 
 				printf("\t\tcmd:\n");
 
-				hexdump(ptr, ibdesc[i].sizedwords * sizeof(unsigned int));
+				hexdump_dwords(ptr, ibdesc[i].sizedwords);
 
 				list_for_each_entry(other_buf, &buffers_of_interest, node) {
 					if (other_buf && other_buf->hostptr) {
