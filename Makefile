@@ -30,10 +30,10 @@ LFLAGS_3D = -lEGL_adreno200 -lGLESv2_adreno200
 LFLAGS_2D = -lC2D2 -lOpenVG
 LFLAGS = -L /system/lib  $(LFLAGS_2D) $(LFLAGS_3D) -lgsl -llog -lcutils -lstdc++ -lstlport -ldl -lc
 
-all: libwrap.so $(UTILS) $(TESTS) redump
+all: libwrap.so $(UTILS) $(TESTS) redump cffdump
 
 clean:
-	rm -f *.bmp *.dat *.so *.o *.rd *.html *.log redump $(TESTS)
+	rm -f *.bmp *.dat *.so *.o *.rd *.html *.log redump cffdump $(TESTS)
 
 %.o: %.c
 	gcc -g -c -fPIC $(CFLAGS) $(LFLAGS) $< -o $@
@@ -47,3 +47,7 @@ test-%: test-%.o $(UTILS)
 # build redump normally.. it doesn't need to link against android libs
 redump: redump.c
 	gcc -g $^ -o $@
+
+cffdump: cffdump.c
+	gcc -g $^ -o $@
+
