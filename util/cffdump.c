@@ -74,6 +74,15 @@ static uint32_t gpuaddr(void *hostptr)
 	return 0;
 }
 
+static void *hostptr(uint32_t gpuaddr)
+{
+	int i;
+	for (i = 0; i < nbuffers; i++)
+		if (buffer_contains_gpuaddr(&buffers[i], gpuaddr, 0))
+			return buffers[i].hostptr + (gpuaddr - buffers[i].gpuaddr);
+	return 0;
+}
+
 static const char *levels[] = {
 		"\t",
 		"\t\t",
@@ -366,6 +375,27 @@ static const char *event_name[] = {
 };
 #undef NAME
 
+#define NAME(x)   [x] = #x
+static const char *format_name[] = {
+		NAME(COLORX_4_4_4_4),
+		NAME(COLORX_1_5_5_5),
+		NAME(COLORX_5_6_5),
+		NAME(COLORX_8),
+		NAME(COLORX_8_8),
+		NAME(COLORX_8_8_8_8),
+		NAME(COLORX_S8_8_8_8),
+		NAME(COLORX_16_FLOAT),
+		NAME(COLORX_16_16_FLOAT),
+		NAME(COLORX_16_16_16_16_FLOAT),
+		NAME(COLORX_32_FLOAT),
+		NAME(COLORX_32_32_FLOAT),
+		NAME(COLORX_32_32_32_32_FLOAT),
+		NAME(COLORX_2_3_3),
+		NAME(COLORX_8_8_8),
+};
+#undef NAME
+
+
 static void dump_hex(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	int i;
@@ -395,12 +425,92 @@ static void dump_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
 }
 
+/* I believe the surface format is low bits:
+#define RB_COLOR_INFO__COLOR_FORMAT_MASK                   0x0000000fL
+comments in sys2gmem_tex_const indicate that address is [31:12], but
+looks like at least some of the bits above the format have different meaning..
+*/
+static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr, uint32_t *flags)
+{
+	*gpuaddr = dword & ~0xfff;
+	*flags   = dword & 0xfff;
+}
+
+static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
+{
+	uint32_t w, h, p;
+	uint32_t gpuaddr, flags, mip_gpuaddr, mip_flags;
+
+	/* see sys2gmem_tex_const[] in adreno_a2xxx.c */
+
+	/* Texture, FormatXYZW=Unsigned, ClampXYZ=Wrap/Repeat,
+	 * RFMode=ZeroClamp-1, Dim=1:2d, pitch
+	 */
+	p = (dwords[0] >> 22) << 5;
+
+	/* Format=6:8888_WZYX, EndianSwap=0:None, ReqSize=0:256bit, DimHi=0,
+	 * NearestClamp=1:OGL Mode
+	 */
+	parse_dword_addr(dwords[1], &gpuaddr, &flags);
+
+	/* Width, Height, EndianSwap=0:None */
+	w = (dwords[2] & 0x1fff) + 1;
+	h = ((dwords[2] >> 13) & 0x1fff) + 1;
+
+	/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
+	 * Mip=2:BaseMap
+	 */
+	// XXX
+
+	/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
+	 * Dim3d=0
+	 */
+	// XXX
+
+	/* BorderColor=0:ABGRBlack, ForceBC=0:diable, TriJuice=0, Aniso=0,
+	 * Dim=1:2d, MipPacking=0
+	 */
+	parse_dword_addr(dwords[5], &mip_gpuaddr, &mip_flags);
+
+	printf("%sset texture const %04x\n", levels[level], val);
+	printf("%saddr=%08x (flags=%03x), size=%dx%d, pitch=%d, format=%s\n",
+			levels[level+1], gpuaddr, flags, w, h, p,
+			format_name[flags & 0xf]);
+	printf("%smipaddr=%08x (flags=%03x)\n", levels[level+1],
+			mip_gpuaddr, mip_flags);
+}
+
+static void dump_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
+{
+	int i;
+	printf("%sset shader const %04x\n", levels[level], val);
+	for (i = 0; i < sizedwords; ) {
+		uint32_t gpuaddr, flags;
+		parse_dword_addr(dwords[i++], &gpuaddr, &flags);
+		void *addr = hostptr(gpuaddr);
+		if (addr) {
+			uint32_t size = dwords[i++];
+			printf("%saddr=%08x, size=%d, format=%s\n", levels[level+1],
+					gpuaddr, size, format_name[flags & 0xf]);
+			// TODO maybe dump these as bytes instead of dwords?
+			size = (size + 3) / 4; // for now convert to dwords
+			dump_hex(addr, size, level + 1);
+		}
+	}
+}
+
 static void dump_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t val = dwords[1] & 0xffff;
 	switch(dwords[1] >> 16) {
 	case 0x1:
-		printf("%sset shader const %04x\n", levels[level], val);
+		dwords += 2;
+		sizedwords -= 2;
+		if (val == 0x000) {
+			dump_tex_const(dwords, sizedwords, val, level);
+		} else {
+			dump_shader_const(dwords, sizedwords, val, level);
+		}
 		break;
 	case 0x2:
 		printf("%sset bool const %04x\n", levels[level], val);
