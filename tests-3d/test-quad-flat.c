@@ -28,6 +28,7 @@
 
 #include "test-util-3d.h"
 
+
 static EGLint const config_attribute_list[] = {
 	EGL_RED_SIZE, 8,
 	EGL_GREEN_SIZE, 8,
@@ -50,80 +51,65 @@ static const EGLint context_attribute_list[] = {
 	EGL_NONE
 };
 
-void test_quad_flat(void)
+static EGLDisplay display;
+static EGLConfig config;
+static EGLint num_config;
+static EGLContext context;
+static EGLSurface surface;
+static GLuint program;
+static GLint width, height;
+static int uniform_location;
+const char *vertex_shader_source =
+	"attribute vec4 aPosition;    \n"
+	"                             \n"
+	"void main()                  \n"
+	"{                            \n"
+	"    gl_Position = aPosition; \n"
+	"}                            \n";
+const char *fragment_shader_source =
+	"precision highp float;       \n"
+	"uniform vec4 uColor;         \n"
+	"                             \n"
+	"void main()                  \n"
+	"{                            \n"
+	"    gl_FragColor = uColor;   \n"
+	"}                            \n";
+
+
+/* Run through multiple variants to detect clear color, quad color (frag
+ * shader param), and vertices
+ */
+void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices)
 {
-	EGLDisplay display;
-	EGLConfig config;
-	EGLint num_config;
-	EGLContext context;
-	EGLSurface surface;
-	GLuint program;
-	GLint width, height;
-	int uniform_location;
-#if 0
-	/* pre-compiled vertex shader program
-	*
-	*  attribute vec4  P;
-	*  void main(void)
-	*  {
-	*    gl_Position = P;
-	*  }
-	*/
-	#define GMEM2SYS_VTX_PGM_LEN	0x12
-
-	static unsigned int gmem2sys_vtx_pgm[GMEM2SYS_VTX_PGM_LEN] = {
-		0x00011003, 0x00001000, 0xc2000000, 0x00001004,
-		0x00001000, 0xc4000000, 0x00001005, 0x00002000,
-		0x00000000, 0x1cb81000, 0x00398a88, 0x00000003,
-		0x140f803e, 0x00000000, 0xe2010100, 0x14000000,
-		0x00000000, 0xe2000000
-	};
-#endif
-	const char *vertex_shader_source =
-		"attribute vec4 aPosition;    \n"
-		"                             \n"
-		"void main()                  \n"
-		"{                            \n"
-		"    gl_Position = aPosition; \n"
-		"}                            \n";
-#if 0
-	/* pre-compiled fragment shader program
-	*
-	*  precision highp float;
-	*  uniform   vec4  clear_color;
-	*  void main(void)
-	*  {
-	*     gl_FragColor = clear_color;
-	*  }
-	*/
-
-	#define GMEM2SYS_FRAG_PGM_LEN	0x0c
-
-	static unsigned int gmem2sys_frag_pgm[GMEM2SYS_FRAG_PGM_LEN] = {
-		0x00000000, 0x1002c400, 0x10000000, 0x00001003,
-		0x00002000, 0x00000000, 0x140f8000, 0x00000000,
-		0x22000000, 0x14000000, 0x00000000, 0xe2000000
-	};
-#endif
-	const char *fragment_shader_source =
-		"precision highp float;       \n"
-		"uniform vec4 uColor;         \n"
-		"                             \n"
-		"void main()                  \n"
-		"{                            \n"
-		"    gl_FragColor = uColor;   \n"
-		"}                            \n";
-
-	GLfloat vertices[] = {
-			-0.45, -0.75, 0.0,
-			 0.45, -0.75, 0.0,
-			-0.45,  0.75, 0.0,
-			 0.45,  0.75, 0.0 };
-	GLfloat quad_color[] = {1.0, 0.0, 0.0, 1.0 };
-
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("quad-flat", "");
 
+	if (clear_color) {
+		/* clear the color buffer */
+		GCHK(glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]));
+		GCHK(glClear(GL_COLOR_BUFFER_BIT));
+	}
+
+	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
+	GCHK(glEnableVertexAttribArray(0));
+
+	/* now set up our uniform. */
+	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
+
+	GCHK(glUniform4fv(uniform_location, 1, quad_color));
+	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
+
+	GCHK(glFlush());
+
+	ECHK(eglSwapBuffers(display, surface));
+
+	usleep(1000000);
+
+	RD_END();
+}
+
+int main(int argc, char *argv[])
+{
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -151,33 +137,62 @@ void test_quad_flat(void)
 
 	GCHK(glViewport(0, 0, width, height));
 
-	/* clear the color buffer */
-	GCHK(glClearColor(0.3125, 0.3125, 0.3125, 1.0));
-	GCHK(glClear(GL_COLOR_BUFFER_BIT));
+	/* do the first test twice to figure out what part is one-time
+	 * initialization:
+	 */
+	GCHK(test_quad_flat(NULL,
+			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
+			(GLfloat[]) {
+				-0.45, -0.75, 0.0,
+				 0.45, -0.75, 0.0,
+				-0.45,  0.75, 0.0,
+				 0.45,  0.75, 0.0}));
+	//XXX
+	GCHK(test_quad_flat(NULL,
+			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
+			(GLfloat[]) {
+				-0.45, -0.75, 0.0,
+				 0.45, -0.75, 0.0,
+				-0.45,  0.75, 0.0,
+				 0.45,  0.75, 0.0}));
 
-	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
-	GCHK(glEnableVertexAttribArray(0));
+	GCHK(test_quad_flat(NULL,
+			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
+			(GLfloat[]) {
+				-0.45, -0.75, 0.0,
+				 0.45, -0.75, 0.0,
+				-0.45,  0.75, 0.0,
+				 0.45,  0.75, 0.0}));
+	GCHK(test_quad_flat((GLfloat[]){0.3125, 0.3125, 0.3125, 1.0},
+			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
+			(GLfloat[]) {
+				-0.45, -0.75, 0.0,
+				 0.45, -0.75, 0.0,
+				-0.45,  0.75, 0.0,
+				 0.45,  0.75, 0.0}));
+	GCHK(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
+			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
+			(GLfloat[]) {
+				-0.45, -0.75, 0.0,
+				 0.45, -0.75, 0.0,
+				-0.45,  0.75, 0.0,
+				 0.45,  0.75, 0.0}));
+	GCHK(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
+			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
+			(GLfloat[]) {
+				-0.45, -0.75, 0.0,
+				 0.45, -0.75, 0.0,
+				-0.45,  0.75, 0.0,
+				 0.45,  0.75, 0.0}));
+	GCHK(test_quad_flat(NULL,
+			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
+			(GLfloat[]) {
+				-0.15, -0.23, 0.12,
+				 0.25, -0.33, 0.22,
+				-0.35,  0.43, 0.32,
+				 0.45,  0.53, 0.42}));
 
-	/* now set up our uniform. */
-	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
-
-	GCHK(glUniform4fv(uniform_location, 1, quad_color));
-	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
-
-	GCHK(glFlush());
-
-	DUMP_ALL_BUFFERS();
-
-	ECHK(eglSwapBuffers(display, surface));
-
-	usleep(1000000);
-
-	RD_END();
-}
-
-int main(int argc, char *argv[])
-{
-	test_quad_flat();
+	ECHK(eglTerminate(display));
 }
 
 void _start(int argc, char **argv)
