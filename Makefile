@@ -33,7 +33,7 @@ LFLAGS = -L /system/lib  $(LFLAGS_2D) $(LFLAGS_3D) -lgsl -llog -lcutils -lstdc++
 all: libwrap.so $(UTILS) $(TESTS) redump cffdump
 
 clean:
-	rm -f *.bmp *.dat *.so *.o *.rd *.html *.log redump cffdump $(TESTS)
+	rm -f *.bmp *.dat *.so *.o *.rd *.html *-cffdump.txt *.log redump cffdump $(TESTS)
 
 %.o: %.c
 	gcc -g -c -fPIC $(CFLAGS) $(LFLAGS) $< -o $@

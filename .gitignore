@@ -13,6 +13,7 @@ test-quad-flat
 
 # misc:
 redump
+cffdump
 *.so
 *.o
 *.swp
@@ -21,3 +22,4 @@ redump
 *.dat
 *.rd
 *.html
+*-cffdump.txt
