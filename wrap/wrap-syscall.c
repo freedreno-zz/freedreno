@@ -445,8 +445,12 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 					}
 				}
 
-				rd_write_section(RD_CMDSTREAM, ptr,
-						ibdesc[i].sizedwords * sizeof(unsigned int));
+				/* we already dump all the buffer contents, so just need
+				 * to dump the address/size of the cmdstream:
+				 */
+				rd_write_section(RD_CMDSTREAM_ADDR, (uint32_t[2]) {
+					ibdesc[i].gpuaddr, ibdesc[i].sizedwords,
+				}, 8);
 			}
 		}
 	}

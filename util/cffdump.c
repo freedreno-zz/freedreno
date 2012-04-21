@@ -655,18 +655,21 @@ int main(int argc, char **argv)
 			break;
 		case RD_GPUADDR:
 			buffers[nbuffers].gpuaddr = ((uint32_t *)buf)[0];
-			buffers[nbuffers].len = ((uint32_t *)buf)[0];
+			buffers[nbuffers].len = ((uint32_t *)buf)[1];
 			break;
 		case RD_BUFFER_CONTENTS:
 			buffers[nbuffers].hostptr = buf;
 			nbuffers++;
 			buf = NULL;
 			break;
-		case RD_CMDSTREAM:
-			printf("cmdstream: %d dwords\n", sz/4);
-			dump_commands(buf, sz/4, 0);
-			for (i = 0; i < nbuffers; i++)
+		case RD_CMDSTREAM_ADDR:
+			printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
+			dump_commands(hostptr(((uint32_t *)buf)[0]),
+					((uint32_t *)buf)[1], 0);
+			for (i = 0; i < nbuffers; i++) {
 				free(buffers[i].hostptr);
+				buffers[i].hostptr = NULL;
+			}
 			nbuffers = 0;
 			break;
 		}

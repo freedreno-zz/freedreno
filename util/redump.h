@@ -31,6 +31,7 @@ enum rd_sect_type {
 	RD_GPUADDR,    /* u32 gpuaddr, u32 size */
 	RD_CONTEXT,    /* raw dump */
 	RD_CMDSTREAM,  /* raw dump */
+	RD_CMDSTREAM_ADDR, /* gpu addr of cmdstream */
 	RD_PARAM,      /* u32 param_type, u32 param_val, u32 bitlen */
 	RD_FLUSH,      /* empty, clear previous params */
 	RD_PROGRAM,    /* shader program, raw dump */
