@@ -106,6 +106,9 @@ static const char *levels[] = {
 /* CP timestamp register */
 #define	REG_CP_TIMESTAMP		 REG_SCRATCH_REG0
 
+/* registers that we have figured out but are not in kernel: */
+#define REG_CLEAR_COLOR			0x220b
+
 #define NAME(x) [REG_ ## x] = #x
 static const const char *type0_regname[0x7fff] = {
 		NAME(CP_CSQ_IB1_STAT),
@@ -200,6 +203,7 @@ static const const char *type0_regname[0x7fff] = {
 		NAME(RB_MODECONTROL),
 		NAME(RB_SURFACE_INFO),
 		NAME(RB_SAMPLE_POS),
+		NAME(CLEAR_COLOR),
 
 		NAME(SCRATCH_ADDR),
 		NAME(SCRATCH_REG0),
@@ -412,17 +416,20 @@ static void dump_hex(uint32_t *dwords, uint32_t sizedwords, int level)
 		printf("\n");
 }
 
-static void dump_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
+static void dump_float(float *dwords, uint32_t sizedwords, int level)
 {
-	uint32_t start = dwords[2] >> 16;
-	uint32_t size  = dwords[2] & 0xffff;
-	const char *type;
-	switch (dwords[1]) {
-	case 0:   type = "vertex";   break;
-	case 1:   type = "fragment"; break;
-	default: type = "<unknown>"; break;
+	int i;
+	for (i = 0; i < sizedwords; i++) {
+		if ((i % 8) == 0)
+			printf("%08x:%s", gpuaddr(dwords), levels[level]);
+		else
+			printf(" ");
+		printf("%8f", *(dwords++));
+		if ((i % 8) == 7)
+			printf("\n");
 	}
-	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
+	if (i % 8)
+		printf("\n");
 }
 
 /* I believe the surface format is low bits:
@@ -434,6 +441,57 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr, uint32_t *flags)
 {
 	*gpuaddr = dword & ~0xfff;
 	*flags   = dword & 0xfff;
+}
+
+static void dump_rb_copy_control(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t gpuaddr, flags, p, format;
+
+	parse_dword_addr(dwords[1], &gpuaddr, &flags);
+	p = dwords[2] << 5;
+
+	/* Endian=none, Linear, Format=RGBA8888,Swap=0,!Dither,
+	 *  MaskWrite:R=G=B=A=1
+	 *   0x0003c008 | (format << 4)
+	 */
+	// XXX dwords[3]
+	format = (dwords[3] >> 4) & 0xf;
+
+	printf("%sRB_COPY_CONTROL: %08x\n", levels[level], dwords[0]);
+	printf("%sRB_COPY_DEST_BASE: %08x\n", levels[level], gpuaddr);
+	printf("%sRB_COPY_DEST_PITCH: %08x (%d)\n", levels[level], p, p);
+	printf("%sformat: %s\n", levels[level], format_name[format]);
+	printf("%soffset: %d\n", levels[level], dwords[4]);
+}
+
+static void dump_clear_color(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t a, b, g, r;
+	a = (dwords[0] >> 24) & 0xff;
+	b = (dwords[0] >> 16) & 0xff;
+	g = (dwords[0] >>  8) & 0xff;
+	r = (dwords[0] >>  0) & 0xff;
+	printf("%sCLEAR_COLOR: %f %f %f %f\n", levels[level],
+			((float)r) / 255.0, ((float)g) / 255.0,
+			((float)b) / 255.0, ((float)a) / 255.0);
+}
+
+static void (*type0_dump_reg[0x7fff])(uint32_t *, uint32_t, int) = {
+		[REG_RB_COPY_CONTROL] = dump_rb_copy_control,
+		[REG_CLEAR_COLOR] = dump_clear_color,
+};
+
+static void dump_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t start = dwords[1] >> 16;
+	uint32_t size  = dwords[1] & 0xffff;
+	const char *type;
+	switch (dwords[0]) {
+	case 0:   type = "vertex";   break;
+	case 1:   type = "fragment"; break;
+	default: type = "<unknown>"; break;
+	}
+	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
@@ -495,21 +553,20 @@ static void dump_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t va
 			// TODO maybe dump these as bytes instead of dwords?
 			size = (size + 3) / 4; // for now convert to dwords
 			dump_hex(addr, size, level + 1);
+			dump_float(addr, size, level + 1);
 		}
 	}
 }
 
 static void dump_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	uint32_t val = dwords[1] & 0xffff;
-	switch(dwords[1] >> 16) {
+	uint32_t val = dwords[0] & 0xffff;
+	switch(dwords[0] >> 16) {
 	case 0x1:
-		dwords += 2;
-		sizedwords -= 2;
 		if (val == 0x000) {
-			dump_tex_const(dwords, sizedwords, val, level);
+			dump_tex_const(dwords+1, sizedwords-1, val, level);
 		} else {
-			dump_shader_const(dwords, sizedwords, val, level);
+			dump_shader_const(dwords+1, sizedwords-1, val, level);
 		}
 		break;
 	case 0x2:
@@ -519,15 +576,18 @@ static void dump_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 		printf("%sset loop const %04x\n", levels[level], val);
 		break;
 	case 0x4:
+		val += 0x2000;
 		printf("%sset register %s\n", levels[level],
-				type0_regname[val + 0x2000]);
+				type0_regname[val]);
+		if (type0_dump_reg[val])
+			type0_dump_reg[val](dwords+1, sizedwords-1, level+1);
 		break;
 	}
 }
 
 static void dump_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	printf("%sevent %s\n", levels[level], event_name[dwords[1]]);
+	printf("%sevent %s\n", levels[level], event_name[dwords[0]]);
 }
 
 static void (*type3_dump_op[0xff])(uint32_t *, uint32_t, int) = {
@@ -586,6 +646,8 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			val = GET_PM4_TYPE0_REGIDX(dwords);
 			printf("\t%swrite: %s (%04x) (%d dwords)\n", levels[level],
 					type0_regname[val], val, count);
+			if (type0_dump_reg[val])
+				type0_dump_reg[val](dwords+1, count-1, level+1);
 			dump_hex(dwords, count, level+1);
 			break;
 		case 0x1: /* type-1 */
@@ -598,7 +660,7 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			printf("\t%sopcode: %s (%02x) (%d dwords)\n", levels[level],
 					type3_opname[val], val, count);
 			if (type3_dump_op[val])
-				type3_dump_op[val](dwords, count, level+1);
+				type3_dump_op[val](dwords+1, count-1, level+1);
 			dump_hex(dwords, count, level+1);
 			dump_type3(dwords, count, level+1);
 			break;
