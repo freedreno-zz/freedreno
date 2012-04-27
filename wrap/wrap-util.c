@@ -48,13 +48,27 @@ void rd_end(void)
 	fd = -1;
 }
 
+volatile int*  __errno( void );
+#undef errno
+#define errno (*__errno())
+
+static void rd_write(const void *buf, int sz)
+{
+	int ret = write(fd, buf, sz);
+	if (ret < 0) {
+		printf("error: %d (%s)\n", ret, strerror(errno));
+		printf("fd=%d, buf=%p, sz=%d\n", fd, buf, sz);
+		exit(-1);
+	}
+}
+
 void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
 {
 	if (fd == -1)
 		return;
-	write(fd, &type, sizeof(type));
-	write(fd, &sz, 4);
-	write(fd, buf, sz);
+	rd_write(&type, sizeof(type));
+	rd_write(&sz, 4);
+	rd_write(buf, sz);
 }
 
 
