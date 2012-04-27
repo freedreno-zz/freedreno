@@ -10,6 +10,7 @@ test-fb
 # 3d tests:
 test-triangle-quad
 test-quad-flat
+test-quad-flat2
 
 # misc:
 redump
