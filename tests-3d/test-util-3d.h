@@ -84,6 +84,8 @@ glStrError(GLenum error)
 {
 	switch (error) {
 	// TODO
+	case GL_INVALID_OPERATION:
+		return "GL_INVALID_OPERATION";
 	default:
 		return "UNKNOWN";
 	}
@@ -128,7 +130,7 @@ get_program(const char *vertex_shader_source, const char *fragment_shader_source
 	RD_WRITE_SECTION(RD_FRAG_SHADER,
 			fragment_shader_source, strlen(fragment_shader_source));
 
-	ECHK(vertex_shader = glCreateShader(GL_VERTEX_SHADER));
+	GCHK(vertex_shader = glCreateShader(GL_VERTEX_SHADER));
 
 	GCHK(glShaderSource(vertex_shader, 1, &vertex_shader_source, NULL));
 	GCHK(glCompileShader(vertex_shader));
@@ -150,7 +152,7 @@ get_program(const char *vertex_shader_source, const char *fragment_shader_source
 
 	DEBUG_MSG("Vertex shader compilation succeeded!");
 
-	ECHK(fragment_shader = glCreateShader(GL_FRAGMENT_SHADER));
+	GCHK(fragment_shader = glCreateShader(GL_FRAGMENT_SHADER));
 
 	GCHK(glShaderSource(fragment_shader, 1, &fragment_shader_source, NULL));
 	GCHK(glCompileShader(fragment_shader));
@@ -172,7 +174,7 @@ get_program(const char *vertex_shader_source, const char *fragment_shader_source
 
 	DEBUG_MSG("Fragment shader compilation succeeded!");
 
-	ECHK(program = glCreateProgram());
+	GCHK(program = glCreateProgram());
 
 	GCHK(glAttachShader(program, vertex_shader));
 	GCHK(glAttachShader(program, fragment_shader));
