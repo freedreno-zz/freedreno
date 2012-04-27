@@ -225,6 +225,7 @@ struct buffer {
 	void *hostptr;
 	unsigned int gpuaddr, flags, len;
 	struct list node;
+	int munmap;
 };
 
 LIST_HEAD(buffers_of_interest);
@@ -258,6 +259,8 @@ static void unregister_buffer(unsigned int gpuaddr)
 	struct buffer *buf = find_buffer((void *)-1, gpuaddr);
 	if (buf) {
 		list_del(&buf->node);
+		if (buf->munmap)
+			munmap(buf->hostptr, buf->len);
 		free(buf);
 	}
 }
@@ -784,7 +787,7 @@ int ioctl(int fd, unsigned long int request, ...)
 
 void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-	void *ret;
+	void *ret = NULL;
 	PROLOG(mmap);
 
 	if (get_kgsl_info(fd)) {
@@ -792,7 +795,16 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 				fd, addr, length, prot, flags, offset);
 	}
 
-	ret = orig_mmap(addr, length, prot, flags, fd, offset);
+	if (get_kgsl_info(fd)) {
+		struct buffer *buf = find_buffer(NULL, offset);
+		if (buf && buf->hostptr) {
+			buf->munmap = 0;
+			ret = buf->hostptr;
+		}
+	}
+
+	if (!ret)
+		ret = orig_mmap(addr, length, prot, flags, fd, offset);
 
 	if (get_kgsl_info(fd)) {
 		struct buffer *buf = find_buffer(NULL, offset);
@@ -802,4 +814,17 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	}
 
 	return ret;
+}
+
+int munmap(void *addr, size_t length)
+{
+	struct buffer *buf = find_buffer(addr, 0);
+	PROLOG(munmap);
+
+	if (buf) {
+		buf->munmap = 1;
+		return 0;
+	}
+
+	return orig_munmap(addr, length);
 }
