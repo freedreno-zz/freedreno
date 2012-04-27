@@ -152,7 +152,9 @@ int main(int argc, char *argv[])
 	test_triangle_quad();
 }
 
+#ifdef BIONIC
 void _start(int argc, char **argv)
 {
 	exit(main(argc, argv));
 }
+#endif

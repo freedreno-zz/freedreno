@@ -168,7 +168,9 @@ int main(int argc, char *argv[])
 	ECHK(eglTerminate(display));
 }
 
+#ifdef BIONIC
 void _start(int argc, char **argv)
 {
 	exit(main(argc, argv));
 }
+#endif
