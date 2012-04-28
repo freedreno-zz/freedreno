@@ -13,6 +13,7 @@ test-triangle-smoothed
 test-strip-smoothed
 test-quad-flat
 test-quad-flat2
+test-cube
 
 # misc:
 redump
