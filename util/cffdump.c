@@ -204,6 +204,15 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr, uint32_t *flags)
 #define REG_RB_COPY_DEST_OFFSET	0x231c  /* ?? */
 #define REG_RB_COLOR_INFO			0x2001
 
+#define REG_PA_SU_VTX_CNTL			0x2302
+#define REG_PA_CL_GB_VERT_CLIP_ADJ	0x2303
+#define REG_PA_CL_GB_VERT_DISC_ADJ	0x2304
+#define REG_PA_CL_GB_HORZ_CLIP_ADJ	0x2305
+#define REG_PA_CL_GB_HORZ_DISC_ADJ	0x2306
+
+#define REG_RB_BLEND_COLOR			0x2105
+#define REG_RB_ALPHA_REF			0x210e
+#define REG_RB_BLEND_CONTROL		0x2201
 
 static void reg_hex(const char *name, uint32_t dword, int level)
 {
@@ -261,6 +270,18 @@ static void reg_rb_color_info(const char *name, uint32_t dword, int level)
 			format_name[dword & 0xf]);
 }
 
+static void reg_xy(const char *name, uint32_t dword, int level)
+{
+	/* note: window_offset is 14 bits, scissors are 13 bits (at least in
+	 * r600) but unused bits are set to zero:
+	 */
+	uint32_t x = (dword >>  0) & 0x3fff;
+	uint32_t y = (dword >> 16) & 0x3fff;
+	/* bit 31 is WINDOW_OFFSET_DISABLE (at least for TL's): */
+	printf("%s%s: %d,%d%s (%08x)\n", levels[level], name, x, y,
+			(dword & 0x80000000) ? " (WINDOW_OFFSET_DISABLE)" : "", dword);
+}
+
 #define REG(x, fxn) [REG_ ## x] = { #x, fxn }
 static const const struct {
 	const char *name;
@@ -316,24 +337,28 @@ static const const struct {
 		REG(PA_CL_VPORT_YOFFSET, reg_float),	/* y + half_height */
 		REG(PA_CL_VPORT_ZSCALE, reg_float),
 		REG(PA_CL_VPORT_ZOFFSET, reg_float),
-
 		REG(PA_CL_CLIP_CNTL, reg_hex),
 		REG(PA_CL_VTE_CNTL, reg_hex),
+		REG(PA_CL_GB_VERT_CLIP_ADJ, reg_float),
+		REG(PA_CL_GB_VERT_DISC_ADJ, reg_float),
+		REG(PA_CL_GB_HORZ_CLIP_ADJ, reg_float),
+		REG(PA_CL_GB_HORZ_DISC_ADJ, reg_float),
 		REG(PA_SC_AA_MASK, reg_hex),
 		REG(PA_SC_LINE_CNTL, reg_hex),
-		REG(PA_SC_SCREEN_SCISSOR_BR, reg_hex),
-		REG(PA_SC_SCREEN_SCISSOR_TL, reg_hex),
+		REG(PA_SC_SCREEN_SCISSOR_BR, reg_xy),
+		REG(PA_SC_SCREEN_SCISSOR_TL, reg_xy),
 		REG(PA_SC_VIZ_QUERY, reg_hex),
 		REG(PA_SC_VIZ_QUERY_STATUS, reg_hex),
-		REG(PA_SC_WINDOW_OFFSET, reg_hex),
-		REG(PA_SC_WINDOW_SCISSOR_BR, reg_hex),
-		REG(PA_SC_WINDOW_SCISSOR_TL, reg_hex),
+		REG(PA_SC_WINDOW_OFFSET, reg_xy),		/* ??? */
+		REG(PA_SC_WINDOW_SCISSOR_BR, reg_xy),
+		REG(PA_SC_WINDOW_SCISSOR_TL, reg_xy),
 		REG(PA_SU_FACE_DATA, reg_hex),
 		REG(PA_SU_POINT_SIZE, reg_hex),
 		REG(PA_SU_LINE_CNTL, reg_hex),
 		REG(PA_SU_POLY_OFFSET_BACK_OFFSET, reg_hex),
 		REG(PA_SU_POLY_OFFSET_FRONT_SCALE, reg_hex),
 		REG(PA_SU_SC_MODE_CNTL, reg_hex),
+		REG(PA_SU_VTX_CNTL, reg_hex),
 
 		REG(PC_INDEX_OFFSET, reg_hex),
 
@@ -362,13 +387,15 @@ static const const struct {
 		REG(RB_COPY_DEST_PITCH, reg_rb_copy_dest_pitch),
 		REG(RB_COPY_DEST_FORMAT, reg_rb_copy_dest_format),
 		REG(RB_COPY_DEST_OFFSET, reg_hex),
-
 		REG(RB_DEPTHCONTROL, reg_hex),
 		REG(RB_EDRAM_INFO, reg_hex),
 		REG(RB_MODECONTROL, reg_hex),
 		REG(RB_SURFACE_INFO, reg_hex),
 		REG(RB_COLOR_INFO, reg_rb_color_info),
 		REG(RB_SAMPLE_POS, reg_hex),
+		REG(RB_BLEND_COLOR, reg_hex),
+		REG(RB_ALPHA_REF, reg_hex),
+		REG(RB_BLEND_CONTROL, reg_hex),
 		REG(CLEAR_COLOR, reg_clear_color),
 
 		REG(SCRATCH_ADDR, reg_hex),
@@ -773,9 +800,11 @@ int main(int argc, char **argv)
 			buf = NULL;
 			break;
 		case RD_CMDSTREAM_ADDR:
+			printf("############################################################\n");
 			printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
 			dump_commands(hostptr(((uint32_t *)buf)[0]),
 					((uint32_t *)buf)[1], 0);
+			printf("############################################################\n");
 			for (i = 0; i < nbuffers; i++) {
 				free(buffers[i].hostptr);
 				buffers[i].hostptr = NULL;
