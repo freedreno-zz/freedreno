@@ -22,7 +22,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-/* Code copied from triangle_quad test from lima driver project adapted to the
+/* Code copied from strip_smoothed test from lima driver project adapted to the
  * logging that I use..
  */
 
@@ -39,13 +39,6 @@ static EGLint const config_attribute_list[] = {
 	EGL_NONE
 };
 
-static EGLint const pbuffer_attribute_list[] = {
-	EGL_WIDTH, 400,
-	EGL_HEIGHT, 240,
-	EGL_LARGEST_PBUFFER, EGL_TRUE,
-	EGL_NONE
-};
-
 static const EGLint context_attribute_list[] = {
 	EGL_CONTEXT_CLIENT_VERSION, 2,
 	EGL_NONE
@@ -55,34 +48,56 @@ static EGLDisplay display;
 static EGLConfig config;
 static EGLint num_config;
 static EGLContext context;
-static EGLSurface surface;
 static GLuint program;
-static GLint width, height;
-static int uniform_location;
 const char *vertex_shader_source =
-	"attribute vec4 aPosition;    \n"
-	"                             \n"
-	"void main()                  \n"
-	"{                            \n"
-	"    gl_Position = aPosition; \n"
-	"}                            \n";
+		"attribute vec4 aPosition;    \n"
+		"attribute vec4 aColor;       \n"
+		"                             \n"
+		"varying vec4 vColor;         \n"
+		"                             \n"
+		"void main()                  \n"
+		"{                            \n"
+		"    vColor = aColor;         \n"
+		"    gl_Position = aPosition; \n"
+		"}                            \n";
 const char *fragment_shader_source =
-	"precision highp float;       \n"
-	"uniform vec4 uColor;         \n"
-	"                             \n"
-	"void main()                  \n"
-	"{                            \n"
-	"    gl_FragColor = uColor;   \n"
-	"}                            \n";
+		"precision mediump float;     \n"
+		"                             \n"
+		"varying vec4 vColor;         \n"
+		"                             \n"
+		"void main()                  \n"
+		"{                            \n"
+		"    gl_FragColor = vColor;   \n"
+		"}                            \n";
 
 
-/* Run through multiple variants to detect clear color, quad color (frag
- * shader param), and vertices
- */
-void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices)
+void test_strip_smoothed(void)
 {
+	GLint width, height;
+	EGLint pbuffer_attribute_list[] = {
+		EGL_WIDTH, 400,
+		EGL_HEIGHT, 240,
+		EGL_LARGEST_PBUFFER, EGL_TRUE,
+		EGL_NONE
+	};
+	GLfloat vVertices[] = {
+			-0.7,  0.7, -0.7,
+			-0.7,  0.2, -0.4,
+			 0.0,  0.3, -0.5,
+			-0.2, -0.3,  0.3,
+			 0.5, -0.2,  0.4,
+			 0.7, -0.7,  0.7 };
+	GLfloat vColors[] = {
+			0.1, 0.1, 0.1, 1.0,
+			1.0, 0.0, 0.0, 1.0,
+			0.0, 0.0, 1.0, 1.0,
+			1.0, 1.0, 0.0, 1.0,
+			0.0, 1.0, 1.0, 1.0,
+			0.9, 0.9, 0.9, 1.0};
+	EGLSurface surface;
+
 	DEBUG_MSG("----------------------------------------------------------------");
-	RD_START("quad-flat", "");
+	RD_START("strip-smoothed", "");
 
 	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
 
@@ -93,37 +108,46 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
+	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
 
 		GCHK(glBindAttribLocation(program, 0, "aPosition"));
+		GCHK(glBindAttribLocation(program, 1, "aColor"));
 
 		link_program(program);
+		GCHK(glFlush());
 	}
 
 	GCHK(glViewport(0, 0, width, height));
+	GCHK(glFlush());
 
-	if (clear_color) {
-		/* clear the color buffer */
-		GCHK(glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]));
-		GCHK(glClear(GL_COLOR_BUFFER_BIT));
-	}
 
-	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
+	/* clear the color buffer */
+	GCHK(glClearColor(0.3125, 0.3125, 0.3125, 1.0));
+	GCHK(glFlush());
+	GCHK(glClear(GL_COLOR_BUFFER_BIT));
+	GCHK(glFlush());
+
+	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vVertices));
+	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
+	GCHK(glFlush());
 
-	/* now set up our uniform. */
-	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
+	GCHK(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, vColors));
+	GCHK(glFlush());
+	GCHK(glEnableVertexAttribArray(1));
+	GCHK(glFlush());
 
-	GCHK(glUniform4fv(uniform_location, 1, quad_color));
-	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
-
+	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 6));
 	GCHK(glFlush());
 
 	ECHK(eglSwapBuffers(display, surface));
+	GCHK(glFlush());
 
-	usleep(1000000);
+	ECHK(eglDestroySurface(display, surface));
+	GCHK(glFlush());
 
 	RD_END();
 }
@@ -139,60 +163,7 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	/* do the first test twice to figure out what part is one-time
-	 * initialization:
-	 */
-	GCHK(test_quad_flat(NULL,
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	//XXX
-	GCHK(test_quad_flat(NULL,
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-
-	GCHK(test_quad_flat(NULL,
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat((GLfloat[]){0.3125, 0.3125, 0.3125, 1.0},
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
-			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat(NULL,
-			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
-			(GLfloat[]) {
-				-0.15, -0.23, 0.12,
-				 0.25, -0.33, 0.22,
-				-0.35,  0.43, 0.32,
-				 0.45,  0.53, 0.42}));
+	test_strip_smoothed();
 
 	ECHK(eglTerminate(display));
 }

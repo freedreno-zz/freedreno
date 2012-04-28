@@ -9,6 +9,8 @@ test-fb
 
 # 3d tests:
 test-triangle-quad
+test-triangle-smoothed
+test-strip-smoothed
 test-quad-flat
 test-quad-flat2
 
