@@ -155,10 +155,10 @@ int main(int argc, char *argv[])
 	 * initialization:
 	 */
 	/* 0000 */
-	test_quad_flat2(400, 240);
+	test_quad_flat2(64, 64);
 
 	/* 0001 */
-	test_quad_flat2(400, 240);
+	test_quad_flat2(64, 64);
 
 	/* 0002 */
 	test_quad_flat2(400, 240);
@@ -170,6 +170,7 @@ int main(int argc, char *argv[])
 	test_quad_flat2(400, 340);
 
 	/* 0004 - I think this one should be big enoug to bump us over GMEM size */
+	test_quad_flat2(800, 600);
 
 	ECHK(eglTerminate(display));
 }
