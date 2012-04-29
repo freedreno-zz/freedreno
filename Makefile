@@ -82,5 +82,5 @@ redump: redump.c
 	gcc -g $^ -o $@
 
 cffdump: cffdump.c
-	gcc -g $^ -o $@
+	gcc -g $(CFLAGS) $^ -o $@
 
