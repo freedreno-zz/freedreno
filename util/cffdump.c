@@ -282,6 +282,13 @@ static void reg_xy(const char *name, uint32_t dword, int level)
 			(dword & 0x80000000) ? " (WINDOW_OFFSET_DISABLE)" : "", dword);
 }
 
+static void reg_bin_size(const char *name, uint32_t dword, int level)
+{
+	uint32_t x = ((dword >> 0) & 0x1f) * 32;
+	uint32_t y = ((dword >> 5) & 0x1f) * 32;
+	printf("%s%s: %dx%d (%08x)\n", levels[level], name, x, y, dword);
+}
+
 #define REG(x, fxn) [REG_ ## x] = { #x, fxn }
 static const const struct {
 	const char *name;
@@ -448,7 +455,7 @@ static const const struct {
 		REG(A220_PC_MAX_VTX_INDX, reg_hex),
 		REG(A220_RB_LRZ_VSC_CONTROL, reg_hex),
 		REG(A220_GRAS_CONTROL, reg_hex),
-		REG(A220_VSC_BIN_SIZE, reg_hex),
+		REG(A220_VSC_BIN_SIZE, reg_bin_size),
 		REG(A220_VSC_PIPE_DATA_LENGTH_7, reg_hex),
 
 		/*registers added in adreno225*/
