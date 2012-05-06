@@ -113,6 +113,7 @@ void test_triangle_quad(void)
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
+	GCHK(glFlush());
 
 	program = get_program(vertex_shader_source, fragment_shader_source);
 
@@ -121,26 +122,34 @@ void test_triangle_quad(void)
 	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
+	GCHK(glFlush());
 
 	/* clear the color buffer */
 	GCHK(glClearColor(0.3125, 0.3125, 0.3125, 1.0));
+	GCHK(glFlush());
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
+	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
+	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
+	GCHK(glFlush());
 
 	/* now set up our uniform. */
 	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
 
 	GCHK(glUniform4fv(uniform_location, 1, triangle_color));
+	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLES, 0, 3));
+	GCHK(glFlush());
 
 	GCHK(glUniform4fv(uniform_location, 1, quad_color));
+	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 3, 4));
-
 	GCHK(glFlush());
 
 	ECHK(eglSwapBuffers(display, surface));
+	GCHK(glFlush());
 
 	usleep(1000000);
 

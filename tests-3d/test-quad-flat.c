@@ -93,6 +93,7 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
+	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -103,22 +104,27 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 	}
 
 	GCHK(glViewport(0, 0, width, height));
+	GCHK(glFlush());
 
 	if (clear_color) {
 		/* clear the color buffer */
 		GCHK(glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]));
+		GCHK(glFlush());
 		GCHK(glClear(GL_COLOR_BUFFER_BIT));
+		GCHK(glFlush());
 	}
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
+	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
+	GCHK(glFlush());
 
 	/* now set up our uniform. */
 	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
 
 	GCHK(glUniform4fv(uniform_location, 1, quad_color));
+	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
-
 	GCHK(glFlush());
 
 	ECHK(eglSwapBuffers(display, surface));

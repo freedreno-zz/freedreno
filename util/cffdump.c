@@ -181,10 +181,11 @@ static void dump_float(float *dwords, uint32_t sizedwords, int level)
 comments in sys2gmem_tex_const indicate that address is [31:12], but
 looks like at least some of the bits above the format have different meaning..
 */
-static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr, uint32_t *flags)
+static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
+		uint32_t *flags, uint32_t mask)
 {
-	*gpuaddr = dword & ~0xfff;
-	*flags   = dword & 0xfff;
+	*gpuaddr = dword & ~mask;
+	*flags   = dword & mask;
 }
 
 
@@ -227,7 +228,7 @@ static void reg_float(const char *name, uint32_t dword, int level)
 static void reg_gpuaddr(const char *name, uint32_t dword, int level)
 {
 	uint32_t gpuaddr, flags;
-	parse_dword_addr(dword, &gpuaddr, &flags);
+	parse_dword_addr(dword, &gpuaddr, &flags, 0xfff);
 	printf("%s%s: %08x (%x)\n", levels[level], name, gpuaddr, flags);
 }
 
@@ -397,7 +398,7 @@ static const const struct {
 		REG(RB_DEPTHCONTROL, reg_hex),
 		REG(RB_EDRAM_INFO, reg_hex),
 		REG(RB_MODECONTROL, reg_hex),
-		REG(RB_SURFACE_INFO, reg_hex),
+		REG(RB_SURFACE_INFO, reg_hex),	/* surface pitch */
 		REG(RB_COLOR_INFO, reg_rb_color_info),
 		REG(RB_SAMPLE_POS, reg_hex),
 		REG(RB_BLEND_COLOR, reg_hex),
@@ -541,7 +542,7 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	/* Format=6:8888_WZYX, EndianSwap=0:None, ReqSize=0:256bit, DimHi=0,
 	 * NearestClamp=1:OGL Mode
 	 */
-	parse_dword_addr(dwords[1], &gpuaddr, &flags);
+	parse_dword_addr(dwords[1], &gpuaddr, &flags, 0xfff);
 
 	/* Width, Height, EndianSwap=0:None */
 	w = (dwords[2] & 0x1fff) + 1;
@@ -560,7 +561,7 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	/* BorderColor=0:ABGRBlack, ForceBC=0:diable, TriJuice=0, Aniso=0,
 	 * Dim=1:2d, MipPacking=0
 	 */
-	parse_dword_addr(dwords[5], &mip_gpuaddr, &mip_flags);
+	parse_dword_addr(dwords[5], &mip_gpuaddr, &mip_flags, 0xfff);
 
 	printf("%sset texture const %04x\n", levels[level], val);
 	printf("%saddr=%08x (flags=%03x), size=%dx%d, pitch=%d, format=%s\n",
@@ -576,7 +577,7 @@ static void dump_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t va
 	printf("%sset shader const %04x\n", levels[level], val);
 	for (i = 0; i < sizedwords; ) {
 		uint32_t gpuaddr, flags;
-		parse_dword_addr(dwords[i++], &gpuaddr, &flags);
+		parse_dword_addr(dwords[i++], &gpuaddr, &flags, 0xf);
 		void *addr = hostptr(gpuaddr);
 		if (addr) {
 			uint32_t size = dwords[i++];
@@ -623,6 +624,38 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 }
 
+static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	/* traverse indirect buffers */
+	int i;
+	uint32_t ibaddr = dwords[0];
+	uint32_t ibsize = dwords[1];
+	uint32_t *ptr = NULL;
+
+	printf("%sibaddr:%08x\n", levels[level], ibaddr);
+	printf("%sibsize:%08x\n", levels[level], ibsize);
+
+	/* map gpuaddr back to hostptr: */
+	for (i = 0; i < nbuffers; i++) {
+		if (buffer_contains_gpuaddr(&buffers[i], ibaddr, ibsize)) {
+			ptr = buffers[i].hostptr + (ibaddr - buffers[i].gpuaddr);
+			break;
+		}
+	}
+
+	if (ptr) {
+		dump_commands(ptr, ibsize, level);
+	} else {
+		fprintf(stderr, "could not find: %08x (%d)\n", ibaddr, ibsize);
+	}
+}
+
+static void cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t gpuaddr = dwords[0];
+	printf("%sgpuaddr:%08x\n", levels[level], gpuaddr);
+	dump_float((float *)&dwords[1], sizedwords-1, level+1);
+}
 
 #define CP(x, fxn)   [CP_ ## x] = { #x, fxn }
 static const struct {
@@ -631,8 +664,8 @@ static const struct {
 } type3_op[0xff] = {
 		CP(ME_INIT, NULL),
 		CP(NOP, NULL),
-		CP(INDIRECT_BUFFER, NULL),
-		CP(INDIRECT_BUFFER_PFD, NULL),
+		CP(INDIRECT_BUFFER, cp_indirect),
+		CP(INDIRECT_BUFFER_PFD, cp_indirect),
 		CP(WAIT_FOR_IDLE, NULL),
 		CP(WAIT_REG_MEM, NULL),
 		CP(WAIT_REG_EQ, NULL),
@@ -641,7 +674,7 @@ static const struct {
 		CP(WAIT_IB_PFD_COMPLETE, NULL),
 		CP(REG_RMW, NULL),
 		CP(REG_TO_MEM, NULL),
-		CP(MEM_WRITE, NULL),
+		CP(MEM_WRITE, cp_mem_write),
 		CP(MEM_WRITE_CNTR, NULL),
 		CP(COND_EXEC, NULL),
 		CP(COND_WRITE, NULL),
@@ -680,43 +713,6 @@ static const struct {
 		 */
 };
 
-static void dump_type3(uint32_t *dwords, uint32_t sizedwords, int level)
-{
-	switch (GET_PM4_TYPE3_OPCODE(dwords)) {
-	case CP_INDIRECT_BUFFER_PFD:
-	case CP_INDIRECT_BUFFER: {
-		/* traverse indirect buffers */
-		int i;
-		uint32_t ibaddr = dwords[1];
-		uint32_t ibsize = dwords[2];
-		uint32_t *ptr = NULL;
-
-		printf("%sibaddr:%08x\n", levels[level], ibaddr);
-		printf("%sibsize:%08x\n", levels[level], ibsize);
-
-		// XXX stripped out checking for loops.. but maybe we need that..
-		// see kgsl_cffdump_handle_type3()
-
-		/* map gpuaddr back to hostptr: */
-		for (i = 0; i < nbuffers; i++) {
-			if (buffer_contains_gpuaddr(&buffers[i], ibaddr, ibsize)) {
-				ptr = buffers[i].hostptr + (ibaddr - buffers[i].gpuaddr);
-				break;
-			}
-		}
-
-		if (ptr) {
-			dump_commands(ptr, ibsize, level);
-		} else {
-			fprintf(stderr, "could not find: %08x (%d)\n", ibaddr, ibsize);
-		}
-
-		break;
-	}
-	}
-
-}
-
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	int dwords_left = sizedwords;
@@ -724,27 +720,36 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t val;
 
 	while (dwords_left > 0) {
-		switch (*dwords >> 30) {
+		int type = dwords[0] >> 30;
+		printf("t%d", type);
+		switch (type) {
 		case 0x0: /* type-0 */
-			count = (*dwords >> 16)+2;
+			count = (dwords[0] >> 16)+2;
 			val = GET_PM4_TYPE0_REGIDX(dwords);
-			printf("%swrite %s\n", levels[level+1], type0_reg[val].name);
+			printf("%swrite %s%s\n", levels[level+1], type0_reg[val].name,
+					(dwords[0] & 0x8000) ? " (same register)" : "");
 			dump_registers(val, dwords+1, count-1, level+2);
 			dump_hex(dwords, count, level+1);
 			break;
 		case 0x1: /* type-1 */
-			count = 2;
+			count = 3;
+			val = dwords[0] & 0xfff;
+			printf("%swrite %s\n", levels[level+1], type0_reg[val].name);
+			dump_registers(val, dwords+1, 1, level+2);
+			val = (dwords[0] >> 12) & 0xfff;
+			printf("%swrite %s\n", levels[level+1], type0_reg[val].name);
+			dump_registers(val, dwords+2, 1, level+2);
 			dump_hex(dwords, count, level+1);
 			break;
 		case 0x3: /* type-3 */
-			count = ((*dwords >> 16) & 0x3fff) + 2;
+			count = ((dwords[0] >> 16) & 0x3fff) + 2;
 			val = GET_PM4_TYPE3_OPCODE(dwords);
-			printf("\t%sopcode: %s (%02x) (%d dwords)\n", levels[level],
-					type3_op[val].name, val, count);
+			printf("\t%sopcode: %s (%02x) (%d dwords)%s\n", levels[level],
+					type3_op[val].name, val, count,
+					(dwords[0] & 0x1) ? " (predicated)" : "");
 			if (type3_op[val].fxn)
 				type3_op[val].fxn(dwords+1, count-1, level+1);
 			dump_hex(dwords, count, level+1);
-			dump_type3(dwords, count, level+1);
 			break;
 		default:
 			fprintf(stderr, "bad type!\n");
