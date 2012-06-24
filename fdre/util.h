@@ -1,5 +1,5 @@
 /*
- * Copyright © 2012 Rob Clark <robclark@freedesktop.org>
+ * Copyright (c) 2012 Rob Clark <robdclark@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -21,46 +21,24 @@
  * SOFTWARE.
  */
 
-#ifndef WRAP_H_
-#define WRAP_H_
+#ifndef UTIL_H_
+#define UTIL_H_
 
-#ifndef BIONIC
-#  include <dlfcn.h>
-#endif
+typedef enum {
+	true = 1, false = 0
+} bool;
 
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <dlfcn.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <pthread.h>
-#include <errno.h>
+#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-#include "kgsl_drm.h"
-#include "msm_kgsl.h"
-#include "android_pmem.h"
-#include "z180.h"
-#include "list.h"
-#include "redump.h"
+#define INFO_MSG(fmt, ...) \
+		do { printf("[I] "fmt " (%s:%d)\n", \
+				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
+#define DEBUG_MSG(fmt, ...) \
+		do { printf("[D] "fmt " (%s:%d)\n", \
+				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
+#define ERROR_MSG(fmt, ...) \
+		do { printf("[E] " fmt " (%s:%d)\n", \
+				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 
-// don't use <stdio.h> from glibc..
-struct _IO_FILE;
-typedef struct _IO_FILE FILE;
-FILE *fopen(const char *path, const char *mode);
-int fscanf(FILE *stream, const char *format, ...);
-int printf(const char *format, ...);
-int sprintf(char *str, const char *format, ...);
-
-void * _dlsym_helper(const char *name);
-
-#define PROLOG(func) 					\
-	static typeof(func) *orig_##func = NULL;	\
-	if (!orig_##func)				\
-		orig_##func = _dlsym_helper(#func);	\
-
-
-#endif /* WRAP_H_ */
+#endif /* UTIL_H_ */
