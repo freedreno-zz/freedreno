@@ -464,7 +464,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	emit_shader(state, &state->fragment_shader);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2181));
+	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
 	OUT_RING(ring, 0x00000004);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -550,7 +550,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	emit_shader(state, &state->fragment_shader);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2181));
+	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
 	OUT_RING(ring, 0x00000004);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -793,7 +793,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	emit_shader(state, &state->fragment_shader);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2181));
+	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
 	OUT_RING(ring, 0x00000004);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -967,7 +967,7 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x0000003b);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2181));
+	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
 	OUT_RING(ring, 0x00000004);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);

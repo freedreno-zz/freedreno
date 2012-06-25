@@ -125,9 +125,10 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 #define REG_RB_ALPHA_REF			0x210e
 #define REG_RB_BLEND_CONTROL		0x2201
 
+#define REG_SQ_CONTEXT_MISC		0x2181
+
 /* unnamed registers: */
 #define REG_2307		0x2307
-#define REG_2181		0x2181
 #define REG_2281		0x2281
 #define REG_0c02		0x0c02
 #define REG_0c04		0x0c04
