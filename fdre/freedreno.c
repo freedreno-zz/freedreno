@@ -98,8 +98,8 @@ struct fd_state {
 	/* shaders: */
 	struct fd_shader vertex_shader, fragment_shader;
 
-	/* vertex shader used internally for blits/fills */
-	struct fd_shader solid_vertex_shader;
+	/* shaders used internally for blits/fills */
+	struct fd_shader solid_vertex_shader, solid_fragment_shader;
 
 	struct fd_parameters attributes, uniforms;
 
@@ -244,6 +244,13 @@ static void emit_shader(struct fd_state *state, struct fd_shader *shader)
 	uint32_t type = (shader == &state->fragment_shader) ? 1 : 0;
 	uint32_t i;
 
+	if ((shader == &state->fragment_shader) ||
+			(shader == &state->solid_fragment_shader)) {
+		type = 1;
+	} else {
+		type = 0;
+	}
+
 	OUT_PKT3(ring, CP_IM_LOAD_IMMEDIATE, 2 + shader->sizedwords);
 	OUT_RING(ring, type);
 	OUT_RING(ring, shader->sizedwords);
@@ -259,11 +266,17 @@ static int attach_shader(struct fd_shader *shader,
 	shader->sizedwords = ALIGN(sz, 4) / 4;
 	return 0;
 }
+
 const uint32_t solid_vertex_shader_bin[] = {
 		0x00031003, 0x00001000, 0xc2000000, 0x00001004,
 		0x00001000, 0xc4000000, 0x00000005, 0x00002000,
 		0x00000000, 0x19a81000, 0x00390a88, 0x0000000c,
 		0x140f803e, 0x00000000, 0xe2010100,
+};
+
+const uint32_t solid_fragment_shader_bin[] = {
+		0x00000000, 0x1001c400, 0x20000000, 0x140f8000,
+		0x00000000, 0x22000000,
 };
 
 static float init_shader_const[] = {
@@ -386,6 +399,9 @@ struct fd_state * fd_init(void)
 	attach_shader(&state->solid_vertex_shader, solid_vertex_shader_bin,
 			sizeof(solid_vertex_shader_bin));
 
+	attach_shader(&state->solid_fragment_shader, solid_fragment_shader_bin,
+			sizeof(solid_fragment_shader_bin));
+
 	return state;
 }
 
@@ -461,7 +477,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
 	OUT_RING(ring, 0x10038001);
 
-	emit_shader(state, &state->fragment_shader);
+	emit_shader(state, &state->solid_fragment_shader);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
@@ -547,7 +563,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
 	OUT_RING(ring, 0x10038001);
 
-	emit_shader(state, &state->fragment_shader);
+	emit_shader(state, &state->solid_fragment_shader);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
