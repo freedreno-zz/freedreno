@@ -1,6 +1,8 @@
 #!/bin/sh
 
+dir=`dirname $0`
+
 for f in $*; do
-	./cffdump $f > ${f%%.rd}-cffdump.txt
+	$dir/cffdump $f > ${f%%.rd}-cffdump.txt
 done
 
