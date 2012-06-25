@@ -103,6 +103,34 @@ static const char *format_name[] = {
 		NAME(COLORX_8_8_8),
 };
 
+/* see VGT_PRIMITIVE_TYPE.PRIM_TYPE? */
+#define PC_DI_PT_POINTLIST 1
+#define PC_DI_PT_LINELIST  2
+#define PC_DI_PT_LINESTRIP 3
+#define PC_DI_PT_TRILIST   4
+#define PC_DI_PT_TRIFAN    5
+#define PC_DI_PT_TRISTRIP  6
+#define PC_DI_PT_RECTLIST  8
+
+static const char *vgt_prim_types[32] = {
+		NAME(PC_DI_PT_POINTLIST),
+		NAME(PC_DI_PT_LINELIST),
+		NAME(PC_DI_PT_LINESTRIP),
+		NAME(PC_DI_PT_TRILIST),
+		NAME(PC_DI_PT_TRIFAN),
+		NAME(PC_DI_PT_TRISTRIP),
+		NAME(PC_DI_PT_RECTLIST),
+};
+
+/* see VGT:VGT_DRAW_INITIATOR.SOURCE_SELECT? */
+#define PC_DI_SRC_SEL_IMMEDIATE 1
+#define PC_DI_SRC_SEL_AUTO_INDEX 2
+
+static const char *vgt_source_select[4] = {
+		NAME(PC_DI_SRC_SEL_IMMEDIATE),
+		NAME(PC_DI_SRC_SEL_AUTO_INDEX),
+};
+
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
 
 struct buffer {
@@ -622,6 +650,24 @@ static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 {
+	uint32_t prim_type     = dwords[1] & 0x1f;
+	uint32_t source_select = (dwords[1] >> 6) & 0x3;
+	uint32_t num_indices   = dwords[2];
+
+	printf("%sprim_type:     %s (%d)\n", levels[level],
+			vgt_prim_types[prim_type], prim_type);
+	printf("%ssource_select: %s (%d)\n", levels[level],
+			vgt_source_select[source_select], source_select);
+	printf("%snum_indices:   %d\n", levels[level], num_indices);
+
+	if (!(prim_type || source_select || num_indices)) {
+		void *ptr = hostptr(dwords[3]);
+		printf("%sgpuaddr:       %08x\n", levels[level], dwords[3]);
+		if (ptr) {
+			dump_hex(ptr, 8, level+1);
+			dump_float(ptr, 8, level+1);
+		}
+	}
 }
 
 static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
