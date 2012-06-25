@@ -243,6 +243,8 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 #define REG_RB_ALPHA_REF			0x210e
 #define REG_RB_BLEND_CONTROL		0x2201
 
+#define REG_SQ_CONTEXT_MISC		0x2181
+
 static void reg_hex(const char *name, uint32_t dword, int level)
 {
 	printf("%s%s: %08x (%d)\n", levels[level], name, dword, dword);
@@ -448,6 +450,7 @@ static const const struct {
 		REG(SQ_INT_CNTL, reg_hex),
 		REG(SQ_INT_STATUS, reg_hex),
 		REG(SQ_PROGRAM_CNTL, reg_hex),
+		REG(SQ_CONTEXT_MISC, reg_hex),
 		REG(SQ_PS_PROGRAM, reg_hex),
 		REG(SQ_VS_PROGRAM, reg_hex),
 		REG(SQ_WRAPPING_0, reg_hex),
