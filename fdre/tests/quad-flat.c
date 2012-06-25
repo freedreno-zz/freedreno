@@ -94,9 +94,9 @@ int main(int argc, char **argv)
 
 	fd_clear(state, 0xff505050);
 
-	fd_attribute_pointer(state, "aPosition", 4, 3, vertices);
+	fd_attribute_pointer(state, "aPosition", 3, 4, vertices);
 
-	fd_uniform_attach(state, "uColor", 1, 4, color);
+	fd_uniform_attach(state, "uColor", 4, 1, color);
 
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 

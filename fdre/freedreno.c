@@ -48,6 +48,31 @@ struct fd_shader {
 	uint32_t sizedwords;
 };
 
+struct fd_param {
+	/* user ptr and dimensions for passed in uniform/attribute:
+	 *   elem_size - size of individual element in bytes
+	 *   size      - number of elements per group
+	 *   count     - number of groups
+	 * so total size in bytes is elem_size * size * count
+	 */
+	const void *data;
+	uint32_t elem_size, size, count;
+};
+
+struct fd_parameters {
+
+	/* gpu buffer used for passing parameters by ptr to the gpu..
+	 * it is used in a circular buffer fashion, wrapping around,
+	 * so we don't immediately overwrite the parameters for the
+	 * last draw cmd which the gpu may still be using:
+	 */
+	struct kgsl_bo *bo;
+	uint32_t off;
+
+	struct fd_param params[4];
+	uint32_t nparams;
+};
+
 struct fd_state {
 
 	int fd;
@@ -76,15 +101,7 @@ struct fd_state {
 	/* vertex shader used internally for blits/fills */
 	struct fd_shader solid_vertex_shader;
 
-	struct {
-		struct kgsl_bo *bo;
-		uint32_t sz;
-	} attributes;
-
-	struct {
-		struct kgsl_bo *bo;
-		uint32_t sz;
-	} uniforms;
+	struct fd_parameters attributes, uniforms;
 
 	struct {
 		/* render target: */
@@ -401,43 +418,27 @@ int fd_link(struct fd_state *state)
 	return 0;
 }
 
+static void attach_parameter(struct fd_parameters *parameter,
+		uint32_t size, uint32_t count, const void *data)
+{
+	uint32_t n = parameter->nparams++;
+	parameter->params[n].elem_size = 4;  /* for now just 32bit types */
+	parameter->params[n].size  = size;
+	parameter->params[n].count = count;
+	parameter->params[n].data  = data;
+}
+
 int fd_attribute_pointer(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	// XXX this is a bit hard coded.. need some samples with multiple
-	// attribute pointers to figure out how to generalize this
-	// NOTE for some reason the data seems to get rounded up to a
-	// multiple of 8 32b words.
-	uint32_t i;
-	const uint32_t *d = data;
-	uint32_t *a = state->attributes.bo->hostptr;
-
-	state->attributes.sz = ALIGN(size * count, 8);
-
-	for (i = 0; i < (size * count); i++)
-		*(a++) = *(d++);
-
-	/* zero pad up to multiple of 8 */
-	for (; i < state->attributes.sz; i++)
-		*(a++) = 0;
-
+	attach_parameter(&state->attributes, size, count, data);
 	return 0;
 }
 
 int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	// XXX this is a bit hard coded.. need some samples with multiple
-	// uniforms to figure out how to generalize this
-	uint32_t i;
-	const uint32_t *d = data;
-	uint32_t *a = state->uniforms.bo->hostptr;
-
-	state->uniforms.sz = size * count;
-
-	for (i = 0; i < (size * count); i++)
-		*(a++) = *(d++);
-
+	attach_parameter(&state->uniforms, size, count, data);
 	return 0;
 }
 
@@ -679,12 +680,70 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	return kgsl_ringbuffer_flush(ring);
 }
 
+static void emit_attributes(struct fd_state *state,
+		uint32_t start, uint32_t count)
+{
+	struct kgsl_bo *bo = state->attributes.bo;
+	struct fd_shader_const shader_const[ARRAY_SIZE(state->attributes.params)];
+	uint32_t n;
+
+	for (n = 0; n < state->attributes.nparams; n++) {
+		struct fd_param *p = &state->attributes.params[n];
+		uint32_t group_size = p->elem_size * p->size;
+		uint32_t total_size = group_size * count;
+		uint32_t align_size = ALIGN(total_size, 32);
+		uint32_t bo_off     = state->attributes.off;
+		uint32_t data_off   = group_size * start;
+
+		memcpy(bo->hostptr + bo_off, p->data + data_off, total_size);
+
+		/* zero pad up to multiple of 32 */
+		memset(bo->hostptr + bo_off + total_size, 0, align_size - total_size);
+
+		state->attributes.off += align_size;
+
+		shader_const[n].format  = COLORX_8;
+		shader_const[n].gpuaddr = bo->gpuaddr + bo_off;
+		shader_const[n].sz      = align_size;
+	}
+
+	if (n > 0) {
+		emit_shader_const(state, 0x78, shader_const, n);
+	}
+}
+
+static void emit_uniforms(struct fd_state *state)
+{
+	struct kgsl_ringbuffer *ring = state->ring;
+	uint32_t n, i;
+
+	/* emit uniforms: */
+	for (n = 0; n < state->uniforms.nparams; n++) {
+		struct fd_param *p = &state->uniforms.params[n];
+		OUT_PKT3(ring, CP_SET_CONSTANT, 1 + p->size);
+		OUT_RING(ring, 0x00000480);		// XXX
+		for (i = 0; i < p->size; i++) {
+			OUT_RING(ring, ((uint32_t *)(p->data))[i]);
+		}
+	}
+}
+
+static void emit_cacheflush(struct fd_state *state)
+{
+	struct kgsl_ringbuffer *ring = state->ring;
+	uint32_t i;
+
+	for (i = 0; i < 12; i++) {
+		OUT_PKT3(ring, CP_EVENT_WRITE, 1);
+		OUT_RING(ring, CACHE_FLUSH);
+	}
+}
+
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		uint32_t start, uint32_t count)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
-	uint32_t i;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
@@ -719,10 +778,8 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
-	emit_shader_const(state, 0x78, (struct fd_shader_const[]) {
-			{ .format = COLORX_8, .gpuaddr = state->attributes.bo->gpuaddr,
-				.sz = state->attributes.sz * 4 },
-		}, 1 );
+	emit_attributes(state, start, count);
+
 	emit_shader(state, &state->vertex_shader);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -743,10 +800,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
 	OUT_RING(ring, 0x00001c27);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + state->uniforms.sz);
-	OUT_RING(ring, 0x00000480);		// XXX
-	for (i = 0; i < state->uniforms.sz; i++)
-		OUT_RING(ring, ((uint32_t *)(state->uniforms.bo->hostptr))[i]);
+	emit_uniforms(state);
 
 	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
 	OUT_RING(ring, 0x00000001);
@@ -763,10 +817,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, CP_REG(REG_2010));
 	OUT_RING(ring, 0x00000000);
 
-	for (i = 0; i < 12; i++) {
-		OUT_PKT3(ring, CP_EVENT_WRITE, 1);
-		OUT_RING(ring, CACHE_FLUSH);
-	}
+	emit_cacheflush(state);
 
 	emit_gmem2mem(state, surface);
 
