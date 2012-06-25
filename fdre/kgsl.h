@@ -135,4 +135,36 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 #define REG_210d		0x210d
 #define REG_2010		0x2010
 
+/*
+ * Format for 2nd dword in CP_DRAW_INDX and friends:
+ */
+
+/* see VGT_PRIMITIVE_TYPE.PRIM_TYPE? */
+#define PC_DI_PT_POINTLIST 1
+#define PC_DI_PT_LINELIST  2
+#define PC_DI_PT_LINESTRIP 3
+#define PC_DI_PT_TRILIST   4
+#define PC_DI_PT_TRIFAN    5
+#define PC_DI_PT_TRISTRIP  6
+#define PC_DI_PT_RECTLIST  8
+
+/* see VGT:VGT_DRAW_INITIATOR.SOURCE_SELECT? */
+#define PC_DI_SRC_SEL_IMMEDIATE 1
+#define PC_DI_SRC_SEL_AUTO_INDEX 2
+
+/* see VGT_DMA_INDEX_TYPE.INDEX_TYPE? */
+#define PC_DI_INDEX_SIZE_IGN    0
+#define PC_DI_INDEX_SIZE_16_BIT 0
+#define PC_DI_INDEX_SIZE_32_BIT 1
+
+#define PC_DI_IGNORE_VISIBILITY 0
+
+#define DRAW(prim_type, source_select, index_size, vis_cull_mode) \
+	(((PC_DI_PT_         ## prim_type)       <<  0) | \
+	 ((PC_DI_SRC_SEL_    ## source_select)   <<  6) | \
+	 ((PC_DI_INDEX_SIZE_ ## index_size & 1)  << 11) | \
+	 ((PC_DI_INDEX_SIZE_ ## index_size >> 1) << 13) | \
+	 ((PC_DI_            ## vis_cull_mode)   <<  9) | \
+	 (1                                      << 14))
+
 #endif /* KGSL_H_ */

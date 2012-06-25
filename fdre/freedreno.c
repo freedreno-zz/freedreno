@@ -808,10 +808,23 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);		// XXX
-	OUT_RING(ring, 0x00004086);		// XXX
-	OUT_RING(ring, 0x00000004);		// XXX
+	switch (mode) {
+	case GL_TRIANGLE_STRIP:
+		OUT_PKT3(ring, CP_DRAW_INDX, 3);
+		OUT_RING(ring, 0x00000000);		/* viz query info. */
+		OUT_RING(ring, DRAW(TRISTRIP, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, 0x00000004);		/* NumIndices=4 */
+		break;
+	case GL_TRIANGLES:
+		OUT_PKT3(ring, CP_DRAW_INDX, 3);
+		OUT_RING(ring, 0x00000000);		/* viz query info. */
+		OUT_RING(ring, DRAW(TRILIST, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, 0x00000003);		/* NumIndices=3 */
+		break;
+	default:
+		ERROR_MSG("unsupported mode: %d", mode);
+		break;
+	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_2010));
