@@ -34,8 +34,10 @@ LDADD = \
 	$(top_builddir)/libfreedreno.la
 
 TESTS = \
+	triangle-quad \
 	quad-flat
 
 noinst_PROGRAMS = $(TESTS)
 
 quad_flat_SOURCES = quad-flat.c
+triangle_quad_SOURCES = triangle-quad.c
