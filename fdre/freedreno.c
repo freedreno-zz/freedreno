@@ -804,7 +804,13 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	OUT_RING(ring, 0x10038001);
+	// this is a bit of a hack..  triangle-smoothed uses different values
+	// here..  need to try more combinations of shaders w/ different number
+	// of attributes/uniforms/etc to establish the pattern..  I suppose the
+	// low part is # of attributes?  This hack gets it working w/
+	// triangle-smoothed (2 attributes, 0 uniforms) as well as the other
+	// simple tests (1 attribute, 1 uniform)
+	OUT_RING(ring, (state->attributes.nparams == 1) ? 0x10038001 : 0x10030002);
 
 	emit_shader(state, &state->fragment_shader);
 
