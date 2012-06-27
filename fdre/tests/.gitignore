@@ -1,3 +1,5 @@
 quad-flat
 triangle-quad
 triangle-smoothed
+strip-smoothed
+fan-smoothed
