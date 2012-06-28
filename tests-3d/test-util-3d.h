@@ -84,6 +84,8 @@ glStrError(GLenum error)
 {
 	switch (error) {
 	// TODO
+	case GL_INVALID_ENUM:
+		return "GL_INVALID_ENUM";
 	case GL_INVALID_OPERATION:
 		return "GL_INVALID_OPERATION";
 	default:
