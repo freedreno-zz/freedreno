@@ -36,7 +36,6 @@
 #include <string.h>
 
 #include "msm_kgsl.h"
-#include "a2xx_reg.h"
 #include "freedreno.h"
 #include "kgsl.h"
 #include "bmp.h"
