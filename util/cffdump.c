@@ -625,6 +625,9 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t val = dwords[0] & 0xffff;
 	switch(dwords[0] >> 16) {
+	case 0x0:
+		dump_float((float *)(dwords+1), sizedwords-1, level+1);
+		break;
 	case 0x1:
 		if (val == 0x000) {
 			dump_tex_const(dwords+1, sizedwords-1, val, level);
