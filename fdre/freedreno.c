@@ -49,6 +49,7 @@ struct fd_shader {
 };
 
 struct fd_param {
+	const char *name;
 	/* user ptr and dimensions for passed in uniform/attribute:
 	 *   elem_size - size of individual element in bytes
 	 *   size      - number of elements per group
@@ -487,28 +488,47 @@ int fd_link(struct fd_state *state)
 	return 0;
 }
 
-static void attach_parameter(struct fd_parameters *parameter,
-		uint32_t size, uint32_t count, const void *data)
+static int attach_parameter(struct fd_parameters *parameter,
+		const char *name, uint32_t size, uint32_t count, const void *data)
 {
-	uint32_t n = parameter->nparams++;
-	parameter->params[n].elem_size = 4;  /* for now just 32bit types */
-	parameter->params[n].size  = size;
-	parameter->params[n].count = count;
-	parameter->params[n].data  = data;
+	struct fd_param *p = NULL;
+	uint32_t i;
+
+	/* if this param is already bound, just update it: */
+	for (i = 0; i < parameter->nparams; i++) {
+		p = &parameter->params[i];
+		if (!strcmp(name, p->name)) {
+			break;
+		}
+	}
+
+	if (i == parameter->nparams) {
+		if (parameter->nparams >= ARRAY_SIZE(parameter->params)) {
+			ERROR_MSG("do many params, cannot bind %s", name);
+			return -1;
+		}
+		p = &parameter->params[parameter->nparams++];
+	}
+
+	p->name  = name;
+	p->elem_size = 4;  /* for now just 32bit types */
+	p->size  = size;
+	p->count = count;
+	p->data  = data;
+
+	return 0;
 }
 
 int fd_attribute_pointer(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	attach_parameter(&state->attributes, size, count, data);
-	return 0;
+	return attach_parameter(&state->attributes, name, size, count, data);
 }
 
 int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	attach_parameter(&state->uniforms, size, count, data);
-	return 0;
+	return attach_parameter(&state->uniforms, name, size, count, data);
 }
 
 /* emit cmdstream to blit from GMEM back to the surface */
@@ -869,15 +889,38 @@ static void emit_attributes(struct fd_state *state,
 static void emit_uniforms(struct fd_state *state)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
-	uint32_t n, i;
+	uint32_t n, size = 0;
 
-	/* emit uniforms: */
 	for (n = 0; n < state->uniforms.nparams; n++) {
 		struct fd_param *p = &state->uniforms.params[n];
-		OUT_PKT3(ring, CP_SET_CONSTANT, 1 + p->size);
-		OUT_RING(ring, 0x00000480);		// XXX
-		for (i = 0; i < p->size; i++) {
-			OUT_RING(ring, ((uint32_t *)(p->data))[i]);
+		// NOTE: a 3x3 matrix seems to get rounded up to four
+		// entries per row.. probably to meet some alignment
+		// constraint:
+		size += ALIGN(p->size, 4) * p->count;
+	}
+
+	if (size == 0)
+		return;
+
+	/* emit uniforms: */
+	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + size);
+
+	// XXX hack, I guess I'll understand this value better once
+	// I start working on the shaders:
+	OUT_RING(ring, (state->uniforms.nparams == 1) ? 0x00000480 : 0x00000080);
+
+	for (n = 0; n < state->uniforms.nparams; n++) {
+		struct fd_param *p = &state->uniforms.params[n];
+		uint32_t *data = p->data;
+		uint32_t i, j;
+		for (i = 0; i < p->count; i++) {
+			for (j = 0; j < p->size; j++) {
+				OUT_RING(ring, *(data++));
+			}
+			/* zero pad, if needed: */
+			for (; j < ALIGN(p->size, 4); j++) {
+				OUT_RING(ring, 0);
+			}
 		}
 	}
 }
@@ -944,11 +987,22 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
 	// this is a bit of a hack..  triangle-smoothed uses different values
 	// here..  need to try more combinations of shaders w/ different number
-	// of attributes/uniforms/etc to establish the pattern..  I suppose the
-	// low part is # of attributes?  This hack gets it working w/
-	// triangle-smoothed (2 attributes, 0 uniforms) as well as the other
-	// simple tests (1 attribute, 1 uniform)
-	OUT_RING(ring, (state->attributes.nparams == 1) ? 0x10038001 : 0x10030002);
+	// of attributes/uniforms/etc to establish the pattern..
+	// XXX this would probably be configuring shader # of GPR, and stack
+	// size.. possibly for both vertex shader and pixel shader?  r600 has
+	// different registers for each, ie. SQ_PGM_RESOURCES_{VS,PS,etc}.  So
+	// my guess is this makes more sense once we disassemble the shader..
+	switch (state->attributes.nparams) {
+	case 1:
+		OUT_RING(ring, 0x10038001);
+		break;
+	case 3:
+		OUT_RING(ring, 0x10030004);
+		break;
+	default:
+		OUT_RING(ring, 0x10030002);
+		break;
+	}
 
 	emit_shader(state, &state->fragment_shader);
 
