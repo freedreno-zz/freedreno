@@ -91,4 +91,39 @@
 	 ((PC_DI_            ## vis_cull_mode)   <<  9) | \
 	 (1                                      << 14))
 
+/*
+ * Bits for PA_SU_SC_MODE_CNTL:
+ * (seems to be same as r600)
+ */
+
+#define PA_SU_SC_CULL_FRONT            0x00000001
+#define PA_SU_SC_CULL_BACK             0x00000002
+#define PA_SU_SC_POLY_OFFSET_FRONT     0x00000800
+#define PA_SU_SC_POLY_OFFSET_BACK      0x00001000
+#define PA_SU_SC_PROVOKING_VTX_LAST    0x00080000
+
+#define PA_SU_SC_DRAW_POINTS       0
+#define PA_SU_SC_DRAW_LINES        1
+#define PA_SU_SC_DRAW_TRIANGLES    2
+#define PA_SU_SC_POLYMODE_FRONT_PTYPE(x) \
+	((PA_SU_SC_DRAW_##x << 5))
+#define PA_SU_SC_POLYMODE_BACK_PTYPE(x) \
+	((PA_SU_SC_DRAW_##x << 8))
+
+/*
+ * Bits for RB_COLORCONTROL:
+ */
+
+#define RB_COLORCONTROL_BLEND_DISABLE  0x00000020
+#define RB_COLORCONTROL_DITHER_ENABLE  0x00001000
+
+/*
+ * Bits for RB_DEPTHCONTROL:
+ */
+
+#define RB_DEPTHCONTROL_ENABLE         0x00000002
+#define RB_DEPTHCONTROL_FUNC_MASK      0x00000070
+#define RB_DEPTH_CONTROL_FUNC(depth_func) \
+	((((depth_func) - GL_NEVER) << 4) & RB_DEPTHCONTROL_FUNC_MASK)
+
 #endif /* FREEDRENO_A2XX_REG_H_ */

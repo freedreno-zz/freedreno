@@ -114,6 +114,12 @@ struct fd_state {
 			float x, y, z;
 		} scale, offset;
 	} viewport;
+
+	GLenum cull_mode;
+
+	uint32_t pa_su_sc_mode_cntl;
+	uint32_t rb_colorcontrol;
+	uint32_t rb_depthcontrol;
 };
 
 struct fd_surface {
@@ -401,6 +407,14 @@ struct fd_state * fd_init(void)
 	attach_shader(&state->solid_fragment_shader, solid_fragment_shader_bin,
 			sizeof(solid_fragment_shader_bin));
 
+	/* setup initial GL state: */
+	state->cull_mode = GL_BACK;
+
+	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST;
+	state->rb_colorcontrol = 0x00000c07 |
+			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
+	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
+
 	return state;
 }
 
@@ -484,7 +498,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00001c27);
+	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
@@ -496,7 +510,9 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, 0x00080240);
+	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
+			PA_SU_SC_POLYMODE_FRONT_PTYPE(LINES) |
+			PA_SU_SC_POLYMODE_BACK_PTYPE(LINES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
@@ -570,7 +586,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00001c27);
+	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
 	OUT_RING(ring, 0x00000001);
@@ -601,11 +617,13 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, 0x00080240);
+	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
+			PA_SU_SC_POLYMODE_FRONT_PTYPE(LINES) |
+			PA_SU_SC_POLYMODE_BACK_PTYPE(LINES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00001c27);
+	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
@@ -651,7 +669,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	OUT_RING(ring, 0x0070079c);
+	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
@@ -659,11 +677,11 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, 0x00080000);
+	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00001c27);
+	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
@@ -693,6 +711,87 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	emit_gmem2mem(state, surface);
 
 	return kgsl_ringbuffer_flush(ring);
+}
+
+int fd_cull(struct fd_state *state, GLenum mode)
+{
+	state->cull_mode = mode;
+	return 0;
+}
+
+int fd_depth_func(struct fd_state *state, GLenum depth_func)
+{
+	state->rb_depthcontrol &= ~RB_DEPTHCONTROL_FUNC_MASK;
+	state->rb_depthcontrol |= RB_DEPTH_CONTROL_FUNC(depth_func);
+	return 0;
+}
+
+int fd_enable(struct fd_state *state, GLenum cap)
+{
+	struct kgsl_ringbuffer *ring = state->ring;
+
+	/* note: some of this code makes assumptions that mode/func/etc is
+	 * set before enabling, and that the previous state was disabled.
+	 * But this isn't really intended to be a robust GL implementation,
+	 * just a tool for figuring out the cmdstream..
+	 */
+
+	switch (cap) {
+	case GL_CULL_FACE:
+		if ((state->cull_mode == GL_FRONT) ||
+				(state->cull_mode == GL_FRONT_AND_BACK)) {
+			state->pa_su_sc_mode_cntl |= PA_SU_SC_CULL_FRONT;
+		}
+		if ((state->cull_mode == GL_BACK) ||
+				(state->cull_mode == GL_FRONT_AND_BACK)) {
+			state->pa_su_sc_mode_cntl |= PA_SU_SC_CULL_BACK;
+		}
+		return 0;
+	case GL_POLYGON_OFFSET_FILL:
+		state->pa_su_sc_mode_cntl |=
+				(PA_SU_SC_POLY_OFFSET_FRONT | PA_SU_SC_POLY_OFFSET_BACK);
+		return 0;
+	case GL_BLEND:
+		state->rb_colorcontrol &= ~RB_COLORCONTROL_BLEND_DISABLE;
+		return 0;
+	case GL_DEPTH_TEST:
+		state->rb_depthcontrol |= RB_DEPTHCONTROL_ENABLE;
+		return 0;
+	case GL_DITHER:
+		state->rb_colorcontrol |= RB_COLORCONTROL_DITHER_ENABLE;
+		return 0;
+	default:
+		ERROR_MSG("unsupported cap: 0x%04x", cap);
+		return -1;
+	}
+}
+
+int fd_disable(struct fd_state *state, GLenum cap)
+{
+	struct kgsl_ringbuffer *ring = state->ring;
+
+	switch (cap) {
+	case GL_CULL_FACE:
+		state->pa_su_sc_mode_cntl &=
+				~(PA_SU_SC_CULL_FRONT | PA_SU_SC_CULL_BACK);
+		return 0;
+	case GL_POLYGON_OFFSET_FILL:
+		state->pa_su_sc_mode_cntl &=
+				~(PA_SU_SC_POLY_OFFSET_FRONT | PA_SU_SC_POLY_OFFSET_BACK);
+		return 0;
+	case GL_BLEND:
+		state->rb_colorcontrol |= RB_COLORCONTROL_BLEND_DISABLE;
+		return 0;
+	case GL_DEPTH_TEST:
+		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_ENABLE;
+		return 0;
+	case GL_DITHER:
+		state->rb_colorcontrol &= ~RB_COLORCONTROL_DITHER_ENABLE;
+		return 0;
+	default:
+		ERROR_MSG("unsupported cap: 0x%04x", cap);
+		return -1;
+	}
 }
 
 static void emit_attributes(struct fd_state *state,
@@ -766,11 +865,11 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	OUT_RING(ring, 0x0070079c);
+	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, 0x00080000);
+	OUT_RING(ring, state->pa_su_sc_mode_cntl);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
@@ -819,7 +918,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00001c27);
+	OUT_RING(ring, state->rb_colorcontrol);
 
 	emit_uniforms(state);
 
@@ -1118,7 +1217,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	OUT_RING(ring, 0x0070079c);
+	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_RB_STENCILREFMASK_BF));
@@ -1127,7 +1226,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00001c27);
+	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_RB_BLEND_COLOR));

@@ -46,6 +46,10 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data);
 
 int fd_clear(struct fd_state *state, uint32_t color);
+int fd_cull(struct fd_state *state, GLenum mode);
+int fd_depth_func(struct fd_state *state, GLenum depth_func);
+int fd_enable(struct fd_state *state, GLenum cap);
+int fd_disable(struct fd_state *state, GLenum cap);
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		uint32_t start, uint32_t count);
 int fd_flush(struct fd_state *state);
