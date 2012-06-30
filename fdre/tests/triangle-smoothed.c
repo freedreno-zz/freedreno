@@ -107,6 +107,8 @@ int main(int argc, char **argv)
 
 	fd_draw_arrays(state, GL_TRIANGLES, 0, 3);
 
+	fd_swap_buffers(state);
+
 	fd_flush(state);
 
 	fd_dump_bmp(surface, "triangle-smoothed.bmp");

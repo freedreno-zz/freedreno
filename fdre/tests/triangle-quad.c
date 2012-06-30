@@ -113,6 +113,8 @@ int main(int argc, char **argv)
 	fd_uniform_attach(state, "uColor", 4, 1, quad_color);
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 3, 4);
 
+	fd_swap_buffers(state);
+
 	fd_flush(state);
 
 	fd_dump_bmp(surface, "triangle-quad.bmp");

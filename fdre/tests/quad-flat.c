@@ -100,6 +100,8 @@ int main(int argc, char **argv)
 
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
+	fd_swap_buffers(state);
+
 	fd_flush(state);
 
 	fd_dump_bmp(surface, "quad-flat.bmp");

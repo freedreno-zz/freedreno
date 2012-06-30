@@ -113,6 +113,8 @@ int main(int argc, char **argv)
 
 	fd_draw_arrays(state, GL_TRIANGLE_FAN, 0, 6);
 
+	fd_swap_buffers(state);
+
 	fd_flush(state);
 
 	fd_dump_bmp(surface, "fan-smoothed.bmp");

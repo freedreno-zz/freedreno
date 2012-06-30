@@ -113,6 +113,8 @@ int main(int argc, char **argv)
 
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 6);
 
+	fd_swap_buffers(state);
+
 	fd_flush(state);
 
 	fd_dump_bmp(surface, "strip-smoothed.bmp");

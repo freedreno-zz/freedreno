@@ -52,6 +52,7 @@ int fd_enable(struct fd_state *state, GLenum cap);
 int fd_disable(struct fd_state *state, GLenum cap);
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		uint32_t start, uint32_t count);
+int fd_swap_buffers(struct fd_state *state);
 int fd_flush(struct fd_state *state);
 
 struct fd_surface * fd_surface_new(struct fd_state *state,

@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <linux/fb.h>
 
 #include "msm_kgsl.h"
 #include "freedreno.h"
@@ -120,6 +121,13 @@ struct fd_state {
 	uint32_t pa_su_sc_mode_cntl;
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
+
+	/* framebuffer info, for presentation blit: */
+	struct {
+		struct fb_var_screeninfo var;
+		struct fb_fix_screeninfo fix;
+		void *ptr;
+	} fb;
 };
 
 struct fd_surface {
@@ -369,8 +377,7 @@ struct fd_state * fd_init(void)
 	if (ret) {
 		ERROR_MSG("failed to allocate context: %d (%s)",
 				ret, strerror(errno));
-		fd_fini(state);
-		return NULL;
+		goto fail;
 	}
 
 	state->drawctxt_id = req.drawctxt_id;
@@ -415,7 +422,40 @@ struct fd_state * fd_init(void)
 			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
 
+	/* open framebuffer for displaying results: */
+	fd = open("/dev/fb0", O_RDWR);
+	ret = ioctl(fd, FBIOGET_VSCREENINFO, &state->fb.var);
+	if (ret) {
+		ERROR_MSG("failed to get var: %d (%s)",
+				ret, strerror(errno));
+		goto fail;
+	}
+	ret = ioctl(fd, FBIOGET_FSCREENINFO, &state->fb.fix);
+	if (ret) {
+		ERROR_MSG("failed to get fix: %d (%s)",
+				ret, strerror(errno));
+		goto fail;
+	}
+
+	INFO_MSG("res %dx%d virtual %dx%d, line_len %d",
+			state->fb.var.xres, state->fb.var.yres,
+			state->fb.var.xres_virtual, state->fb.var.yres_virtual,
+			state->fb.fix.line_length);
+
+	state->fb.ptr = mmap(0,
+			state->fb.var.yres_virtual * state->fb.fix.line_length,
+			PROT_WRITE | PROT_READ,
+			MAP_SHARED, fd, 0);
+	if(state->fb.ptr == MAP_FAILED) {
+		ERROR_MSG("mmap failed");
+		goto fail;
+	}
+
 	return state;
+
+fail:
+	fd_fini(state);
+	return NULL;
 }
 
 void fd_fini(struct fd_state *state)
@@ -955,6 +995,26 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	emit_gmem2mem(state, surface);
 
 	return kgsl_ringbuffer_flush(ring);
+}
+
+int fd_swap_buffers(struct fd_state *state)
+{
+	struct fd_surface *surface = state->render_target.surface;
+	char *dstptr = state->fb.ptr;
+	char *srcptr = surface->bo->hostptr;
+	int len = surface->pitch * surface->cpp;
+	int i;
+
+	if (len > state->fb.fix.line_length)
+		len = state->fb.fix.line_length;
+
+	for (i = 0; i < surface->height; i++) {
+		memcpy(dstptr, srcptr, len);
+		dstptr += state->fb.fix.line_length;
+		srcptr += len;
+	}
+
+	return 0;
 }
 
 int fd_flush(struct fd_state *state)
