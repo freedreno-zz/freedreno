@@ -243,6 +243,40 @@ static void reg_rb_copy_dest_pitch(const char *name, uint32_t dword, int level)
 	printf("%s%s: %d (%08x)\n", levels[level], name, p, dword);
 }
 
+
+static void reg_pa_su_sc_mode_cntl(const char *name, uint32_t dword, int level)
+{
+	static const char *ptype[] = {
+			"points", "lines", "triangles", "???",
+	};
+	printf("%s%s: %08x (front-ptype=%s, back-ptype=%s, provoking-vtx=%s%s%s%s%s)\n",
+			levels[level], name, dword,
+			ptype[(dword >> 5) & 0x3], ptype[(dword >> 8) & 0x3],
+			(dword & PA_SU_SC_PROVOKING_VTX_LAST) ? "last" : "first",
+			(dword & PA_SU_SC_CULL_FRONT) ? ", cull-front" : "",
+			(dword & PA_SU_SC_CULL_BACK) ? ", cull-back" : "",
+			(dword & PA_SU_SC_POLY_OFFSET_FRONT) ? ", poly-offset-front" : "",
+			(dword & PA_SU_SC_POLY_OFFSET_BACK) ? ", poly-offset-back" : "");
+}
+
+static void reg_rb_colorcontrol(const char *name, uint32_t dword, int level)
+{
+	printf("%s%s: %08x (blend=%s, dither=%s)\n", levels[level], name, dword,
+			(dword & RB_COLORCONTROL_BLEND_DISABLE) ? "disabled" : "enabled",
+			(dword & RB_COLORCONTROL_DITHER_ENABLE) ? "enabled" : "disabled");
+}
+
+static void reg_rb_depthcontrol(const char *name, uint32_t dword, int level)
+{
+	static const char *func[] = {
+			"GL_NEVER", "GL_LESS", "GL_EQUAL", "GL_LEQUAL",
+			"GL_GREATER", "GL_NOTEQUAL", "GL_GEQUAL", "GL_ALWAYS",
+	};
+	printf("%s%s: %08x (%s, func=%s)\n", levels[level], name, dword,
+			(dword & RB_DEPTHCONTROL_ENABLE) ? "enabled" : "disabled",
+			func[(dword >> 4) & 0x7]);
+}
+
 static void reg_clear_color(const char *name, uint32_t dword, int level)
 {
 	uint32_t a, b, g, r;
@@ -360,7 +394,7 @@ static const const struct {
 		REG(PA_SU_LINE_CNTL, reg_hex),
 		REG(PA_SU_POLY_OFFSET_BACK_OFFSET, reg_hex),
 		REG(PA_SU_POLY_OFFSET_FRONT_SCALE, reg_hex),
-		REG(PA_SU_SC_MODE_CNTL, reg_hex),
+		REG(PA_SU_SC_MODE_CNTL, reg_pa_su_sc_mode_cntl),
 		REG(PA_SU_VTX_CNTL, reg_hex),
 
 		REG(PC_INDEX_OFFSET, reg_hex),
@@ -381,7 +415,7 @@ static const const struct {
 		REG(RBBM_SOFT_RESET, reg_hex),
 		REG(RBBM_STATUS, reg_hex),
 
-		REG(RB_COLORCONTROL, reg_hex),
+		REG(RB_COLORCONTROL, reg_rb_colorcontrol),
 		REG(RB_COLOR_DEST_MASK, reg_hex),
 		REG(RB_COLOR_MASK, reg_hex),
 
@@ -390,7 +424,7 @@ static const const struct {
 		REG(RB_COPY_DEST_PITCH, reg_rb_copy_dest_pitch),
 		REG(RB_COPY_DEST_FORMAT, reg_rb_copy_dest_format),
 		REG(RB_COPY_DEST_OFFSET, reg_hex),
-		REG(RB_DEPTHCONTROL, reg_hex),
+		REG(RB_DEPTHCONTROL, reg_rb_depthcontrol),
 		REG(RB_EDRAM_INFO, reg_hex),
 		REG(RB_MODECONTROL, reg_hex),
 		REG(RB_SURFACE_INFO, reg_hex),	/* surface pitch */
