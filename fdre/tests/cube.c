@@ -191,8 +191,11 @@ int main(int argc, char **argv)
 			0x00000000, 0xe2000000,
 	};
 #endif
-	int width = 256, height = 256;
+	int width = 352, height = 352;
 	int i, n = 1;
+
+	if (argc == 2)
+		n = atoi(argv[1]);
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("fd-cube", "");
@@ -214,8 +217,6 @@ int main(int argc, char **argv)
 
 	fd_link(state);
 
-	fd_clear(state, 0xff808080);
-
 	fd_enable(state, GL_CULL_FACE);
 
 	for (i = 0; i < n; i++) {
@@ -224,15 +225,19 @@ int main(int argc, char **argv)
 		ESMatrix projection;
 		ESMatrix modelviewprojection;
 		float normal[9];
+		float scale = 1.8;
 
 		esMatrixLoadIdentity(&modelview);
 		esTranslate(&modelview, 0.0f, 0.0f, -8.0f);
-		esRotate(&modelview, 45.0f, 1.0f, 0.0f, 0.0f);
-		esRotate(&modelview, 45.0f, 0.0f, 1.0f, 0.0f);
-		esRotate(&modelview, 10.0f, 0.0f, 0.0f, 1.0f);
+		esRotate(&modelview, 45.0f + (0.5f * i), 1.0f, 0.0f, 0.0f);
+		esRotate(&modelview, 45.0f - (0.5f * i), 0.0f, 1.0f, 0.0f);
+		esRotate(&modelview, 10.0f + (0.5f * i), 0.0f, 0.0f, 1.0f);
 
 		esMatrixLoadIdentity(&projection);
-		esFrustum(&projection, -2.8f, +2.8f, -2.8f * aspect, +2.8f * aspect, 6.0f, 10.0f);
+		esFrustum(&projection,
+				-scale, +scale,
+				-scale * aspect, +scale * aspect,
+				6.0f, 10.0f);
 
 		esMatrixLoadIdentity(&modelviewprojection);
 		esMatrixMultiply(&modelviewprojection, &modelview, &projection);
@@ -247,6 +252,8 @@ int main(int argc, char **argv)
 		normal[7] = modelview.m[2][1];
 		normal[8] = modelview.m[2][2];
 
+		fd_clear(state, 0xff404040);
+
 		fd_attribute_pointer(state, "in_position", 3, 24, vVertices);
 		fd_attribute_pointer(state, "in_normal", 3, 24, vNormals);
 		fd_attribute_pointer(state, "in_color", 3, 24, vColors);
@@ -257,6 +264,15 @@ int main(int argc, char **argv)
 				4, 4,  &modelviewprojection.m[0][0]);
 		fd_uniform_attach(state, "normalMatrix",
 				3, 3, normal);
+
+		/* since we aren't hooked up to the compiler yet, manually
+		 * emit the consts needed by the compiled vertex shader as
+		 * uniforms:
+		 */
+		fd_uniform_attach(state, "constants", 1, 8, (float[]){
+			2.0f,  2.0f, 20.0f,  0.0f,
+			1.0f,  0.0f,  0.0f,  0.0f,
+		});
 
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 4, 4);

@@ -611,13 +611,16 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, 0x0000000);
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);		// XXX
-	OUT_RING(ring, 0x00004088);		// XXX
-	OUT_RING(ring, 0x00000003);		// XXX
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
 	OUT_RING(ring, 0x0000004);
+
+	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
+	OUT_RING(ring, 0x0000000);
 }
 
 int fd_clear(struct fd_state *state, uint32_t color)
@@ -715,9 +718,9 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	OUT_RING(ring, 0x200 | COLORX_8_8_8_8);
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
-	OUT_RING(ring, 0x00000000);		// XXX
-	OUT_RING(ring, 0x00004088);		// XXX
-	OUT_RING(ring, 0x00000003);		// XXX
+	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_RB_LRZ_VSC_CONTROL));
@@ -861,6 +864,7 @@ static void emit_attributes(struct fd_state *state,
 	struct fd_shader_const shader_const[ARRAY_SIZE(state->attributes.params)];
 	uint32_t n;
 
+retry:
 	for (n = 0; n < state->attributes.nparams; n++) {
 		struct fd_param *p = &state->attributes.params[n];
 		uint32_t group_size = p->elem_size * p->size;
@@ -868,6 +872,13 @@ static void emit_attributes(struct fd_state *state,
 		uint32_t align_size = ALIGN(total_size, 32);
 		uint32_t bo_off     = state->attributes.off;
 		uint32_t data_off   = group_size * start;
+
+		/* if we reach end of bo, then wrap-around: */
+		if ((bo_off + align_size) > bo->size) {
+			state->attributes.off = 0;
+			n = 0;
+			goto retry;
+		}
 
 		memcpy(bo->hostptr + bo_off, p->data + data_off, total_size);
 
@@ -906,7 +917,8 @@ static void emit_uniforms(struct fd_state *state)
 	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + size);
 
 	// XXX hack, I guess I'll understand this value better once
-	// I start working on the shaders:
+	// I start working on the shaders.. note, the last byte appears
+	// to be an offset..
 	OUT_RING(ring, (state->uniforms.nparams == 1) ? 0x00000480 : 0x00000080);
 
 	for (n = 0; n < state->uniforms.nparams; n++) {
@@ -981,7 +993,15 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
-	OUT_RING(ring, 0x0000028f);
+	// XXX this is not understood:
+	switch (state->attributes.nparams) {
+	case 3:
+		OUT_RING(ring, 0x0000003b);
+		break;
+	default:
+		OUT_RING(ring, 0x0000028f);
+		break;
+	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
@@ -1062,6 +1082,8 @@ int fd_swap_buffers(struct fd_state *state)
 	if (len > state->fb.fix.line_length)
 		len = state->fb.fix.line_length;
 
+	fd_flush(state);
+
 	for (i = 0; i < surface->height; i++) {
 		memcpy(dstptr, srcptr, len);
 		dstptr += state->fb.fix.line_length;
@@ -1073,8 +1095,9 @@ int fd_swap_buffers(struct fd_state *state)
 
 int fd_flush(struct fd_state *state)
 {
-	ERROR_MSG("TODO");
-	sleep(1);
+	// TODO wait for render to complete
+	usleep(15*1000);
+
 	return 0;
 }
 

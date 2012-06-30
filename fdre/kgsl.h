@@ -65,6 +65,7 @@ struct kgsl_ringbuffer * kgsl_ringbuffer_new(int fd, uint32_t size,
 void kgsl_ringbuffer_del(struct kgsl_ringbuffer *ring);
 
 int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring);
+int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords);
 
 static inline void
 OUT_RING(struct kgsl_ringbuffer *ring, uint32_t data)
@@ -79,12 +80,14 @@ OUT_RING(struct kgsl_ringbuffer *ring, uint32_t data)
 static inline void
 OUT_PKT0(struct kgsl_ringbuffer *ring, uint16_t regindx, uint16_t cnt)
 {
+	kgsl_ringbuffer_begin(ring, cnt+1);
 	OUT_RING(ring, CP_TYPE0_PKT | ((cnt-1) << 16) | (regindx & 0x7FFF));
 }
 
 static inline void
 OUT_PKT3(struct kgsl_ringbuffer *ring, uint8_t opcode, uint16_t cnt)
 {
+	kgsl_ringbuffer_begin(ring, cnt+1);
 	OUT_RING(ring, CP_TYPE3_PKT | ((cnt-1) << 16) | ((opcode & 0xFF) << 8));
 }
 

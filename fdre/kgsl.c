@@ -151,3 +151,14 @@ int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring)
 
 	return ret;
 }
+
+int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords)
+{
+	int ret;
+	if ((ring->cur + dwords) >= ring->end) {
+		ret = kgsl_ringbuffer_flush(ring);
+		ring->cur = ring->last_start = ring->start;
+		return ret;
+	}
+	return 0;
+}
