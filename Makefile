@@ -61,14 +61,14 @@ LFLAGS = $(LFLAGS_2D) $(LFLAGS_3D) $(LDFLAGS_MISC) -ldl -lc
 
 all: tests-3d tests-2d
 
-utils: libwrap.so $(UTILS) redump cffdump
+utils: libwrap.so $(UTILS) redump cffdump pgmdump
 
 tests-2d: $(TESTS_2D) utils
 
 tests-3d: $(TESTS_3D) utils
 
 clean:
-	rm -f *.bmp *.dat *.so *.o *.rd *.html *-cffdump.txt *.log redump cffdump $(TESTS)
+	rm -f *.bmp *.dat *.so *.o *.rd *.html *-cffdump.txt *-pgmdump.txt *.log redump cffdump pgmdump $(TESTS)
 
 %.o: %.c
 	$(CC) -fPIC -g -c $(CFLAGS) $(LFLAGS) $< -o $@
@@ -84,5 +84,8 @@ redump: redump.c
 	gcc -g $^ -o $@
 
 cffdump: cffdump.c
+	gcc -g $(CFLAGS) $^ -o $@
+
+pgmdump: pgmdump.c
 	gcc -g $(CFLAGS) $^ -o $@
 

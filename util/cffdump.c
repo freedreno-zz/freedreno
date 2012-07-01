@@ -850,9 +850,6 @@ int main(int argc, char **argv)
 		case RD_FRAG_SHADER:
 			printf("fragment shader:\n%s\n", (char *)buf);
 			break;
-		case RD_PROGRAM:
-			/* TODO */
-			break;
 		case RD_GPUADDR:
 			buffers[nbuffers].gpuaddr = ((uint32_t *)buf)[0];
 			buffers[nbuffers].len = ((uint32_t *)buf)[1];

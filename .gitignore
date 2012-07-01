@@ -20,6 +20,7 @@ test-compiler
 # misc:
 redump
 cffdump
+pgmdump
 *.so
 *.o
 *.swp
