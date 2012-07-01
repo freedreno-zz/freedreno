@@ -15,6 +15,7 @@ test-quad-flat
 test-quad-flat2
 test-cube
 test-enable-disable
+test-compiler
 
 # misc:
 redump
