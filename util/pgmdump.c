@@ -44,13 +44,13 @@ struct pgm_header {
 	uint32_t unknown8;
 	uint32_t num_attribs;
 	uint32_t num_uniforms;
-	uint32_t unknown9;
+	uint32_t num_samplers;
 	uint32_t num_varyings;
 };
 
 struct vs_header {
 	uint32_t unknown1;  /* seems to be # of sections up to and including shader */
-	uint32_t unknown2;
+	uint32_t unknown2;  /* seems to be low byte or so of SQ_PROGRAM_CNTL */
 	uint32_t unknown3;
 	uint32_t unknown4;
 	uint32_t unknown5;
@@ -210,6 +210,7 @@ void dump_program(char *buf, int sz)
 	printf("\tsize:       %d\n", hdr->size);
 	printf("\tattributes: %d\n", hdr->num_attribs);
 	printf("\tuniforms:   %d\n", hdr->num_uniforms);
+	printf("\tsamplers:   %d\n", hdr->num_samplers);
 	printf("\tvaryings:   %d\n", hdr->num_varyings);
 	printf("as hex:\n");
 	dump_hex((void *)hdr, sect_size);
@@ -231,6 +232,15 @@ void dump_program(char *buf, int sz)
 		ptr = next_sect(&buf, &sz, &sect_size);
 		printf("######## UNIFORM: (size %d)\n", sect_size);
 		dump_ascii(ptr + 40, sect_size - 42);
+		printf("as hex:\n");
+		dump_hex(ptr, sect_size);
+		free(ptr);
+	}
+
+	for (i = 0; (i < hdr->num_samplers) && (sz > 0); i++) {
+		ptr = next_sect(&buf, &sz, &sect_size);
+		printf("######## SAMPLER: (size %d)\n", sect_size);
+		dump_ascii(ptr + 32, sect_size - 34);
 		printf("as hex:\n");
 		dump_hex(ptr, sect_size);
 		free(ptr);
