@@ -555,6 +555,7 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 	default: type = "<unknown>"; break;
 	}
 	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
+	disasm(dwords + 2, sizedwords - 2, level);
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)

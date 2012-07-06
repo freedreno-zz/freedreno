@@ -83,9 +83,9 @@ test-%: test-%.o $(UTILS)
 redump: redump.c
 	gcc -g $^ -o $@
 
-cffdump: cffdump.c
+cffdump: cffdump.c disasm.c
 	gcc -g $(CFLAGS) $^ -o $@
 
-pgmdump: pgmdump.c
+pgmdump: pgmdump.c disasm.c
 	gcc -g $(CFLAGS) $^ -o $@
 
