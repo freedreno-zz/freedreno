@@ -1,0 +1,22 @@
+To deal with render targets larger than can what can fit in GMEM
+we need to split the render up into multiple passes.  But ideally
+we don't want to do gmem->mem at each step.  Ie. if there are six
+glDrawArrays() we want to do the six draws for each section of
+the render target, and then a single gmem->mem.. ie. a sort of
+deferred rendering.
+
+One idea for that is to split the GL state out into a (tree of)
+reference counted objects.  When there is only a single ref to
+an object, it is writable.  When there is more than one ref, it
+is only readable and updates to the state require creating a
+copy.  (Splitting out different parts of the state into various
+sub-objects could help, because only the modified object and its
+parents in the path to the root need to be cloned.)  When a draw
+call (or clear) is made, simply queue up a cmd, it's args, and
+a reference to the current state.
+
+Note: glClear() and gmem->mem are special sorts of draw cmds, so
+it is possible that there could be separate state objects for
+these, but that they could otherwise re-use the same cmdstream
+building as a normal draw call.
+

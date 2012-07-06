@@ -33,7 +33,7 @@ CFLAGS = -Iincludes -Iutil
 #            against android libc and libs in /system/lib
 #  glibc  -  build for gnu/linux glibc, linking against
 #            normal gnu dynamic loader
-BUILD = bionic
+BUILD ?= bionic
 
 ifeq ($(strip $(BUILD)),bionic)
 # Note: setup symlinks in /system/lib to the vendor specific .so's in
