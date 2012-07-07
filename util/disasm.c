@@ -75,34 +75,107 @@ static const char *levels[] = {
  *         00001007 00002000 00000000
  *                 ALU:    140f8000 00430000 a1000000
  *
+ * Interpretation of swizzle fields:
+ *
+ *  bits 7..6 - chan[3] (w) swizzle
+ *       5..4 - chan[2] (z) swizzle
+ *       3..2 - chan[1] (y) swizzle
+ *       1..0 - chan[0] (x) swizzle
+ *
+ *  chan[0]: 00 - x
+ *           01 - y
+ *           10 - z
+ *           11 - w
+ *
+ *  chan[1]: 11 - x
+ *           00 - y
+ *           01 - z
+ *           10 - w
+ *
+ *  chan[2]: 10 - x
+ *           11 - y
+ *           00 - z
+ *           01 - w
+ *
+ *  chan[3]: 00 - w
+ *           01 - x
+ *           10 - y
+ *           11 - z
+ *
+ * Note: .x is same as .xxxx, .y same as .yyyy, etc.  So must be some other
+ * bit(s) which control MULv, whether the operand is interpreted as vector
+ * or scalar.
+ *
  */
 
 #define REG_MASK 0x1f	/* not really sure how many regs yet */
 
+static const char chan_names[] = { 'x', 'y', 'z', 'w' };
+
+static void print_srcreg(uint32_t num, uint32_t type, uint32_t swiz, uint32_t negate)
+{
+	if (negate)
+		printf("-");
+	printf("%c%u", type ? 'C' : 'R', num);
+	if (swiz) {
+		int i;
+		printf(".");
+		for (i = 0; i < 4; i++) {
+			printf("%c", chan_names[(swiz + i) & 0x3]);
+			swiz >>= 2;
+		}
+	}
+}
+
+static void print_dstreg(uint32_t num, uint32_t mask)
+{
+	printf("R%u", num);
+	if (mask != 0xf) {
+		int i;
+		printf(".");
+		for (i = 0; i < 4; i++) {
+			printf("%c", (mask & 0x1) ? chan_names[i] : '_');
+			mask >>= 1;
+		}
+	}
+}
+
 static int disasm_alu(uint32_t *dwords, int level)
 {
-	static const char *op_name[0xf] = {
+	static const char *op_name[0x1f] = {
 			[0]  = "ADDv",
 			[1]  = "MULv",
 			[2]  = "MAXv",
 			[11] = "MULADDv",
+			[15] = "DOT4v",
+			[16] = "DOT3v",
 	};
-	uint32_t dst_reg  =  dwords[0] & REG_MASK;
-	uint32_t src1_reg = (dwords[2] >> 16) & REG_MASK;
-	uint32_t src2_reg = (dwords[2] >> 8) & REG_MASK;
-	char src1_type    = (dwords[2] & 0x80000000) ? 'R' : 'C';
-	char src2_type    = (dwords[2] & 0x40000000) ? 'R' : 'C';
-	uint32_t op       = (dwords[2] >> 24) & 0xf;
-	// TODO swizzle
+	uint32_t dst_reg   =  dwords[0] & REG_MASK;
+	uint32_t dst_mask  = (dwords[0] >> 16) & 0xf;
+	uint32_t src1_reg  = (dwords[2] >> 16) & REG_MASK;
+	uint32_t src2_reg  = (dwords[2] >> 8) & REG_MASK;
+	uint32_t src1_type = !(dwords[2] & 0x80000000);
+	uint32_t src2_type = !(dwords[2] & 0x40000000);
+	uint32_t src1_swiz = (dwords[1] >> 16) & 0xff;
+	uint32_t src2_swiz = (dwords[1] >> 8) & 0xff;
+	uint32_t src1_neg  = (dwords[1] & 0x04000000);
+	uint32_t src2_neg  = (dwords[1] & 0x02000000);
+	uint32_t op        = (dwords[2] >> 24) & 0x1f;
 
 	if (op_name[op]) {
-		printf("%s", op_name[op]);
+		printf("ALU:\t%s", op_name[op]);
 	} else {
-		printf("OP(%u)", op);
+		printf("ALU:\tOP(%u)", op);
 	}
 
-	printf("\tR%u = %c%u, %c%u\n", dst_reg, src1_type, src1_reg,
-			src2_type, src2_reg);
+	printf("\t");
+	print_dstreg(dst_reg, dst_mask);
+	printf(" = ");
+	print_srcreg(src1_reg, src1_type, src1_swiz, src1_neg);
+	printf(", ");
+	print_srcreg(src2_reg, src2_type, src2_swiz, src2_neg);
+	printf("\n");
+
 	return 0;
 }
 
@@ -114,7 +187,7 @@ static int disasm_fetch(uint32_t *dwords, int level)
 	uint32_t src_reg = (dwords[0] >> 5) & REG_MASK;
 	uint32_t dst_reg = (dwords[0] >> 12) & REG_MASK;
 
-	printf("%s\tR%u = R%u CONST(%u)\n", fetch_type, dst_reg,
+	printf("FETCH:\t%s\tR%u = R%u CONST(%u)\n", fetch_type, dst_reg,
 			src_reg, src_const);
 	return 0;
 }
@@ -123,17 +196,17 @@ static int disasm_inst(uint32_t *dwords, int level)
 {
 	int ret = 0;
 
+	printf("%s%08x %08x %08x\t\t", levels[level], dwords[0], dwords[1], dwords[2]);
+
 	/* I don't know if this is quite the right way to separate
 	 * instruction types or not:
 	 */
 	if (dwords[2] & 0xf0000000) {
-		printf("%s\tALU:\t", levels[level]);
 		ret = disasm_alu(dwords, level);
 	} else {
-		printf("%s\tFETCH:\t", levels[level]);
 		ret = disasm_fetch(dwords, level);
 	}
-	printf("%s\t\t%08x %08x %08x\n", levels[level], dwords[0], dwords[1], dwords[2]);
+
 	return ret;
 }
 
@@ -148,8 +221,8 @@ int disasm(uint32_t *dwords, int sizedwords, int level)
 		uint32_t off = 1;
 		uint32_t cnt = (sizedwords / 3) - off;
 		alu_off = off * 3;
-		printf("%s%02d\tCF:\tADDR(0x%x) CNT(0x%x)\n", levels[level], 0, off, cnt);
-		printf("%s\t%08x %08x %08x\n", levels[level], dwords[0], dwords[1], dwords[2]);
+		printf("%s%08x %08x %08x\t", levels[level], dwords[0], dwords[1], dwords[2]);
+		printf("%02d\tCF:\tADDR(0x%x) CNT(0x%x)\n", 0, off, cnt);
 	}
 
 	/* decode CF instructions: */
@@ -168,15 +241,15 @@ int disasm(uint32_t *dwords, int sizedwords, int level)
 		/* make sure we parsed the expected amount of data: */
 		while (alu_off != (off * 3)) {
 			printf("?");
-			disasm_inst(dwords + alu_off, level + 1);
+			disasm_inst(dwords + alu_off, level);
 			alu_off += 3;
 		}
 
-		printf("%s%02d\tCF:\tADDR(0x%x) CNT(0x%x)\n", levels[level], i, off, cnt);
-		printf("%s\t%08x %08x %08x\n", levels[level], dwords[idx], dwords[idx+1], dwords[idx+2]);
+		printf("%s%08x %08x %08x\t", levels[level], dwords[idx], dwords[idx+1], dwords[idx+2]);
+		printf("%02d\tCF:\tADDR(0x%x) CNT(0x%x)\n", i, off, cnt);
 
 		for (j = 0; j < cnt; j++) {
-			disasm_inst(dwords + alu_off, level + 1);
+			disasm_inst(dwords + alu_off, level);
 			alu_off += 3;
 		}
 	}
@@ -184,7 +257,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level)
 	/* make sure we parsed the expected amount of data: */
 	while (alu_off != sizedwords) {
 		printf("?");
-		disasm_inst(dwords + alu_off, level + 1);
+		disasm_inst(dwords + alu_off, level);
 		alu_off += 3;
 	}
 
