@@ -1,0 +1,535 @@
+more useful links:
+
+http://www.allhatter.com/showthread.php/61067-Programming-the-XPERIA-Play-GPU?s=03177c982e0b20577631cfcbe4ae1343
+
+--------------------------------------------------------------------------------
+
+so, http://www.anandtech.com/show/4940/qualcomm-new-snapdragon-s4-msm8960-krait-architecture/3
+sort of implies we have an arrangement of N * (4-wide vector + 1 scalar)
+ALU elements.  The r600, if I understand properly can execute independent
+scalar operations across 4+1 ALU's, so that makes it sort of MIMD.  So SIMD
+vector operations just happen to perform the same ALU op across multiple
+scaler operations within the instruction:
+
+00 ALU: ADDR(34) CNT(5)
+  0	x: MUL R0.x, R0.x, (1.0f).x
+	y: MUL R0.y, R0.y, (0.25f).y
+	z: MUL R0.z, R0.z, (0.5f).z
+	w: MUL R0.w, R0.x, (0.75f).w
+	t: RECIPSQRT_IEEE R2.w, R0.w
+
+but I think adreno can do, instead of 5 independent scalar operations, one
+4-wide vector operation plus one scaler.  This would simplify the hw a bit
+without much tradeoff for most common shaders.  Re-arranging the asm syntax
+from the screenshot to be a bit more like tha r600 syntax, it would look
+like:
+
+02 ALU: ADDR(6) CNT(2)
+  3	MAXv      export0.zy__ = R0, R0
+	SQRT_IEEE export0.__z_ = R1.xyzx
+  4	MAXv      export0.___w = C1.xyzx, C1.xyzx
+
+where the MAXv and SQRT_IEEE execute together on the vector and scalar units
+respectively.
+
+Note: I assume MOV is an alias for MAX Rd = Rn, Rn
+
+--------------------------------------------------------------------------------
+Original unmodified adreno asm syntax:
+(note: some creativity applied, as right edge of asm was cut off in the
+screenshot, and some parts where a bit too fuzzy to make out)
+
+vec3 vNormal = vec3(2.0, 2.0, 0.0) * texture2D(g_NormalMap, vTexCoord0).rgb;
+vNormal.z = sqrt(1.0 - dot(vNormal, vNormal));
+gl_FragColor = vec4(vNormal, 1.0);
+
+00	EXEC ADDR(0x2) CNT(0x4) SERIALIZE(0x9)
+	0    FETCH:	SAMPLE	R0.xyz_ = R0.xyz  CONST(0)
+	0 (?)ALU:	MULADDv	R0.xyz_ = R0, C0.??, -C1.??  (??? why -C1.swiz?)
+	1    ALU:	DOT3v	R1.x___ = R0, R0
+	2    ALU:	ADDv	R1.x___ = -R1, C1
+01	ALLOC PARAM/PIXEL SIZE(0x0)
+02	EXEC_END ADDR(0x6) CNT(0x2)
+	3    ALU:	MAXv	export0.zy__ = R0, R0
+		   SQRT_IEEE	export0.__z_ = R1.xyzx
+	4    ALU:	MAXv	export0.___w = C1.xyzx, C1.xyzx
+03	NOP
+
+	I assume:
+	  C0: vec3(2.0, 2.0, 0.0)
+	  C1: 1.0
+
+######## FS0 SHADER: (size=116)
+        00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+        00094002 00001000 c4000000 00001006 00002000 00000000 10000001 1ffffe88
+        00000002 14070000 00000c00 a1000000 14010001 00000000 f0000000 14010001
+        026c6c00 60010100 a0cb8000 00000040 e2000001
+
+--------------------------------------------------------------------------------
+Playing with swizzles, etc, to try and find location of instructions:
+
+vec3 vNormal = vec3(2.0, 2.0, 0.0) * texture2D(g_NormalMap, vTexCoord0.yx).bgr;
+vNormal.z = sqrt(2.0 * dot(vNormal.zyx, vNormal.zyx));
+gl_FragColor = vec4(vNormal, 1.0).bgra;
+
+Which in theory gives:
+
+00	EXEC ADDR(0x2) CNT(0x4) SERIALIZE(0x9)
+	0    FETCH:	SAMPLE	R0.xyz_ = R0.yxz  CONST(0)
+	0 (?)ALU:	MULADDv	R0.xyz_ = R0.zxy, C0.??, -C1.??  (??? why -C1.swiz?)
+	1    ALU:	DOT3v	R1.x___ = R0.zyx, R0.zyx
+	2    ALU:	MULv	R1.x___ = -R1, C0
+01	ALLOC PARAM/PIXEL SIZE(0x0)
+02	EXEC_END ADDR(0x6) CNT(0x2)
+XXX not sure how .bgra on output is handled.. seems to change stuff in two
+    dwords, so I assume it is partialy handled on src operand and partially
+    on dst?
+	3    ALU:	MAXv	export0.zy__ = R0, R0
+		   SQRT_IEEE	export0.__z_ = R1.xyzx
+	4    ALU:	MAXv	export0.___w = C1.xyzx, C1.xyzx
+03	NOP
+
+######## FS0 SHADER: (size=116)
+        00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+        00094002 00001000 c4000000 00001006 00002000 00000000<44000001>1ffffe88
+        00000002 14070000<00220c00>a1000000 14010001<00222200>f0000000 14010001
+       <006c6c00 61000100 a09e8000 00202040>e2000001
+
+00000000 -> 00220000 -> 00222200 with changing one or both src operand swizzle,
+so I assume the following are parts of an ALU op that control src operand
+swizzle for different instructions: 00220c00, 00222200, 00202040
+
+--------------------------------------------------------------------------------
+Remove the MULADDv instruction:
+
+vec3 vNormal = texture2D(g_NormalMap, vTexCoord0.yx).bgr;
+vNormal.z = sqrt(2.0 * dot(vNormal.zyx, vNormal.zyx));
+gl_FragColor = vec4(vNormal, 1.0).bgra;
+
+Which in theory gives:
+
+00	EXEC ADDR(0x2) CNT(0x3) SERIALIZE(0x9)
+	0    FETCH:	SAMPLE	R0.xyz_ = R0.yxz  CONST(0)
+	1    ALU:	DOT3v	R1.x___ = R0.zyx, R0.zyx
+	2    ALU:	MULv	R1.x___ = -R1, C0
+01	ALLOC PARAM/PIXEL SIZE(0x0)
+02	EXEC_END ADDR(0x5) CNT(0x2)
+    dwords, so I assume it is partialy handled on src operand and partially
+    on dst?
+	3    ALU:	MAXv	export0.zy__ = R0, R0
+		   SQRT_IEEE	export0.__z_ = R1.xyzx
+	4    ALU:	MAXv	export0.___w = C1.xyzx, C1.xyzx
+03	NOP
+
+######## FS0 SHADER: (size=104)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	00093002 00001000 c4000000 00001005{00002000 00000000 44000001 1ffffe88
+	00000002,                           14010000 00000000 f0000000}14010000
+	006c6c00 61000000 a09e8000 00000040 e2000000
+
+--------------------------------------------------------------------------------
+
+XXX what if CF are 3 dwords each.. and ADDR/CNT are multiples of 3?
+
+######## FS0 SHADER: (size=116)
+        00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+        00094002 00001000 c4000000,00001006 00002000 00000000{44000001 1ffffe88
+        00000002,14070000 00220c00 a1000000,14010001 00222200 f0000000,14010001
+        006c6c00 61000100}a09e8000 00202040 e2000001
+
+######## FS0 SHADER: (size=104)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	00093002 00001000 c4000000 00001005 00002000 00000000{44000001 1ffffe88
+	00000002,                           14010000 00000000 f0000000,14010000
+	006c6c00 61000000}a09e8000 00000040 e2000000
+
+######## VS2 SHADER: (size=116)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	00052003 00001000 c2000000,00001005 00001000 c4000000,00001006 00002000
+	00000000{1a181000 00000688 00000000,14282000 40000fc8 00000000}140f803e
+	00000000 e2010100,14038000 00000000 e2020200
+
+	attribute vec4 aPosition;
+	attribute vec2 aTexCoord0;
+	
+	varying vec2 vTexCoord0;
+	
+	void main()
+	{
+		vTexCoord0 = aTexCoord0;
+		gl_Position = aPosition;
+	}
+
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+precision mediump float;
+
+uniform sampler2D g_NormalMap;
+varying vec2 vTexCoord0;
+
+void main()
+{
+  vec3 vNormal = vec3(2.0, 2.0, 0.0) * texture2D(g_NormalMap, vTexCoord0).rgb;
+  vNormal.z = sqrt(2.0 - dot(vNormal.zyx, vNormal.zyx));
+  gl_FragColor = vec4(vNormal, 1.0);
+}
+
+######## FS0 SHADER: (size=116)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	00094002 00001000 c4000000 00001006 00002000 00000000 10000001 1ffffe88
+	00000002 14070000 00000c00 a1000000 14010001 00222200 f0000000 14010001
+	026c6c00 60000100 a0cb8000 00000040 e2000001
+		00	CF:	ADDR(0x2) CNT(0x4)
+			00094002 00001000 c4000000
+				ALU:	10000001 1ffffe88 00000002
+				ALU:	14070000 00000c00 a1000000
+				ALU:	14010001 00222200 f0000000
+				ALU:	14010001 026c6c00 60000100
+		01	CF:	ADDR(0x6) CNT(0x1)
+			00001006 00002000 00000000
+				ALU:	a0cb8000 00000040 e2000001
+
+--------------------------------------------------------------------------------
+
+precision mediump float;
+
+uniform sampler2D g_NormalMap;
+varying vec2 vTexCoord0;
+
+void main()
+{
+  vec3 vNormal = vec3(2.0, 2.0, 0.0) * texture2D(g_NormalMap, vTexCoord0.yx).bgr;
+  vNormal.z = sqrt(2.0 * dot(vNormal.zyx, vNormal.zyx));
+  gl_FragColor = vec4(vNormal, 2.0).bgra;
+}
+
+######## FS0 SHADER: (size=128)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	00094002 00001000 c4000000 00002006 00002000 00000000 44000001 1ffffe88
+	00000002 14070000 00220c00 a1000000 14010001 00222200 f0000000 14010001
+	006c6c00 61000100 a0168000 00202040 e2000001 14088000 00404000 22000000
+		00	CF:	ADDR(0x2) CNT(0x4)
+			00094002 00001000 c4000000
+				ALU:	44000001 1ffffe88 00000002
+				ALU:	14070000 00220c00 a1000000
+				ALU:	14010001 00222200 f0000000
+				ALU:	14010001 006c6c00 61000100
+		01	CF:	ADDR(0x6) CNT(0x2)
+			00002006 00002000 00000000
+				ALU:	a0168000 00202040 e2000001
+				ALU:	14088000 00404000 22000000
+
+--------------------------------------------------------------------------------
+
+precision mediump float;
+
+uniform sampler2D g_NormalMap;
+uniform sampler2D g_NormalMap2;
+varying vec2 vTexCoord0;
+
+void main()
+{
+  vec3 vNormal = vec3(2.0, 2.0, 0.0) * texture2D(g_NormalMap, vTexCoord0.yx).bgr;
+  vNormal = vNormal * texture2D(g_NormalMap2, vTexCoord0.yx).rgb;
+  vNormal.z = sqrt(2.0 * dot(vNormal.zyx, vNormal.zyx));
+  gl_FragColor = vec4(vNormal, 2.0).bgra;
+}
+
+######## FS0 SHADER: (size=152)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	00256002 00001000 c4000000 00002008 00002000 00000000 44001001 1ffffe88
+	00000002 44100001 1ffffe88 00000002 14070001 00220c00 a1010000 14070000
+	00000000 e1010000 14010001 00222200 f0000000 14010001 006c6c00 61000100
+	a0168000 00202040 e2000001 14088000 00404000 22000000
+		00	CF:	ADDR(0x2) CNT(0x6)
+			00256002 00001000 c4000000
+				ALU:	44001001 1ffffe88 00000002
+				ALU:	44100001 1ffffe88 00000002
+				ALU:	14070001 00220c00 a1010000
+				ALU:	14070000 00000000 e1010000
+				ALU:	14010001 00222200 f0000000
+				ALU:	14010001 006c6c00 61000100
+		01	CF:	ADDR(0x8) CNT(0x2)
+			00002008 00002000 00000000
+				ALU:	a0168000 00202040 e2000001
+				ALU:	14088000 00404000 22000000
+
+--------------------------------------------------------------------------------
+        uniform sampler2D uSamp1;
+        uniform sampler2D uSamp2;
+        uniform sampler2D uSamp3;
+        uniform vec4 uVal;
+        varying vec2 vTexCoord0;
+        varying vec2 vTexCoord1;
+        
+        void main()
+        {
+          vec4 v1 = texture2D(uSamp1, vTexCoord1);
+          vec4 v2 = texture2D(uSamp3, vTexCoord0);
+          vec4 v3 = texture2D(uSamp2, vTexCoord1);
+          vec4 v4 = v1.bgra + v3;
+          vec4 v5 = v4.rabg * v2;
+          vec4 v6 = uVal * v5.agbr;
+          gl_FragColor = v6;
+        }
+
+my theory about what this should look like:
+
+EXEC ADDR(0x2) CNT(0x5) SERIALIZE(??)
+    FETCH:	SAMPLE	R2 = R1  CONST(0)	; v1 = texture2D(uSamp1, vTexCoord1)
+    FETCH:	SAMPLE	R1 = R1  CONST(1)	; v3 = texture2D(uSamp2, vTexCoord1)
+    FETCH:	SAMPLE	R0 = R0  CONST(2)	; v2 = texture2D(uSamp3, vTexCoord0)
+    ALU:	ADDv	R1 = R1.bgra, R2	; v4 = v1.bgra + v3
+    ALU:	MULv	R0 = R1.rabg, R0	; v5 = v4.rabg * v2
+EXEC_END ADDR(0x7) CNT(0x1)
+    ALU:	MULv	export0 = R0.argb, C0	; gl_FragColor = uVal * v5.argb
+NOP
+
+######## FS0 SHADER: (size=128)
+        00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+        00955002 00001000 c4000000 00001007 00002000 00000000 10002021 1ffff688
+        00000002 10101021 1ffff688 00000002 10200001 1ffff688 00000002 140f0001
+        00220000 e0020100 140f0000 00008800 e1000100 140f8000 00430000 a1000000
+                00      CF:     ADDR(0x2) CNT(0x5)
+                        00955002 00001000 c4000000
+                                ALU:    10002021 1ffff688 00000002
+                                          ^ ^ ^
+                                          | | +-- src reg (coord, bit offset 5)
+                                          | +---- dst register
+                                          +------ sampler # (CONST(n)
+                                ALU:    10101021 1ffff688 00000002
+                                ALU:    10200001 1ffff688 00000002
+                                ALU:    140f0001 00220000 e0020100
+                                               ^   ^^^^    ^ ^ ^
+                                               |    | |    | | +-- src2
+                                               |    | |    | +---- src1
+                                               |    | |    +------ op, 0:ADDv, 1:MULv
+                                               |    | +----------- src2 swizzle
+                                               |    +------------- src1 swizzle
+                                               |
+                                               +------------------ dst
+                                ALU:    140f0000 00008800 e1000100
+                01      CF:     ADDR(0x7) CNT(0x1)
+                        00001007 00002000 00000000
+                                ALU:    140f8000 00430000 a1000000
+
+--------------------------------------------------------------------------------
+	uniform sampler2D uSamp1;
+	uniform sampler2D uSamp2;
+	uniform sampler2D uSamp3;
+	uniform vec4 uVal;
+	varying vec2 vTexCoord0;
+	varying vec2 vTexCoord1;
+	
+	void main()
+	{
+	  vec4 v1 = texture2D(uSamp1, vTexCoord1);
+	  vec4 v2 = texture2D(uSamp3, v1.xy);
+	  vec4 v3 = texture2D(uSamp2, vTexCoord0);
+	  vec4 v4 = v1.bgra * uVal;
+	  vec4 v5 = v2.rabg * v3;
+	  vec4 v6 = v4 * v5;
+	  gl_FragColor = v6 * uVal;
+	}
+
+my theory about what this should look like:
+
+EXEC ADDR(0x2) CNT(0x5) SERIALIZE(??)
+    FETCH:	SAMPLE	R1 = R1  CONST(0)	; v1 = texture2D(uSamp1, vTexCoord1)
+    FETCH:	SAMPLE	R0 = R0  CONST(1)	; v3 = texture2D(uSamp2, vTexCoord0)
+    ALU:	MULv	R2 = R1.bgra, C0	; v4 = v1.bgra * uVal
+    FETCH:	SAMPLE	R1 = R1  CONST(2)	; v2 = texture2D(uSamp3, v1.xy)
+    ALU:	MULv	R0 = R1.rabg, R0	; v5 = v2.rabg * v3
+    ALU:	MULv	R0 = R2, R0		; v6 = v4 * v5
+EXEC_END ADDR(0x7) CNT(0x1)
+    ALU:	MULv	export0 = R0, C0	; v6 * uVal
+NOP
+
+######## FS0 SHADER: (size=140)
+	00000000 00000001 00000000 00000002 40000000 3f400000 3ec00000 3e800000
+	02e56002 00001000 c4000000 00001008 00002000 00000000 10001021 1ffff688
+	00000002 10100001 1ffff688 00000002 140f0002 00220000 a1010000 10201021
+	1ffff688 00000002 140f0000 00880000 e1010000 140f0000 00000000 e1020000
+	140f8000 00000000 a1000000
+		00	CF:	ADDR(0x2) CNT(0x6)
+			02e56002 00001000 c4000000
+				ALU:	10001021 1ffff688 00000002
+				ALU:	10100001 1ffff688 00000002
+				ALU:	140f0002 00220000 a1010000
+				ALU:	10201021 1ffff688 00000002
+				ALU:	140f0000 00880000 e1010000
+				ALU:	140f0000 00000000 e1020000
+		01	CF:	ADDR(0x8) CNT(0x1)
+			00001008 00002000 00000000
+				ALU:	140f8000 00000000 a1000000
+
+Interpretation of swizzle fields:
+
+ bits 7..6 - chan[3] (w) swizzle
+      5..4 - chan[2] (z) swizzle
+      3..2 - chan[1] (y) swizzle
+      1..0 - chan[0] (x) swizzle
+
+ chan[0]: 00 - x
+          01 - y
+          10 - z
+          11 - w
+
+ chan[1]: 11 - x
+          00 - y
+          01 - z
+          10 - w
+
+ chan[2]: 10 - x
+          11 - y
+          00 - z
+          01 - w
+
+ chan[3]: 00 - w
+          01 - x
+          10 - y
+          11 - z
+
+Note: .x is same as .xxxx, .y same as .yyyy, etc.  So must be some other
+bit(s) which control MULv, whether the operand is interpreted as vector
+or scalar.
+
+Shader Outputs:
+    vertex shader:
+        R30: gl_Position
+        R31: gl_PointSize
+    fragment shader:
+        R0:  gl_FragColor
+        ??:  gl_FragData   --   TODO
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+00	CF:	ADDR(0x3) CNT(0x6)				02e56003 60091000 10000000
+		FETCH:	SAMPLE	R1 = R1 CONST(0)		10001021 1ffff688 00000002  vec4 v1 = texture2D(uSamp1, vTexCoord1);
+		FETCH:	SAMPLE	R0 = R0 CONST(1)		10100001 1ffff688 00000002  vec4 v3 = texture2D(uSamp2, vTexCoord0);
+		ALU:	MULv	R2 = R1, C0				ac1f0302 00000040 81010000  vec4 v4 = v1 * uVal;
+		FETCH:	SAMPLE	R4 = R1 CONST(2)		10204021 1ffff688 00000002  vec4 v2 = texture2D(uSamp3, v1.xy);
+		ALU:	MULv	R2 = R0, R2				a81f0502 00000085 c1000200  -> v3 * v4
+		ALU:	MULv	R6 = R1.wxyz, C0		a81f0706 00ff00c3 81010000  vec4 v5 = v1.wxyz * uVal;
+		ALU:	MULv	R8 = R4, C0				140f0008 00000000 a1040000  vec4 v6 = v2 * uVal;
+		ALU:	MULADDv	R2 = R1, R4				140f0002 00000000 eb010402  -> (v3 * v4) + (v1 * v2)
+		ALU:	MULADDv	R2 = R6, R8				140f0002 00000000 eb060802  -> ((v3 * v4) + (v1 * v2)) + (v5 * v6)
+		ALU:	MULv	R6 = R4.zwxy, C0.yzwx	140f0006 00aa5500 a1040000  vec4 v7 = v2.zwxy * uVal.yzwx;
+		ALU:	ADDv	R1 = R1.xyxy, C0		140f0001 00a00000 a0010000  vec4 v8 = v1.xyxy + uVal;
+		ALU:	MULADDv	R1 = R6, R1				140f0001 00000000 eb060102 ?-> v8 + (v7 * v8)
+01	CF:	ADDR(0xf) CNT(0x5)				0000500f 00001000 c4000000
+		ALU:	MULv	R2 = R4.wzzw, C0		140f0002 00070000 a1040000  vec4 v9 = v2.wzzw * uVal;
+		ALU:	MULADDv	R1 = R3.xxxx, R2		140f0001 006c0000 eb030201 ?-> (v8 + (v7 * v8)) + (R3.xxxx? * v9)
+		ALU:	ADDv	R2 = R0, C0.zzzz		140f0002 0000c600 a0000000  vec4 v12 = v3 + uVal.zzzz;
+		ALU:	MULADDv	R1 = R5.xxxx, R2		140f0001 006c0000 eb050201 ?-> ((v8 + (v7 * v8)) + (R3.xxxx? * v9)) + (R5.xxxx * v12)
+		ALU:	MULv	R0 = R0, C0.wwww		140f0000 00001b00 a1000000  vec4 v13 = v3 * uVal.w;
+02	CF:	ADDR(0x14) CNT(0x1)				00001014 00002000 00000000
+		ALU:	MULADDv	R0 = R0, R7.xxxx		140f8000 00006c00 eb000701 ?->
+
+
+02e56003 60091000 10000000	02e50000 60091000 10000000	00  CF:	ADDR(0x3) CNT(0x6)
+10001021 1ffff688 00000002	10000001 1ffff688 00000002		FETCH:	SAMPLE	R1 = R1 CONST(0)
+10100001 1ffff688 00000002	10000001 1ffff688 00000002		FETCH:	SAMPLE	R0 = R0 CONST(1)
+ac1f0302 00000040 81010000	ac100300 00000040 00000000		ALU:	MULv	R2 = R1, C0
+10204021 1ffff688 00000002	10000001 1ffff688 00000002		FETCH:	SAMPLE	R4 = R1 CONST(2)
+a81f0502 00000085 c1000200	a8100500 00000085 00000000		ALU:	MULv	R2 = R0, R2
+a81f0706 00ff00c3 81010000	a8100700 000000c3 00000000		ALU:	MULv	R6 = R1.wxyz, C0
+140f0008 00000000 a1040000	14000000 00000000 20000000		ALU:	MULv	R8 = R4, C0
+140f0002 00000000 eb010402	14000000 00000000 20000002		ALU:	MULADDv	R2 = R1, R4
+140f0002 00000000 eb060802	14000000 00000000 20000002		ALU:	MULADDv	R2 = R6, R8
+140f0006 00aa5500 a1040000	14000000 00000000 20000000		ALU:	MULv	R6 = R4.zwxy, C0.yzwx
+140f0001 00a00000 a0010000	14000000 00000000 20000000		ALU:	ADDv	R1 = R1.xyxy, C0
+140f0001 00000000 eb060102	14000000 00000000 20000002		ALU:	MULADDv	R1 = R6, R1
+0000500f 00001000 c4000000	00000000 00001000 c4000000	01  CF:	ADDR(0xf) CNT(0x5)
+140f0002 00070000 a1040000	14000000 00000000 20000000		ALU:	MULv	R2 = R4.wzzw, C0
+140f0001 006c0000 eb030201	14000000 00000000 20000001		ALU:	MULADDv	R1 = R3.xxxx, R2
+140f0002 0000c600 a0000000	14000000 00000000 20000000		ALU:	ADDv	R2 = R0, C0.zzzz
+140f0001 006c0000 eb050201	14000000 00000000 20000001		ALU:	MULADDv	R1 = R5.xxxx, R2
+140f0000 00001b00 a1000000	14000000 00000000 20000000		ALU:	MULv	R0 = R0, C0.wwww
+00001014 00002000 00000000	00000000 00002000 00000000	02  CF:	ADDR(0x14) CNT(0x1)
+140f8000 00006c00 eb000701	14008000 00000000 20000001		ALU:	MULADDv	R0 = R0, R7.xxxx
+
+-----------------------------------------------------------------------------
+
+00094002 00001000 c4000000	00090000 00001000 c4000000	00  CF:	ADDR(0x2) CNT(0x4)
+10000001 1ffffe88 00000002	10000001 1ffffe88 00000002		FETCH:	SAMPLE	R0 = R0 CONST(0)
+14070000 00000c00 a1000000	14000000 00000000 20000000		ALU:	MULv	R0.xyz_ = R0, C0.xxzw
+14010001 00000000 f0000000	14000000 00000000 20000000		ALU:	DOT3v	R1.x___ = R0, R0
+14010001 026c6c00 60010100	14000000 00000000 20000000		ALU:	ADDv	R1.x___ = C1.xxxx, -R1.xxxx
+00001006 00002000 00000000	00000000 00002000 00000000	01  CF:	ADDR(0x6) CNT(0x1)
+a0cb8000 00000040 e2000001	a0c08000 00000040 20000001		ALU:	MAXv	R0.xy_w = R0, R0
+
+-----------------------------------------------------------------------------
+
+attribute vec4 aPosition0;
+attribute vec4 aPosition1;
+
+void main()
+{
+	vec2 v;
+	v.x = aPosition0.y;
+	v.y = aPosition1.x;
+	gl_PointSize = dot(v, v);
+	gl_Position = aPosition0;
+}
+
+00	CF:	ADDR(0x3) CNT(0x2)				00052003 00011000 c2000000
+		FETCH:	SAMPLE	R1 = R0 CONST(1)		1a181000 00000688 00000000  aPosition0
+		FETCH:	SAMPLE	R2 = R0 CONST(2)		14282000 40000ff8 00000000  aPosition1
+01	CF:	ADDR(0x5) CNT(0x5)				00005005 00001000 c4000000
+		ALU:	MAXv	R30 = R1, R1			140f803e 00000000 e2010100  gl_Position
+		ALU:	MAXv	R0 = R1.yyyy, R1.yyyy	14210000 00b1b16c e2010102
+		ALU:	MAXv	R0 = C1.wwww, C1.wwww	14040000 201b1b00 22010100  ????  must be clearing to zero?
+		ALU:	DOT3v	R0 = R0, R0.xyyw		14010000 00003000 f0000000
+		ALU:	MAXv	R31 = R0, R0			1401803f 00000000 e2000000  gl_PointSize
+02	CF:	ADDR(0xa) CNT(0x0)				0000000a 00002000 00000000
+
+
+gl_PointSize = dot(aPosition.xy, aPosition.xy);
+gl_Position = aPosition;
+00	CF:	ADDR(0x3) CNT(0x3)				00093003 00011000 c2000000
+		FETCH:	SAMPLE  R1 = R0 CONST(1)		1a181000 00000688 00000000
+		ALU:	MAXv    R0 = R1, R1				64430000 2000001b c2010101  -- this must mask zw
+		ALU:	DOT3v   R0 = R0, R1.xyyw		14010000 00003000 f0000100
+01	CF:	ADDR(0x6) CNT(0x2)				00002006 00001000 c4000000
+		ALU:	MAXv    R30 = R1, R1			140f803e 00000000 e2010100
+		ALU:	MAXv    R31 = R0, R0			1401803f 00000000 e2000000
+02	CF:	ADDR(0x8) CNT(0x0)				00000008 00002000 00000000
+
+gl_PointSize = dot(aPosition.xy, aPosition.xy);
+		ALU:	MAXv    R0 = R1, R1				64430000 2000001b c2010101  -- this must mask zw
+gl_PointSize = dot(aPosition.yz, aPosition.yz);
+		ALU:	MAXv    R0 = R1.yzzw, R1.yzzw	64430000 2005051b c2010101
+
+gl_PointSize = dot(aPosition.xyz, aPosition.xyz);
+gl_Position = aPosition;
+00	CF:	ADDR(0x3) CNT(0x2)				00092003 00011000 c2000000
+		FETCH:	SAMPLE  R1 = R0 CONST(1)		1a181000 00000688 00000000
+		ALU:	DOT3v   R0 = R1, R1				14010000 00000000 f0010100
+01	CF:	ADDR(0x5) CNT(0x2)				00002005 00001000 c4000000
+		ALU:	MAXv    R30 = R1, R1			140f803e 00000000 e2010100
+		ALU:	MAXv    R31 = R0, R0			1401803f 00000000 e2000000
+02	CF:	ADDR(0x7) CNT(0x0)				00000007 00002000 00000000
+
+
+gl_PointSize = dot(aPosition, aPosition);
+gl_Position = aPosition;
+00	CF:	ADDR(0x3) CNT(0x2)				00092003 00011000 c2000000
+		FETCH:	SAMPLE  R1 = R0 CONST(1)		1a181000 00000688 00000000
+		ALU:	DOTv4   R0 = R1, R1				14010000 00000000 ef010100
+01	CF:	ADDR(0x5) CNT(0x2)				00002005 00001000 c4000000
+		ALU:	MAXv    R30 = R1, R1			140f803e 00000000 e2010100
+		ALU:	MAXv    R31 = R0, R0			1401803f 00000000 e2000000
+02	CF:	ADDR(0x7) CNT(0x0)				00000007 00002000 00000000
+
+
+val + dot(vNormal, vNormal)		14010001 006c6c00 60000100              ALU:    ADDv    R1.x___ = C0.xxxx, R1.xxxx
+val - dot(vNormal, vNormal)		14010001 026c6c00 60000100              ALU:    ADDv    R1.x___ = C0.xxxx, R1.xxxx
+-val + dot(vNormal, vNormal)	14010001 046c6c00 60000100              ALU:    ADDv    R1.x___ = C0.xxxx, R1.xxxx
+

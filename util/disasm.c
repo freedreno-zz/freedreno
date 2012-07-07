@@ -51,6 +51,9 @@ static const char *levels[] = {
 		"x",
 };
 
+#define print_raw     1
+#define print_unknown 1   /* raw with already identified bitfields masked */
+
 /*
  * 00      CF:     ADDR(0x2) CNT(0x5)
  *         00955002 00001000 c4000000
@@ -105,6 +108,14 @@ static const char *levels[] = {
  * Note: .x is same as .xxxx, .y same as .yyyy, etc.  So must be some other
  * bit(s) which control MULv, whether the operand is interpreted as vector
  * or scalar.
+ *
+ * Shader Outputs:
+ *     vertex shader:
+ *         R30: gl_Position
+ *         R31: gl_PointSize
+ *     fragment shader:
+ *         R0:  gl_FragColor
+ *         ??:  gl_FragData   --   TODO
  *
  */
 
@@ -162,10 +173,18 @@ static int disasm_alu(uint32_t *dwords, int level)
 	uint32_t src2_neg  = (dwords[1] & 0x02000000);
 	uint32_t op        = (dwords[2] >> 24) & 0x1f;
 
+	if (print_unknown) {
+		printf("%08x %08x %08x\t",
+				dwords[0] & ~(REG_MASK | (0xf << 16)),
+				dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 | 0x02000000),
+				dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
+						0x80000000 | 0x40000000 | (0x1f << 24)));
+	}
+
 	if (op_name[op]) {
-		printf("ALU:\t%s", op_name[op]);
+		printf("\tALU:\t%s", op_name[op]);
 	} else {
-		printf("ALU:\tOP(%u)", op);
+		printf("\tALU:\tOP(%u)", op);
 	}
 
 	printf("\t");
@@ -182,12 +201,20 @@ static int disasm_alu(uint32_t *dwords, int level)
 static int disasm_fetch(uint32_t *dwords, int level)
 {
 	// XXX I guess there are other sorts of fetches too??
+	// XXX write mask?  swizzle?
 	static const char *fetch_type = "SAMPLE";
 	uint32_t src_const = (dwords[0] >> 20) & 0xf;
 	uint32_t src_reg = (dwords[0] >> 5) & REG_MASK;
 	uint32_t dst_reg = (dwords[0] >> 12) & REG_MASK;
 
-	printf("FETCH:\t%s\tR%u = R%u CONST(%u)\n", fetch_type, dst_reg,
+	if (print_unknown) {
+		printf("%08x %08x %08x\t",
+				dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) | (0xf << 20)),
+				dwords[1] & ~0x00000000,
+				dwords[2] & ~0x00000000);
+	}
+
+	printf("\tFETCH:\t%s\tR%u = R%u CONST(%u)\n", fetch_type, dst_reg,
 			src_reg, src_const);
 	return 0;
 }
@@ -196,7 +223,9 @@ static int disasm_inst(uint32_t *dwords, int level)
 {
 	int ret = 0;
 
-	printf("%s%08x %08x %08x\t\t", levels[level], dwords[0], dwords[1], dwords[2]);
+	printf("%s", levels[level]);
+	if (print_raw)
+		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 
 	/* I don't know if this is quite the right way to separate
 	 * instruction types or not:
@@ -210,6 +239,23 @@ static int disasm_inst(uint32_t *dwords, int level)
 	return ret;
 }
 
+static int disasm_cf(uint32_t *dwords, int level,
+		uint32_t idx, uint32_t off, uint32_t cnt)
+{
+	printf("%s", levels[level]);
+	if (print_raw) {
+		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
+	}
+	if (print_unknown) {
+		printf("%08x %08x %08x\t",
+				dwords[0] & ~0x0000ffff,
+				dwords[1] & ~0x00000000,
+				dwords[2] & ~0x00000000);
+	}
+	printf("%02d  CF:\tADDR(0x%x) CNT(0x%x)\n", idx, off, cnt);
+	return 0;
+}
+
 int disasm(uint32_t *dwords, int sizedwords, int level)
 {
 	uint32_t first_off = (dwords[0] & 0xfff);
@@ -221,8 +267,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level)
 		uint32_t off = 1;
 		uint32_t cnt = (sizedwords / 3) - off;
 		alu_off = off * 3;
-		printf("%s%08x %08x %08x\t", levels[level], dwords[0], dwords[1], dwords[2]);
-		printf("%02d\tCF:\tADDR(0x%x) CNT(0x%x)\n", 0, off, cnt);
+		disasm_cf(dwords, level, 0, off, cnt);
 	}
 
 	/* decode CF instructions: */
@@ -245,8 +290,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level)
 			alu_off += 3;
 		}
 
-		printf("%s%08x %08x %08x\t", levels[level], dwords[idx], dwords[idx+1], dwords[idx+2]);
-		printf("%02d\tCF:\tADDR(0x%x) CNT(0x%x)\n", i, off, cnt);
+		disasm_cf(&dwords[idx], level, i, off, cnt);
 
 		for (j = 0; j < cnt; j++) {
 			disasm_inst(dwords + alu_off, level);
