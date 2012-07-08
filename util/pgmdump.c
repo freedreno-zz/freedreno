@@ -65,6 +65,61 @@ struct fs_header {
 	uint32_t unknown1;
 };
 
+struct attribute {
+	uint32_t unknown1;
+	uint32_t reg;       /* seems to be the register the fetch instruction loads to */
+	uint32_t const_idx; /* the CONST() indx value for sampler */
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t unknown4;
+	uint32_t unknown5;
+	char name[];
+};
+
+struct uniform {
+	uint32_t unknown1;
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t unknown4;
+	uint32_t const_base; /* const base register (for uniforms that take more than one const reg, ie. matrices) */
+	uint32_t unknown6;
+	uint32_t const_reg; /* the const register holding the value */
+	uint32_t unknown7;
+	uint32_t unknown8;
+	uint32_t unknown9;
+	char name[];
+};
+
+struct sampler {
+	uint32_t unknown1;
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t unknown4;
+	uint32_t unknown5;
+	uint32_t unknown6;
+	uint32_t const_idx; /* the CONST() indx value for the sampler */
+	uint32_t unknown7;
+	char name[];
+};
+
+struct varying {
+	uint32_t unknown1;
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t reg;       /* the register holding the value (on entry to the shader) */
+	char name[];
+};
+
+struct constant {
+	uint32_t unknown1;
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t const_idx;
+	float val[];
+};
+
+static int full_dump = 1;
+
 char *find_sect_end(char *buf, int sz)
 {
 	uint8_t *ptr = (uint8_t *)buf;
@@ -162,6 +217,15 @@ static void dump_float(char *buf, int sz)
 #define is_ok_ascii(c) \
 	(isascii(c) && ((c == '\t') || !iscntrl(c)))
 
+static void clean_ascii(char *buf, int sz)
+{
+	uint8_t *ptr = (uint8_t *)buf;
+	uint8_t *end = ptr + sz;
+	while (ptr < end) {
+		*(ptr++) ^= 0xff;
+	}
+}
+
 static void dump_ascii(char *buf, int sz)
 {
 	uint8_t *ptr = (uint8_t *)buf;
@@ -199,9 +263,45 @@ void *next_sect(char **buf, int *sz, int *sect_size)
 	return sect;
 }
 
+static void dump_attribute(struct attribute *attrib)
+{
+	printf("\tR%d, CONST(%d): %s\n", attrib->reg,
+			attrib->const_idx, attrib->name);
+}
+
+static void dump_uniform(struct uniform *uniform)
+{
+	if (uniform->const_reg == -1) {
+		printf("\tC%d+: %s\n", uniform->const_base, uniform->name);
+	} else {
+		printf("\tC%d: %s\n", uniform->const_reg, uniform->name);
+	}
+}
+
+static void dump_sampler(struct sampler *sampler)
+{
+	printf("\tCONST(%d): %s\n", sampler->const_idx, sampler->name);
+}
+
+static void dump_varying(struct varying *varying)
+{
+	printf("\tR%d: %s\n", varying->reg, varying->name);
+}
+
+static void dump_constant(struct constant *constant)
+{
+	printf("\tC%d: %f, %f, %f, %f\n", constant->const_idx,
+			constant->val[0], constant->val[1],
+			constant->val[2], constant->val[3]);
+}
+
 void dump_program(char *buf, int sz)
 {
 	struct pgm_header *hdr;
+	struct attribute *attribs[32];  /* don't really know the upper limit.. */
+	struct uniform *uniforms[32];
+	struct sampler *samplers[32];
+	struct varying *varyings[32];
 	int i, sect_size;
 	uint8_t *ptr;
 
@@ -213,81 +313,117 @@ void dump_program(char *buf, int sz)
 	printf("\tuniforms:   %d\n", hdr->num_uniforms);
 	printf("\tsamplers:   %d\n", hdr->num_samplers);
 	printf("\tvaryings:   %d\n", hdr->num_varyings);
-	printf("as hex:\n");
-	dump_hex((void *)hdr, sect_size);
+	if (full_dump)
+		dump_hex((void *)hdr, sect_size);
+	printf("\n");
 
 	/* there seems to be two 0xba5eba11's at the end of the header: */
 	sz  -= 4;
 	buf += 4;
 
 	for (i = 0; (i < hdr->num_attribs) && (sz > 0); i++) {
-		ptr = next_sect(&buf, &sz, &sect_size);
-		printf("######## ATTRIBUTE: (size %d)\n", sect_size);
-		dump_ascii(ptr + 28, sect_size - 29);
-		printf("as hex:\n");
-		dump_hex(ptr, sect_size);
-		free(ptr);
+		attribs[i] = next_sect(&buf, &sz, &sect_size);
+		clean_ascii(attribs[i]->name, sect_size - 28);
+		if (full_dump) {
+			printf("######## ATTRIBUTE: (size %d)\n", sect_size);
+			dump_attribute(attribs[i]);
+			dump_hex((char *)attribs[i], sect_size);
+		}
 	}
 
 	for (i = 0; (i < hdr->num_uniforms) && (sz > 0); i++) {
-		ptr = next_sect(&buf, &sz, &sect_size);
-		printf("######## UNIFORM: (size %d)\n", sect_size);
-		dump_ascii(ptr + 40, sect_size - 42);
-		printf("as hex:\n");
-		dump_hex(ptr, sect_size);
-		free(ptr);
+		uniforms[i] = next_sect(&buf, &sz, &sect_size);
+		clean_ascii(uniforms[i]->name, sect_size - 41);
+		if (full_dump) {
+			printf("######## UNIFORM: (size %d)\n", sect_size);
+			dump_uniform(uniforms[i]);
+			dump_hex((char *)uniforms[i], sect_size);
+		}
 	}
 
 	for (i = 0; (i < hdr->num_samplers) && (sz > 0); i++) {
-		ptr = next_sect(&buf, &sz, &sect_size);
-		printf("######## SAMPLER: (size %d)\n", sect_size);
-		dump_ascii(ptr + 32, sect_size - 34);
-		printf("as hex:\n");
-		dump_hex(ptr, sect_size);
-		free(ptr);
+		samplers[i] = next_sect(&buf, &sz, &sect_size);
+		clean_ascii(samplers[i]->name, sect_size - 33);
+		if (full_dump) {
+			printf("######## SAMPLER: (size %d)\n", sect_size);
+			dump_sampler(samplers[i]);
+			dump_hex((char *)samplers[i], sect_size);
+		}
 	}
 
 	for (i = 0; (i < hdr->num_varyings) && (sz > 0); i++) {
-		ptr = next_sect(&buf, &sz, &sect_size);
-		printf("######## VARYING: (size %d)\n", sect_size);
-		dump_ascii(ptr + 16, sect_size - 17);
-		printf("as hex:\n");
-		dump_hex(ptr, sect_size);
-		free(ptr);
+		varyings[i] = next_sect(&buf, &sz, &sect_size);
+		clean_ascii(varyings[i]->name, sect_size - 16);
+		if (full_dump) {
+			printf("######## VARYING: (size %d)\n", sect_size);
+			dump_varying(varyings[i]);
+			dump_hex((char *)varyings[i], sect_size);
+		}
 	}
 
 	/* dump vertex shaders: */
 	for (i = 0; i < 3; i++) {
 		struct vs_header *vs_hdr = next_sect(&buf, &sz, &sect_size);
-		int j;
+		struct constant *constants[32];
+		int j, level = 0;
 
-		printf("\n#######################################################\n");
-		printf("######## VS%d HEADER: (size %d)\n", i, sect_size);
-		printf("as hex:\n");
-		dump_hex((void *)vs_hdr, sect_size);
+		printf("\n");
+
+		if (full_dump) {
+			printf("#######################################################\n");
+			printf("######## VS%d HEADER: (size %d)\n", i, sect_size);
+			dump_hex((void *)vs_hdr, sect_size);
+		}
 
 		for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
-			ptr = next_sect(&buf, &sz, &sect_size);
-			printf("######## VS%d CONST: (size=%d)\n", i, sect_size);
-			printf("as hex:\n");
-			dump_hex(ptr, sect_size);
-			printf("as float:\n");
-			dump_float(ptr, sect_size);
-			free(ptr);
+			constants[j] = next_sect(&buf, &sz, &sect_size);
+			if (full_dump) {
+				printf("######## VS%d CONST: (size=%d)\n", i, sect_size);
+				dump_constant(constants[j]);
+				dump_hex((char *)constants[j], sect_size);
+			}
 		}
 
 		ptr = next_sect(&buf, &sz, &sect_size);
 		printf("######## VS%d SHADER: (size=%d)\n", i, sect_size);
-		dump_hex(ptr, sect_size);
-		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, 1, SHADER_VERTEX);
+		if (full_dump) {
+			dump_hex(ptr, sect_size);
+			level = 1;
+		} else {
+			/* dump attr/uniform/sampler/varying/const summary: */
+			for (j = 0; j < hdr->num_varyings; j++) {
+				dump_varying(varyings[j]);
+			}
+			for (j = 0; j < hdr->num_attribs; j++) {
+				dump_attribute(attribs[j]);
+			}
+			for (j = 0; j < hdr->num_uniforms; j++) {
+				dump_uniform(uniforms[j]);
+			}
+			for (j = 0; j < hdr->num_samplers; j++) {
+				dump_sampler(samplers[j]);
+			}
+			for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
+				if (constants[j]->unknown2 == 0) {
+					dump_constant(constants[j]);
+				}
+			}
+			printf("\n");
+		}
+		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_VERTEX);
 		free(ptr);
 
 		for (j = 0; j < vs_hdr->unknown9; j++) {
 			ptr = next_sect(&buf, &sz, &sect_size);
-			printf("######## VS%d CONST?: (size=%d)\n", i, sect_size);
-			printf("as hex:\n");
-			dump_hex(ptr, sect_size);
+			if (full_dump) {
+				printf("######## VS%d CONST?: (size=%d)\n", i, sect_size);
+				dump_hex(ptr, sect_size);
+			}
 			free(ptr);
+		}
+
+		for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
+			free(constants[j]);
 		}
 
 		free(vs_hdr);
@@ -296,41 +432,75 @@ void dump_program(char *buf, int sz)
 	/* dump fragment shaders: */
 	for (i = 0; i < 1; i++) {
 		struct fs_header *fs_hdr = next_sect(&buf, &sz, &sect_size);
-		int j;
+		struct constant *constants[32];
+		int j, level = 0;
 
-		printf("\n#######################################################\n");
-		printf("######## FS%d HEADER: (size %d)\n", i, sect_size);
-		printf("as hex:\n");
-		dump_hex((void *)fs_hdr, sect_size);
+		printf("\n");
+
+		if (full_dump) {
+			printf("#######################################################\n");
+			printf("######## FS%d HEADER: (size %d)\n", i, sect_size);
+			dump_hex((void *)fs_hdr, sect_size);
+		}
 
 		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
-			ptr = next_sect(&buf, &sz, &sect_size);
-			printf("######## FS%d CONST: (size=%d)\n", i, sect_size);
-			printf("as hex:\n");
-			dump_hex(ptr, sect_size);
-			printf("as float:\n");
-			dump_float(ptr, sect_size);
-			free(ptr);
+			constants[j] = next_sect(&buf, &sz, &sect_size);
+			if (full_dump) {
+				printf("######## FS%d CONST: (size=%d)\n", i, sect_size);
+				dump_constant(constants[j]);
+				dump_hex((char *)constants[j], sect_size);
+			}
 		}
 
 		ptr = next_sect(&buf, &sz, &sect_size);
 		printf("######## FS%d SHADER: (size=%d)\n", i, sect_size);
-		dump_hex(ptr, sect_size);
-		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, 1, SHADER_FRAGMENT);
+		if (full_dump) {
+			dump_hex(ptr, sect_size);
+			level = 1;
+		} else {
+			/* dump attr/uniform/sampler/varying/const summary: */
+			for (j = 0; j < hdr->num_varyings; j++) {
+				dump_varying(varyings[j]);
+			}
+			for (j = 0; j < hdr->num_attribs; j++) {
+				dump_attribute(attribs[j]);
+			}
+			for (j = 0; j < hdr->num_uniforms; j++) {
+				dump_uniform(uniforms[j]);
+			}
+			for (j = 0; j < hdr->num_samplers; j++) {
+				dump_sampler(samplers[j]);
+			}
+			for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
+				if (constants[j]->unknown2 == 0) {
+					dump_constant(constants[j]);
+				}
+			}
+			printf("\n");
+		}
+		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_FRAGMENT);
 		free(ptr);
+
+		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
+			free(constants[j]);
+		}
 
 		free(fs_hdr);
 	}
+
+	if (!full_dump)
+		return;
 
 	/* dump ascii version of shader program: */
 	ptr = next_sect(&buf, &sz, &sect_size);
 	printf("\n#######################################################\n");
 	printf("######## SHADER SRC: (size=%d)\n", sect_size);
 	dump_ascii(ptr, sect_size);
+	free(ptr);
 
 	/* dump remaining sections (there shouldn't be any): */
 	while (sz > 0) {
-		uint8_t *ptr = next_sect(&buf, &sz, &sect_size);
+		ptr = next_sect(&buf, &sz, &sect_size);
 		printf("######## section (size=%d)\n", sect_size);
 		printf("as hex:\n");
 		dump_hex(ptr, sect_size);
@@ -347,6 +517,14 @@ int main(int argc, char **argv)
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
 	int fd, sz, i;
+
+	/* lame argument parsing: */
+	if ((argc == 3) && !strcmp(argv[1], "--short")) {
+		/* only short dump, original shader, symbol table, and disassembly */
+		full_dump = 0;
+		argv++;
+		argc--;
+	}
 
 	if (argc != 2)
 		fprintf(stderr, "usage: %s testlog.rd\n", argv[0]);
@@ -366,7 +544,8 @@ int main(int argc, char **argv)
 
 		switch(type) {
 		case RD_TEST:
-			printf("test: %s\n", (char *)buf);
+			if (full_dump)
+				printf("test: %s\n", (char *)buf);
 			break;
 		case RD_VERT_SHADER:
 			printf("vertex shader:\n%s\n", (char *)buf);
