@@ -13,7 +13,7 @@ void main()
   vec4 v2 = texture2D(uSamp3, v1.xy);
   vec4 v3 = texture2D(uSamp2, vTexCoord0);
   vec4 v4 = v1.bgra * uVal;
-  vec4 v5 = v2.rabg * v3;
+  vec4 v5 = v2.rabg + v3;
   vec4 v6 = v4 * v5;
   gl_FragColor = v6 * uVal;
 }

@@ -37,7 +37,7 @@ void main()
   vec4 v8 = v1.xyxy + uVal;
   vec4 v9 = v2.wzzw * uVal;
   vec4 v10 = v1.xxxx * uVal2.x;
-  vec4 v11 = v2.yyyy * uVal3.y;
+  vec4 v11 = v2.wwww * uVal3.y;
   vec4 v12 = v3 + uVal.zzzz;
   vec4 v13 = v3 * uVal.w;
   vec4 v14 = v3.wwww * uVal4.z;

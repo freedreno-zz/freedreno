@@ -1,6 +1,4 @@
-more useful links:
-
-http://www.allhatter.com/showthread.php/61067-Programming-the-XPERIA-Play-GPU?s=03177c982e0b20577631cfcbe4ae1343
+random unorganized (and perhaps obsolete) notes from shader disassembly:
 
 --------------------------------------------------------------------------------
 
@@ -114,8 +112,6 @@ Which in theory gives:
 	2    ALU:	MULv	R1.x___ = -R1, C0
 01	ALLOC PARAM/PIXEL SIZE(0x0)
 02	EXEC_END ADDR(0x5) CNT(0x2)
-    dwords, so I assume it is partialy handled on src operand and partially
-    on dst?
 	3    ALU:	MAXv	export0.zy__ = R0, R0
 		   SQRT_IEEE	export0.__z_ = R1.xyzx
 	4    ALU:	MAXv	export0.___w = C1.xyzx, C1.xyzx
@@ -366,45 +362,6 @@ NOP
 			00001008 00002000 00000000
 				ALU:	140f8000 00000000 a1000000
 
-Interpretation of swizzle fields:
-
- bits 7..6 - chan[3] (w) swizzle
-      5..4 - chan[2] (z) swizzle
-      3..2 - chan[1] (y) swizzle
-      1..0 - chan[0] (x) swizzle
-
- chan[0]: 00 - x
-          01 - y
-          10 - z
-          11 - w
-
- chan[1]: 11 - x
-          00 - y
-          01 - z
-          10 - w
-
- chan[2]: 10 - x
-          11 - y
-          00 - z
-          01 - w
-
- chan[3]: 00 - w
-          01 - x
-          10 - y
-          11 - z
-
-Note: .x is same as .xxxx, .y same as .yyyy, etc.  So must be some other
-bit(s) which control MULv, whether the operand is interpreted as vector
-or scalar.
-
-Shader Outputs:
-    vertex shader:
-        R30: gl_Position
-        R31: gl_PointSize
-    fragment shader:
-        R0:  gl_FragColor
-        ??:  gl_FragData   --   TODO
-
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -478,6 +435,19 @@ void main()
 	gl_PointSize = dot(v, v);
 	gl_Position = aPosition0;
 }
+
+00052003 00011000 c2000000	00050000 00011000 c2000000	00  CF:	ADDR(0x3) CNT(0x2)
+1a181000 00000688 00000000	1a080000 00000688 00000000		FETCH:	SAMPLE	R1 = R0 CONST(1)			; aPosition0
+14282000 40000ff8 00000000	14080000 40000ff8 00000000		FETCH:	SAMPLE	R2 = R0 CONST(2)			; aPosition1
+00005005 00001000 c4000000	00000000 00001000 c4000000	01  CF:	ADDR(0x5) CNT(0x5)
+140f803e 00000000 e2010100	14008020 00000000 20000000		ALU:	MAXv	R30 = R1, R1				; gl_Position
+14210000 00b1b16c e2010102	14200000 0000006c 20000002		ALU:	MAXv	R0.x___ = R1.yyyy, R1.yyyy	; v.x = aPosition0.y
+																	MAXv	R0._y__ = R2.xxxx, R2.xxxx	; v.y = aPosition1.x
+14040000 201b1b00 22010100	14000000 20000000 20000000		ALU:	MAXv	R0.__z_ = C1.wwww, C1.wwww	; maybe clearing to zero?
+14010000 00003000 f0000000	14000000 00000000 20000000		ALU:	DOT3v	R0.x___ = R0, R0.xyyw
+1401803f 00000000 e2000000	14008020 00000000 20000000		ALU:	MAXv	R31.x___ = R0, R0			; gl_PointSize
+0000000a 00002000 00000000	00000000 00002000 00000000	02  CF:	ADDR(0xa) CNT(0x0)
+
 
 00	CF:	ADDR(0x3) CNT(0x2)				00052003 00011000 c2000000
 		FETCH:	SAMPLE	R1 = R0 CONST(1)		1a181000 00000688 00000000  aPosition0

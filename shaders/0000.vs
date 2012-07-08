@@ -1,7 +1,12 @@
-attribute vec4 aPosition;
+attribute vec4 aPosition0;
+attribute vec4 aPosition1;
 
 void main()
 {
-	gl_Position = aPosition;
+	vec2 v;
+	v.x = aPosition0.y;
+	v.y = aPosition1.x;
+	gl_PointSize = dot(v, v);
+	gl_Position = aPosition0;
 }
 
