@@ -279,7 +279,7 @@ void dump_program(char *buf, int sz)
 		ptr = next_sect(&buf, &sz, &sect_size);
 		printf("######## VS%d SHADER: (size=%d)\n", i, sect_size);
 		dump_hex(ptr, sect_size);
-		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, 1);
+		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, 1, SHADER_VERTEX);
 		free(ptr);
 
 		for (j = 0; j < vs_hdr->unknown9; j++) {
@@ -316,7 +316,7 @@ void dump_program(char *buf, int sz)
 		ptr = next_sect(&buf, &sz, &sect_size);
 		printf("######## FS%d SHADER: (size=%d)\n", i, sect_size);
 		dump_hex(ptr, sect_size);
-		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, 1);
+		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, 1, SHADER_FRAGMENT);
 		free(ptr);
 
 		free(fs_hdr);

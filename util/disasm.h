@@ -24,6 +24,11 @@
 #ifndef DISASM_H_
 #define DISASM_H_
 
-int disasm(uint32_t *dwords, int sizedwords, int level);
+enum shader_t {
+	SHADER_VERTEX,
+	SHADER_FRAGMENT,
+};
+
+int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
 
 #endif /* DISASM_H_ */

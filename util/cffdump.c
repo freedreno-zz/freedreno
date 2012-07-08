@@ -31,6 +31,7 @@
 #include <string.h>
 
 #include "redump.h"
+#include "disasm.h"
 
 
 /* ************************************************************************* */
@@ -549,13 +550,21 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t start = dwords[1] >> 16;
 	uint32_t size  = dwords[1] & 0xffff;
 	const char *type;
+	enum shader_t disasm_type;
 	switch (dwords[0]) {
-	case 0:   type = "vertex";   break;
-	case 1:   type = "fragment"; break;
-	default: type = "<unknown>"; break;
+	case 0:
+		type = "vertex";
+		disasm_type = SHADER_VERTEX;
+		break;
+	case 1:
+		type = "fragment";
+		disasm_type = SHADER_FRAGMENT;
+		break;
+	default:
+		type = "<unknown>"; break;
 	}
 	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
-	disasm(dwords + 2, sizedwords - 2, level);
+	disasm(dwords + 2, sizedwords - 2, level, disasm_type);
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
