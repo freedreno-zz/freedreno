@@ -472,6 +472,10 @@ void dump_program(char *buf, int sz)
 				dump_sampler(samplers[j]);
 			}
 			for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
+				// seems unknown2==1 means compiler internal const..
+				// seems to start counting again from C0, but I guess
+				// the number should be added to the last non-internal
+				// const??  Well, that is a theory..
 				if (constants[j]->unknown2 == 0) {
 					dump_constant(constants[j]);
 				}

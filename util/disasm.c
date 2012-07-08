@@ -55,28 +55,68 @@ static const char *levels[] = {
 #define print_unknown 1   /* raw with already identified bitfields masked */
 
 /*
- * 00      CF:     ADDR(0x2) CNT(0x5)
- *         00955002 00001000 c4000000
- *                 ALU:    10002021 1ffff688 00000002
- *                           ^ ^ ^
- *                           | | +-- src reg (coord, bit offset 5)
- *                           | +---- dst register
- *                           +------ sampler # (CONST(n)
- *                 ALU:    10101021 1ffff688 00000002
- *                 ALU:    10200001 1ffff688 00000002
- *                 ALU:    140f0001 00220000 e0020100
- *                                ^   ^^^^    ^ ^ ^
- *                                |    | |    | | +-- src2
- *                                |    | |    | +---- src1
- *                                |    | |    +------ op, 0:ADDv, 1:MULv
- *                                |    | +----------- src2 swizzle
- *                                |    +------------- src1 swizzle
- *                                |
- *                                +------------------ dst
- *                 ALU:    140f0000 00008800 e1000100
- * 01      CF:     ADDR(0x7) CNT(0x1)
- *         00001007 00002000 00000000
- *                 ALU:    140f8000 00430000 a1000000
+ * FETCH instruction format:
+ * ----- ----------- ------
+ *
+ *     dword0:   0..4    -  <UNKNOWN>
+ *               5..9?   -  src register
+ *              9?..11   -  <UNKNOWN>
+ *              12..16?  -  dest register
+ *             17?..19   -  <UNKNOWN>
+ *              20..23?  -  const
+ *
+ *     dword1:   0..31   -  <UNKNOWN>
+ *
+ *     dword2:   0..31   -  <UNKNOWN>
+ *
+ *
+ * ALU instruction format:
+ * --- ----------- ------
+ *
+ *     dword0:   0..4?   -  vector dest register
+ *              5?..7    -  <UNKNOWN>
+ *               8..12?  -  scalar dest register
+ *             13?..14   -  <UNKNOWN>
+ *                15     -  export flag
+ *              16..19   -  vector dest write mask (xyzw)
+ *              20..23   -  scalar dest write mask (xyzw)
+ *              24..26   -  <UNKNOWN>
+ *              27..31   -  scalar operation
+ *
+ *     dword 1:  0..1    -  scalar src1 channel
+ *                            00 - x
+ *                            01 - y
+ *                            10 - z
+ *                            11 - w
+ *               2..5    -  <UNKNOWN>
+ *     maybe upper bits of scalar src1??
+ *               6..7    -  scalar src2 channel
+ *                            01 - x
+ *                            10 - y
+ *                            11 - z
+ *                            00 - w
+ *               8..15   -  vector src2 swizzle
+ *              16..23   -  vector src1 swizzle
+ *                24     -  <UNKNOWN>
+ *                25     -  vector src2 negate
+ *                26     -  vector src1 negate
+ *              27..31   -  <UNKNOWN>
+ *
+ *     dword 2:  0..4?   -  src3 register
+ *              5?..6    -  <UNKNOWN>
+ *                7      -  src3 abs (assumed)
+ *               8..12?  -  src2 register
+ *             13?..14   -  <UNKNOWN>
+ *                15     -  src2 abs
+ *              16..20?  -  src1 register
+ *             21?.. 22  -  <UNKNOWN>
+ *                23     -  src1 abs
+ *              24..28   -  vector operation
+ *                29     -  src3 type/bank
+ *                            0 - Constant bank (C)  -  uniforms and consts
+ *                            1 - Register bank (R)  -  varyings and locals
+ *                30     -  vector src2 type/bank  (same as above)
+ *                31     -  vector src1 type/bank  (same as above)
  *
  * Interpretation of swizzle fields:
  *
@@ -109,69 +149,10 @@ static const char *levels[] = {
  * bit(s) which control MULv, whether the operand is interpreted as vector
  * or scalar.
  *
- * FETCH instruction format:
- * ----- ----------- ------
- *
- *     dword0:   0..4    -  <UNKNOWN>
- *               5..9?   -  src register
- *              9?..11   -  <UNKNOWN>
- *              12..16?  -  dest register
- *             17?..19   -  <UNKNOWN>
- *              20..23?  -  const
- *
- *     dword1:   0..31   -  <UNKNOWN>
- *
- *     dword2:   0..31   -  <UNKNOWN>
- *
- *
- * ALU instruction format:
- * --- ----------- ------
- *
- *     dword0:   0..4?   -  vector dest register
- *              5?..7    -  <UNKNOWN>
- *               8..12?  -  scalar dest register
- *             13?..14   -  <UNKNOWN>
- *                15     -  export flag
- *              16..19   -  vector dest write mask (xyzw)
- *              20..23   -  scalar dest write mask (xyzw)
- *              24..31   -  <UNKNOWN>
- *
- *     dword 1:  0..1    -  scalar src1 channel
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *               2..5    -  <UNKNOWN>
- *     maybe upper bits of scalar src1??
- *               6..7    -  scalar src2 channel
- *                            01 - x
- *                            10 - y
- *                            11 - z
- *                            00 - w
- *               8..15   -  vector src2 swizzle
- *              16..23   -  vector src1 swizzle
- *                24     -  <UNKNOWN>
- *                25     -  vector src2 negate
- *                26     -  vector src1 negate
- *              27..31   -  <UNKNOWN>
- *
- *     dword 2:  0..4?   -  scalar src2 register
- *              5?..7    -  <UNKNOWN>
- *               8..12?  -  vector src2 register
- *             13?..15   -  <UNKNOWN>
- *              16..20?  -  vector src1 register
- *             21?.. 23  -  <UNKNOWN>
- *              24..28   -  vector operation
- *                29     -  <UNKNOWN>  (maybe, or maybe part of vector opc?)
- *                30     -  vector src2 type/bank
- *                            0 - Constant bank (C)  -  uniforms and consts
- *                            1 - Register bank (R)  -  varyings and locals
- *                31     -  vector src1 type/bank  (same as above)
- *
  *  still looking for:
  *    scalar opc
- *    scalar src1 reg
- *    scalar src1/src2 type/back
+ *    scalar src1 reg?  Is there one?
+ *    scalar src1 type/back
  *    scalar src1/src2 negate?
  *
  * Shader Outputs:
@@ -193,7 +174,7 @@ static void print_srcreg(uint32_t num, uint32_t type,
 {
 	if (negate)
 		printf("-");
-	printf("%c%u", type ? 'C' : 'R', num);
+	printf("%c%u", type ? 'R' : 'C', num);
 	if (swiz) {
 		int i;
 		printf(".");
@@ -209,7 +190,7 @@ static void print_scalar_srcreg(uint32_t num, uint32_t type,
 {
 	if (negate)
 		printf("-");
-	printf("%c%u.%c", type ? 'C' : 'R', num, chan_names[chan]);
+	printf("%c%u.%c", type ? 'R' : 'C', num, chan_names[chan]);
 }
 
 static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
@@ -225,51 +206,110 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
 	}
 }
 
+enum vector_opc {
+	ADDv = 0,
+	MULv = 1,
+	MAXv = 2,
+	MINv = 3,
+	FLOORv = 10,
+	MULADDv = 11,
+	DOT4v = 15,
+	DOT3v = 16,
+};
+
+enum scalar_opc {
+	MOV = 2,
+	EXP2 = 7,
+	LOG2 = 8,
+	RCP = 9,
+	RSQ = 11,
+	SQRT = 20,
+	MUL = 21,
+	ADD = 22,
+};
+
+struct {
+	uint32_t num_srcs;
+	const char *name;
+} vector_instructions[0x20] = {
+#define INSTR(name, num_srcs) [name] = { num_srcs, #name }
+		INSTR(ADDv, 2),
+		INSTR(MULv, 2),
+		INSTR(MAXv, 2),
+		INSTR(MINv, 2),
+		INSTR(FLOORv, 2),
+		INSTR(MULADDv, 3),
+		INSTR(DOT4v, 2),
+		INSTR(DOT3v, 2),
+}, scalar_instructions[0x20] = {
+		INSTR(MOV, 1),  // todo doesn’t seem was can do a scalar max?? so I assume this is a single src MOV
+		INSTR(EXP2, 1),
+		INSTR(LOG2, 1),
+		INSTR(RCP, 1),
+		INSTR(RSQ, 1),
+		INSTR(SQRT, 1),
+		INSTR(MUL, 2),
+		INSTR(ADD, 2),
+};
+
 static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 {
-	static const char *op_names[0x20] = {
-			[0]  = "ADDv",
-			[1]  = "MULv",
-			[2]  = "MAXv",
-			[11] = "MULADDv",
-			[15] = "DOT4v",
-			[16] = "DOT3v",
-	};
-	uint32_t dst_reg   =   dwords[0] & REG_MASK;
-	uint32_t dst_mask  =  (dwords[0] >> 16) & 0xf;
-	uint32_t dst_exp   =  (dwords[0] & 0x00008000);
-	uint32_t src1_swiz =  (dwords[1] >> 16) & 0xff;
-	uint32_t src2_swiz =  (dwords[1] >> 8) & 0xff;
-	uint32_t src1_neg  =  (dwords[1] & 0x04000000);
-	uint32_t src2_neg  =  (dwords[1] & 0x02000000);
-	uint32_t src1_reg  =  (dwords[2] >> 16) & REG_MASK;
-	uint32_t src2_reg  =  (dwords[2] >> 8) & REG_MASK;
-	uint32_t src1_type = !(dwords[2] & 0x80000000);
-	uint32_t src2_type = !(dwords[2] & 0x40000000);
-	uint32_t opc       =  (dwords[2] >> 24) & 0x1f;
+	uint32_t dst_reg   =  dwords[0] & REG_MASK;
+	uint32_t dst_mask  = (dwords[0] >> 16) & 0xf;
+	uint32_t dst_exp   = (dwords[0] & 0x00008000);
+	uint32_t src1_swiz = (dwords[1] >> 16) & 0xff;
+	uint32_t src2_swiz = (dwords[1] >> 8) & 0xff;
+	uint32_t src1_neg  = (dwords[1] & 0x04000000);
+	uint32_t src2_neg  = (dwords[1] & 0x02000000);
+	uint32_t src1_reg  = (dwords[2] >> 16) & REG_MASK;
+	uint32_t src2_reg  = (dwords[2] >> 8) & REG_MASK;
+	uint32_t src3_reg  =  dwords[2] & REG_MASK;
+	uint32_t src1_type = (dwords[2] >> 31) & 0x1;
+	uint32_t src2_type = (dwords[2] >> 30) & 0x1;
+	uint32_t src3_type = (dwords[2] >> 29) & 0x1;
+	uint32_t vector_op = (dwords[2] >> 24) & 0x1f;
+	// TODO add abs
 
 	printf("%s", levels[level]);
 	if (print_raw) {
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
 	if (print_unknown) {
-		printf("%08x %08x %08x\t",
-				dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
-						(0xf << 20) | 0x00008000),
-				dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
-						0x02000000 | 0x3 | (0x3 << 6)),
-				dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
-						0x80000000 | 0x40000000 | (0x1f << 24) | REG_MASK));
+		/* hmm, possibly some of these bits have other meanings if
+		 * no scalar op.. like MULADDv?
+		 */
+		if (dwords[0] & 0x00f00000) {
+			printf("%08x %08x %08x\t",
+					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
+							(0xf << 20) | 0x00008000),
+					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
+							0x02000000 | 0x3 | (0x3 << 6)),
+					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
+							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
+							(0x1f << 24) | REG_MASK));
+		} else {
+			printf("%08x %08x %08x\t",
+					dwords[0] & ~(REG_MASK | (0xf << 16) | 0x00008000),
+					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
+							0x02000000),
+					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
+							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
+							(0x1f << 24) | REG_MASK));
+		}
 	}
 
-	if (op_names[opc]) {
-		printf("\tALU:\t%s\t", op_names[opc]);
+	if (vector_instructions[vector_op].name) {
+		printf("\tALU:\t%s\t", vector_instructions[vector_op].name);
 	} else {
-		printf("\tALU:\tOP(%u)\t", opc);
+		printf("\tALU:\tOP(%u)\t", vector_op);
 	}
 
 	print_dstreg(dst_reg, dst_mask, dst_exp);
 	printf(" = ");
+	if (vector_instructions[vector_op].num_srcs == 3) {
+		print_srcreg(src3_reg, src3_type, 0, 0);
+		printf(", ");
+	}
 	print_srcreg(src1_reg, src1_type, src1_swiz, src1_neg);
 	printf(", ");
 	print_srcreg(src2_reg, src2_type, src2_swiz, src2_neg);
@@ -301,20 +341,17 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 
 	if (dwords[0] & 0x00f00000) {
 		/* 2nd optional scalar op: */
-		uint32_t sdst_reg   =  (dwords[0] >> 8) & REG_MASK;
-		uint32_t sdst_mask  =  (dwords[0] >> 20) & 0xf;
-		uint32_t ssrc1_neg  = 0; // XXX
-		uint32_t ssrc1_reg  = 99; // XXX
-		uint32_t ssrc1_type = 0; // XXX
-		uint32_t ssrc1_chan =   dwords[1] & 0x3;
-		uint32_t ssrc2_neg  = 0; // XXX
-		uint32_t ssrc2_reg  =   dwords[2] & REG_MASK;
-		uint32_t ssrc2_type = 0; // XXX
-		uint32_t ssrc2_chan = ((dwords[1] >> 6) + 3) & 0x3;
+		uint32_t scalar_op = (dwords[0] >> 27) & 0x1f;
+		uint32_t sdst_reg  =  (dwords[0] >> 8) & REG_MASK;
+		uint32_t sdst_mask =  (dwords[0] >> 20) & 0xf;
+		uint32_t src4_neg  = 0; // XXX
+		uint32_t src4_reg  = 99; // XXX
+		uint32_t src4_type = 1; // XXX
+		uint32_t src4_chan =   dwords[1] & 0x3;
 
-		// looking for 1 reg,  (4 or 5 bits?)
-		//             2 types (1 bit each)
-		//             op code (?? bits)
+		/* possibly these are used for 3 src ops, like MULADDv?? */
+		uint32_t src3_neg  = 0; // XXX
+		uint32_t src3_chan = ((dwords[1] >> 6) + 3) & 0x3;
 
 		printf("%s", levels[level]);
 		if (print_raw)
@@ -322,14 +359,19 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 		if (print_unknown)
 			printf("                          \t");
 
-		// XXX not sure the opcode..
-		printf("\t    \t????\t");
+		if (scalar_instructions[scalar_op].name) {
+			printf("\t    \t%s\t", scalar_instructions[scalar_op].name);
+		} else {
+			printf("\t    \tOP(%u)\t", scalar_op);
+		}
 
-		print_dstreg(sdst_reg, sdst_mask, 0);  // can scalar op export??
+		print_dstreg(sdst_reg, sdst_mask, dst_exp);
 		printf(" = ");
-		print_scalar_srcreg(ssrc1_reg, ssrc1_type, ssrc1_chan, ssrc1_neg);
-		printf(", ");
-		print_scalar_srcreg(ssrc2_reg, ssrc2_type, ssrc2_chan, ssrc2_neg);
+		print_scalar_srcreg(src3_reg, src3_type, src3_chan, src3_neg);
+		if (scalar_instructions[scalar_op].num_srcs == 2) {
+			printf(", ");
+			print_scalar_srcreg(src4_reg, src4_type, src4_chan, src4_neg);
+		}
 		printf("\n");
 	}
 
@@ -422,7 +464,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 		}
 
 		/* make sure we parsed the expected amount of data: */
-		while (alu_off != (off * 3)) {
+		while (alu_off < (off * 3)) {
 			printf("?");
 			disasm_inst(dwords + alu_off, level, type);
 			alu_off += 3;
@@ -437,7 +479,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 	}
 
 	/* make sure we parsed the expected amount of data: */
-	while (alu_off != sizedwords) {
+	while (alu_off < sizedwords) {
 		printf("?");
 		disasm_inst(dwords + alu_off, level, type);
 		alu_off += 3;
