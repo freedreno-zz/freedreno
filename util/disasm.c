@@ -100,7 +100,10 @@ static const char *levels[] = {
  *                24     -  <UNKNOWN>
  *                25     -  vector src2 negate
  *                26     -  vector src1 negate
- *              27..31   -  <UNKNOWN>
+ *                27     -  predicate case (1 - execute if true, 0 - execute if false)
+ *                28     -  predicate (conditional execution)
+ *              29..31   -  <UNKNOWN>
+ *
  *
  *     dword 2:  0..4?   -  src3 register
  *              5?..6    -  <UNKNOWN>
@@ -166,6 +169,7 @@ static const char *levels[] = {
  */
 
 #define REG_MASK 0x1f	/* not really sure how many regs yet */
+#define ADDR_MASK 0xfff
 
 static const char chan_names[] = { 'x', 'y', 'z', 'w' };
 
@@ -203,6 +207,30 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
 			printf("%c", (mask & 0x1) ? chan_names[i] : '_');
 			mask >>= 1;
 		}
+	}
+}
+
+static void print_export_comment(uint32_t num, enum shader_t type)
+{
+	const char *name = NULL;
+	switch (type) {
+	case SHADER_VERTEX:
+		switch (num) {
+		case 30: name = "gl_Position";  break;
+		case 31: name = "gl_PointSize"; break;
+		}
+		break;
+	case SHADER_FRAGMENT:
+		switch (num) {
+		case 0:  name = "gl_FragColor"; break;
+		}
+		break;
+	}
+	/* if we had a symbol table here, we could look
+	 * up the name of the varying..
+	 */
+	if (name) {
+		printf("\t; %s", name);
 	}
 }
 
@@ -257,6 +285,8 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 	uint32_t dst_reg   =  dwords[0] & REG_MASK;
 	uint32_t dst_mask  = (dwords[0] >> 16) & 0xf;
 	uint32_t dst_exp   = (dwords[0] & 0x00008000);
+	uint32_t sdst_reg  = (dwords[0] >> 8) & REG_MASK; /* scalar dst */
+	uint32_t sdst_mask = (dwords[0] >> 20) & 0xf;
 	uint32_t src1_swiz = (dwords[1] >> 16) & 0xff;
 	uint32_t src2_swiz = (dwords[1] >> 8) & 0xff;
 	uint32_t src1_neg  = (dwords[1] & 0x04000000);
@@ -269,6 +299,7 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 	uint32_t src3_type = (dwords[2] >> 29) & 0x1;
 	uint32_t vector_op = (dwords[2] >> 24) & 0x1f;
 	// TODO add abs
+	// TODO add pred
 
 	printf("%s", levels[level]);
 	if (print_raw) {
@@ -281,7 +312,7 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 		if (dwords[0] & 0x00f00000) {
 			printf("%08x %08x %08x\t",
 					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
-							(0xf << 20) | 0x00008000),
+							(0xf << 20) | 0x00008000 | (0x1f << 27)),
 					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
 							0x02000000 | 0x3 | (0x3 << 6)),
 					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
@@ -314,36 +345,14 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 	printf(", ");
 	print_srcreg(src2_reg, src2_type, src2_swiz, src2_neg);
 
-	if (dst_exp) {
-		const char *name = NULL;
-		switch (type) {
-		case SHADER_VERTEX:
-			switch (dst_reg) {
-			case 30: name = "gl_Position";  break;
-			case 31: name = "gl_PointSize"; break;
-			}
-			break;
-		case SHADER_FRAGMENT:
-			switch (dst_reg) {
-			case 0:  name = "gl_FragColor"; break;
-			}
-			break;
-		}
-		/* if we had a symbol table here, we could look
-		 * up the name of the varying..
-		 */
-		if (name) {
-			printf("\t; %s", name);
-		}
-	}
+	if (dst_exp)
+		print_export_comment(dst_reg, type);
 
 	printf("\n");
 
-	if (dwords[0] & 0x00f00000) {
+	if (sdst_mask || !dst_mask) {
 		/* 2nd optional scalar op: */
-		uint32_t scalar_op = (dwords[0] >> 27) & 0x1f;
-		uint32_t sdst_reg  =  (dwords[0] >> 8) & REG_MASK;
-		uint32_t sdst_mask =  (dwords[0] >> 20) & 0xf;
+		uint32_t scalar_op =  (dwords[0] >> 27) & 0x1f;
 		uint32_t src4_neg  = 0; // XXX
 		uint32_t src4_reg  = 99; // XXX
 		uint32_t src4_type = 1; // XXX
@@ -368,10 +377,12 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 		print_dstreg(sdst_reg, sdst_mask, dst_exp);
 		printf(" = ");
 		print_scalar_srcreg(src3_reg, src3_type, src3_chan, src3_neg);
-		if (scalar_instructions[scalar_op].num_srcs == 2) {
+		if (scalar_instructions[scalar_op].num_srcs != 1) {
 			printf(", ");
 			print_scalar_srcreg(src4_reg, src4_type, src4_chan, src4_neg);
 		}
+		if (dst_exp)
+			print_export_comment(sdst_reg, type);
 		printf("\n");
 	}
 
@@ -422,6 +433,7 @@ static int disasm_inst(uint32_t *dwords, int level, enum shader_t type)
 static int disasm_cf(uint32_t *dwords, int level,
 		uint32_t idx, uint32_t off, uint32_t cnt)
 {
+	uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
 	printf("%s", levels[level]);
 	if (print_raw) {
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
@@ -429,18 +441,29 @@ static int disasm_cf(uint32_t *dwords, int level,
 	if (print_unknown) {
 		printf("%08x %08x %08x\t",
 				dwords[0] & ~0x0000ffff,
-				dwords[1] & ~0x00000000,
+				dwords[1] & ~((ADDR_MASK << 16)),
 				dwords[2] & ~0x00000000);
 	}
-	printf("%02d  CF:\tADDR(0x%x) CNT(0x%x)\n", idx, off, cnt);
+	printf("%02d  CF:\tADDR(0x%x) CNT(0x%x) ADDR2(0x%x)\n",
+			idx, off, cnt, addr2);
 	return 0;
 }
 
 int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 {
-	uint32_t first_off = (dwords[0] & 0xfff);
-	uint32_t i = 0, j;
+	uint32_t first_off = (dwords[0] & ADDR_MASK);
+	uint32_t i, j;
 	uint32_t alu_off = first_off * 3;
+
+	if (print_raw) {
+		for (i = 0; i < first_off; i++) {
+			uint32_t idx = i * 3;
+			uint32_t off = (dwords[idx] & ADDR_MASK);
+			uint32_t cnt = (dwords[idx] & 0xf000) >> 12;
+			disasm_cf(&dwords[idx], level, i, off, cnt);
+		}
+		printf("\n");
+	}
 
 	/* seems to be special case for last CF: */
 	if (dwords[0] == 0) {
@@ -453,7 +476,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 	/* decode CF instructions: */
 	for (i = 0; i < first_off; i++) {
 		uint32_t idx = i * 3;
-		uint32_t off = (dwords[idx] & 0x0fff);
+		uint32_t off = (dwords[idx] & ADDR_MASK);
 		uint32_t cnt = (dwords[idx] & 0xf000) >> 12;
 
 		/* seems to be special case for last CF: */
