@@ -4,5 +4,5 @@ varying float foo;
 
 void main()
 {
-	gl_FragColor = exp(uColor);
+	gl_FragColor = foo * uColor;
 }
