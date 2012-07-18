@@ -251,6 +251,7 @@ enum scalar_opc {
 	LOG2 = 8,
 	RCP = 9,
 	RSQ = 11,
+	PSETE = 13,    /* called PRED_SETE in r600isa.pdf */
 	SQRT = 20,
 	MUL = 21,
 	ADD = 22,
@@ -275,6 +276,7 @@ struct {
 		INSTR(LOG2, 1),
 		INSTR(RCP, 1),
 		INSTR(RSQ, 1),
+		INSTR(PSETE, 1),
 		INSTR(SQRT, 1),
 		INSTR(MUL, 2),
 		INSTR(ADD, 2),
@@ -298,6 +300,8 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 	uint32_t src2_type = (dwords[2] >> 30) & 0x1;
 	uint32_t src3_type = (dwords[2] >> 29) & 0x1;
 	uint32_t vector_op = (dwords[2] >> 24) & 0x1f;
+	uint32_t vector_pred = (dwords[1] >> 28) & 0x1;
+	uint32_t vector_case = (dwords[1] >> 27) & 0x1;
 	// TODO add abs
 	// TODO add pred
 
@@ -314,7 +318,7 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
 							(0xf << 20) | 0x00008000 | (0x1f << 27)),
 					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
-							0x02000000 | 0x3 | (0x3 << 6)),
+							0x02000000 | 0x3 | (0x3 << 6) | (0x1 << 27) | (0x1 << 28)),
 					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
 							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
 							(0x1f << 24) | REG_MASK));
@@ -322,7 +326,7 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 			printf("%08x %08x %08x\t",
 					dwords[0] & ~(REG_MASK | (0xf << 16) | 0x00008000),
 					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
-							0x02000000),
+							0x02000000 | (0x1 << 27) | (0x1 << 28)),
 					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
 							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
 							(0x1f << 24) | REG_MASK));
@@ -330,10 +334,19 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 	}
 
 	if (vector_instructions[vector_op].name) {
-		printf("\tALU:\t%s\t", vector_instructions[vector_op].name);
+		printf("\tALU:\t%s", vector_instructions[vector_op].name);
 	} else {
-		printf("\tALU:\tOP(%u)\t", vector_op);
+		printf("\tALU:\tOP(%u)", vector_op);
 	}
+
+	if (vector_pred) {
+		/* seems to work similar to conditional execution in ARM instruction
+		 * set, so let's use a similar syntax for now:
+		 */
+		printf(vector_case ? "EQ" : "NE");
+	}
+
+	printf("\t");
 
 	print_dstreg(dst_reg, dst_mask, dst_exp);
 	printf(" = ");
