@@ -443,82 +443,88 @@ static int disasm_inst(uint32_t *dwords, int level, enum shader_t type)
 	return ret;
 }
 
-static int disasm_cf(uint32_t *dwords, int level,
-		uint32_t idx, uint32_t off, uint32_t cnt)
+struct cf {
+	uint32_t  addr;
+	uint32_t  cnt;
+	uint32_t *dwords;
+};
+
+static void print_cf(struct cf *cf, int idx, int level)
 {
-	uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
 	printf("%s", levels[level]);
 	if (print_raw) {
-		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
+		if (cf->dwords) {
+			printf("%08x %08x %08x\t",
+					cf->dwords[0], cf->dwords[1], cf->dwords[2]);
+		} else {
+			printf("                          \t");
+		}
 	}
 	if (print_unknown) {
+		if (cf->dwords) {
 		printf("%08x %08x %08x\t",
-				dwords[0] & ~0x0000ffff,
-				dwords[1] & ~((ADDR_MASK << 16)),
-				dwords[2] & ~0x00000000);
+				cf->dwords[0] & ~0x0000ffff,
+				cf->dwords[1] & ~((ADDR_MASK << 16)),
+				cf->dwords[2] & ~0x00000000);
+		} else {
+			printf("                          \t");
+		}
 	}
-	printf("%02d  CF:\tADDR(0x%x) CNT(0x%x) ADDR2(0x%x)\n",
-			idx, off, cnt, addr2);
-	return 0;
+	printf("%02d  CF:\tADDR(0x%x) CNT(0x%x)\n", idx, cf->addr, cf->cnt);
+}
+
+static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
+{
+	int idx = 0;
+	int off = 0;
+
+	do {
+		struct cf *cf;
+		uint32_t addr  =  dwords[0] & ADDR_MASK;
+		uint32_t cnt   = (dwords[0] >> 12) & 0xf;
+		uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
+		uint32_t cnt2  = (dwords[1] >> 28) & 0xf;
+
+		if (!off)
+			off = addr ? addr : addr2;
+
+		cf = &cfs[idx++];
+		cf->dwords = dwords;
+		cf->addr = addr;
+		cf->cnt  = cnt;
+
+		if (addr2 || cnt2) {
+			cf = &cfs[idx++];
+			cf->dwords = NULL;
+			cf->addr = addr2;
+			cf->cnt  = cnt2;
+		}
+
+		dwords += 3;
+
+	} while (--off > 0);
+
+	return idx;
 }
 
 int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 {
-	uint32_t first_off = (dwords[0] & ADDR_MASK);
-	uint32_t i, j;
-	uint32_t alu_off = first_off * 3;
+	static struct cf cfs[64];
+	int off, idx, max_idx;
 
-	if (print_raw) {
-		for (i = 0; i < first_off; i++) {
-			uint32_t idx = i * 3;
-			uint32_t off = (dwords[idx] & ADDR_MASK);
-			uint32_t cnt = (dwords[idx] & 0xf000) >> 12;
-			disasm_cf(&dwords[idx], level, i, off, cnt);
-		}
-		printf("\n");
-	}
+	idx = 0;
+	max_idx = parse_cf(dwords, sizedwords, cfs);
 
-	/* seems to be special case for last CF: */
-	if (dwords[0] == 0) {
-		uint32_t off = 1;
-		uint32_t cnt = (sizedwords / 3) - off;
-		alu_off = off * 3;
-		disasm_cf(dwords, level, 0, off, cnt);
-	}
+	while (idx < max_idx) {
+		struct cf *cf = &cfs[idx++];
+		uint32_t i;
 
-	/* decode CF instructions: */
-	for (i = 0; i < first_off; i++) {
-		uint32_t idx = i * 3;
-		uint32_t off = (dwords[idx] & ADDR_MASK);
-		uint32_t cnt = (dwords[idx] & 0xf000) >> 12;
+		print_cf(cf, idx, level);
 
-		/* seems to be special case for last CF: */
-		if (dwords[idx] == 0) {
-			printf("?");
-			off = alu_off / 3;
-			cnt = (sizedwords / 3) - off;
-		}
-
-		/* make sure we parsed the expected amount of data: */
-		while (alu_off < (off * 3)) {
-			printf("?");
+		for (i = 0; i < cf->cnt; i++) {
+			uint32_t alu_off = (cf->addr + i) * 3;
 			disasm_inst(dwords + alu_off, level, type);
-			alu_off += 3;
 		}
-
-		disasm_cf(&dwords[idx], level, i, off, cnt);
-
-		for (j = 0; j < cnt; j++) {
-			disasm_inst(dwords + alu_off, level, type);
-			alu_off += 3;
-		}
-	}
-
-	/* make sure we parsed the expected amount of data: */
-	while (alu_off < sizedwords) {
-		printf("?");
-		disasm_inst(dwords + alu_off, level, type);
-		alu_off += 3;
 	}
 
 	return 0;
