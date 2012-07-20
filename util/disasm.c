@@ -280,6 +280,7 @@ struct {
 		INSTR(SQRT, 1),
 		INSTR(MUL, 2),
 		INSTR(ADD, 2),
+#undef INSTR
 };
 
 static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
@@ -443,9 +444,25 @@ static int disasm_inst(uint32_t *dwords, int level, enum shader_t type)
 	return ret;
 }
 
+enum cf_opc {
+	EXEC = 0x10,
+	EXEC_END = 0x20,
+};
+
+struct {
+	uint32_t exec;
+	const char *name;
+} cf_instructions[0xff] = {
+#define INSTR(name, num_srcs) [name] = { num_srcs, #name }
+		INSTR(EXEC, 1),
+		INSTR(EXEC_END, 1),
+#undef INSTR
+};
+
 struct cf {
 	uint32_t  addr;
 	uint32_t  cnt;
+	uint32_t  op;
 	uint32_t *dwords;
 };
 
@@ -470,7 +487,13 @@ static void print_cf(struct cf *cf, int idx, int level)
 			printf("                          \t");
 		}
 	}
-	printf("%02d  CF:\tADDR(0x%x) CNT(0x%x)\n", idx, cf->addr, cf->cnt);
+	printf("%02d  ", idx);
+	if (cf_instructions[cf->op].name) {
+		printf("%s", cf_instructions[cf->op].name);
+	} else {
+		printf("CF(0x%x)", cf->op);
+	}
+	printf(":\tADDR(0x%x) CNT(0x%x)\n", cf->addr, cf->cnt);
 }
 
 static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
@@ -482,8 +505,10 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		struct cf *cf;
 		uint32_t addr  =  dwords[0] & ADDR_MASK;
 		uint32_t cnt   = (dwords[0] >> 12) & 0xf;
+		uint32_t op    = (dwords[1] >> 8) & 0xff;
 		uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
 		uint32_t cnt2  = (dwords[1] >> 28) & 0xf;
+		uint32_t op2   = (dwords[2] >> 24) & 0xff;
 
 		if (!off)
 			off = addr ? addr : addr2;
@@ -492,12 +517,14 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		cf->dwords = dwords;
 		cf->addr = addr;
 		cf->cnt  = cnt;
+		cf->op   = op;
 
 		if (addr2 || cnt2) {
 			cf = &cfs[idx++];
 			cf->dwords = NULL;
 			cf->addr = addr2;
 			cf->cnt  = cnt2;
+			cf->op   = op2;
 		}
 
 		dwords += 3;
@@ -521,9 +548,11 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 
 		print_cf(cf, idx, level);
 
-		for (i = 0; i < cf->cnt; i++) {
-			uint32_t alu_off = (cf->addr + i) * 3;
-			disasm_inst(dwords + alu_off, level, type);
+		if (cf_instructions[cf->op].exec) {
+			for (i = 0; i < cf->cnt; i++) {
+				uint32_t alu_off = (cf->addr + i) * 3;
+				disasm_inst(dwords + alu_off, level, type);
+			}
 		}
 	}
 
