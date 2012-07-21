@@ -55,6 +55,25 @@ static const char *levels[] = {
 #define print_unknown 1   /* raw with already identified bitfields masked */
 
 /*
+ * CF instruction format:
+ * -- ----------- ------
+ *
+ *     dword0:   0..11   -  addr 1
+ *              12..15   -  count 1
+ *              16..23   -  sequence.. 2 bits per instruction in the EXEC
+ *                          clause, the low bit seems to control FETCH vs
+ *                          ALU instruction type, not sure what the high
+ *                          bit controls yet
+ *              24..31   -  <UNKNOWN>  (could be sequence2?)
+ *
+ *     dword1:   0..7    -  <UNKNOWN>
+ *               8..15?  -  op 1
+ *              16..27   -  addr 2
+ *              28..31   -  count 2
+ *
+ *     dword2:   0..23   -  <UNKNOWN>
+ *              24..31   -  op 2
+ *
  * FETCH instruction format:
  * ----- ----------- ------
  *
@@ -428,23 +447,8 @@ static int disasm_fetch(uint32_t *dwords, int level)
 	return 0;
 }
 
-static int disasm_inst(uint32_t *dwords, int level, enum shader_t type)
-{
-	int ret = 0;
-
-	/* I don't know if this is quite the right way to separate
-	 * instruction types or not:
-	 */
-	if (dwords[2] & 0xf0000000) {
-		ret = disasm_alu(dwords, level, type);
-	} else {
-		ret = disasm_fetch(dwords, level);
-	}
-
-	return ret;
-}
-
 enum cf_opc {
+	NOP = 0x00,
 	EXEC = 0x10,
 	EXEC_END = 0x20,
 };
@@ -454,6 +458,7 @@ struct {
 	const char *name;
 } cf_instructions[0xff] = {
 #define INSTR(name, num_srcs) [name] = { num_srcs, #name }
+		INSTR(NOP, 0),
 		INSTR(EXEC, 1),
 		INSTR(EXEC_END, 1),
 #undef INSTR
@@ -464,6 +469,12 @@ struct cf {
 	uint32_t  cnt;
 	uint32_t  op;
 	uint32_t *dwords;
+
+	/* I think the same as SERIALIZE() in optimize-for-adreno.pdf
+	 * screenshot.. but that name doesn't really make sense to me, as
+	 * it appears to differentiate fetch vs alu instructions:
+	 */
+	uint32_t  sequence;
 };
 
 static void print_cf(struct cf *cf, int idx, int level)
@@ -480,9 +491,10 @@ static void print_cf(struct cf *cf, int idx, int level)
 	if (print_unknown) {
 		if (cf->dwords) {
 		printf("%08x %08x %08x\t",
-				cf->dwords[0] & ~0x0000ffff,
-				cf->dwords[1] & ~((ADDR_MASK << 16)),
-				cf->dwords[2] & ~0x00000000);
+				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0xff << 16)),
+				cf->dwords[1] & ~((ADDR_MASK << 16) |
+						(0xf << 28) | (0xff << 8)),
+				cf->dwords[2] & ~((0xff << 24)));
 		} else {
 			printf("                          \t");
 		}
@@ -505,6 +517,7 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		struct cf *cf;
 		uint32_t addr  =  dwords[0] & ADDR_MASK;
 		uint32_t cnt   = (dwords[0] >> 12) & 0xf;
+		uint32_t seqn1 = (dwords[0] >> 16) & 0xff;
 		uint32_t op    = (dwords[1] >> 8) & 0xff;
 		uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
 		uint32_t cnt2  = (dwords[1] >> 28) & 0xf;
@@ -518,14 +531,14 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		cf->addr = addr;
 		cf->cnt  = cnt;
 		cf->op   = op;
+		cf->sequence = seqn1;
 
-		if (addr2 || cnt2) {
-			cf = &cfs[idx++];
-			cf->dwords = NULL;
-			cf->addr = addr2;
-			cf->cnt  = cnt2;
-			cf->op   = op2;
-		}
+		cf = &cfs[idx++];
+		cf->dwords = NULL;
+		cf->addr = addr2;
+		cf->cnt  = cnt2;
+		cf->op   = op2;
+		cf->sequence = 0;  // XXX probably not.. need to find examples
 
 		dwords += 3;
 
@@ -544,6 +557,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 
 	while (idx < max_idx) {
 		struct cf *cf = &cfs[idx++];
+		uint32_t sequence = cf->sequence;
 		uint32_t i;
 
 		print_cf(cf, idx, level);
@@ -551,7 +565,12 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 		if (cf_instructions[cf->op].exec) {
 			for (i = 0; i < cf->cnt; i++) {
 				uint32_t alu_off = (cf->addr + i) * 3;
-				disasm_inst(dwords + alu_off, level, type);
+				if (sequence & 0x1) {
+					disasm_fetch(dwords + alu_off, level);
+				} else {
+					disasm_alu(dwords + alu_off, level, type);
+				}
+				sequence >>= 2;
 			}
 		}
 	}
