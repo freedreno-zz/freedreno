@@ -55,42 +55,6 @@ static const char *levels[] = {
 #define print_unknown 1   /* raw with already identified bitfields masked */
 
 /*
- * CF instruction format:
- * -- ----------- ------
- *
- *     dword0:   0..11   -  addr 1
- *              12..15   -  count 1
- *              16..31   -  sequence.. 2 bits per instruction in the EXEC
- *                          clause, the low bit seems to control FETCH vs
- *                          ALU instruction type, the high bit seems to be
- *                          (S) modifier on instruction (which might make
- *                          the name SERIALIZE() in optimize-for-adreno.pdf
- *                          make sense.. although I don't quite understand
- *                          the meaning yet)
- *
- *     dword1:   0..7    -  <UNKNOWN>
- *               8..15?  -  op 1
- *              16..27   -  addr 2
- *              28..31   -  count 2
- *
- *     dword2:   0..23   -  <UNKNOWN>
- *              24..31   -  op 2
- *
- * FETCH instruction format:
- * ----- ----------- ------
- *
- *     dword0:   0..4    -  <UNKNOWN>
- *               5..10?  -  src register
- *                11     -  <UNKNOWN>
- *              12..17?  -  dest register
- *             18?..19   -  <UNKNOWN>
- *              20..23?  -  const
- *
- *     dword1:   0..31   -  <UNKNOWN>
- *
- *     dword2:   0..31   -  <UNKNOWN>
- *
- *
  * ALU instruction format:
  * --- ----------- ------
  *
@@ -141,7 +105,7 @@ static const char *levels[] = {
  *                30     -  vector src2 type/bank  (same as above)
  *                31     -  vector src1 type/bank  (same as above)
  *
- * Interpretation of swizzle fields:
+ * Interpretation of ALU swizzle fields:
  *
  *       bits 7..6 - chan[3] (w) swizzle
  *            5..4 - chan[2] (z) swizzle
@@ -319,7 +283,6 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	uint32_t vector_pred = (dwords[1] >> 28) & 0x1;
 	uint32_t vector_case = (dwords[1] >> 27) & 0x1;
 	// TODO add abs
-	// TODO add pred
 
 	printf("%s", levels[level]);
 	if (print_raw) {
@@ -420,14 +383,49 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	return 0;
 }
 
+/*
+ * FETCH instruction format:
+ * ----- ----------- ------
+ *
+ *     dword0:   0..4?   -  fetch operation
+ *               5..10?  -  src register
+ *                11     -  <UNKNOWN>
+ *              12..17?  -  dest register
+ *             18?..19   -  <UNKNOWN>
+ *              20..23?  -  const
+ *              24..25   -  <UNKNOWN>  (maybe part of const?)
+ *              26..31   -  src swizzle (z/y/x)
+ *                            00 - x
+ *                            01 - y
+ *                            10 - z
+ *                            11 - w
+ *
+ *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
+ *                          low two bits of each determine position src channel,
+ *                          high bit set 1 to mask
+ *              12..31   -  <UNKNOWN>
+ *
+ *     dword2:   0..31   -  <UNKNOWN>
+ */
+
+struct {
+	const char *name;
+} fetch_instructions[0x1f] = {
+#define INSTR(opc, name) [opc] = { name }
+		INSTR(0x00, "VERTEX"),
+		INSTR(0x01, "SAMPLE"),
+#undef INSTR
+};
+
 static int disasm_fetch(uint32_t *dwords, int level, int sync)
 {
-	// XXX I guess there are other sorts of fetches too??
-	// XXX write mask?  swizzle?
-	static const char *fetch_type = "SAMPLE";
 	uint32_t src_const = (dwords[0] >> 20) & 0xf;
-	uint32_t src_reg = (dwords[0] >> 5) & REG_MASK;
-	uint32_t dst_reg = (dwords[0] >> 12) & REG_MASK;
+	uint32_t src_reg   = (dwords[0] >> 5) & REG_MASK;
+	uint32_t dst_reg   = (dwords[0] >> 12) & REG_MASK;
+	uint32_t fetch_opc =  dwords[0] & 0x1f;
+	uint32_t src_swiz  = (dwords[0] >> 26) & 0x3f;
+	uint32_t dst_swiz  =  dwords[1] & 0xfff;
+	int i;
 
 	printf("%s", levels[level]);
 	if (print_raw) {
@@ -435,15 +433,59 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 	}
 	if (print_unknown) {
 		printf("%08x %08x %08x\t",
-				dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) | (0xf << 20)),
-				dwords[1] & ~0x00000000,
+				dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
+						(0xf << 20) | 0x1f | (0x3f << 26)),
+				dwords[1] & ~(0xfff),
 				dwords[2] & ~0x00000000);
 	}
 
-	printf("      %sFETCH:\t%s\tR%u = R%u CONST(%u)\n", sync ? "(S)" : "   ",
-			fetch_type, dst_reg, src_reg, src_const);
+	printf("      %sFETCH:\t", sync ? "(S)" : "   ");
+	if (fetch_instructions[fetch_opc].name) {
+		printf(fetch_instructions[fetch_opc].name);
+	} else {
+		printf("OP(%u)", fetch_opc);
+	}
+
+	printf("\tR%u.", dst_reg);
+	for (i = 0; i < 4; i++) {
+		printf("%c", dst_swiz & 0x4 ? '_' : chan_names[dst_swiz & 0x3]);
+		dst_swiz >>= 3;
+	}
+
+	printf(" = R%u.", src_reg);
+	for (i = 0; i < 3; i++) {
+		printf("%c", chan_names[src_swiz & 0x3]);
+		src_swiz >>= 2;
+	}
+
+	printf(" CONST(%u)\n", src_const);
+
 	return 0;
 }
+
+/*
+ * CF instruction format:
+ * -- ----------- ------
+ *
+ *     dword0:   0..11   -  addr 1
+ *              12..15   -  count 1
+ *              16..31   -  sequence.. 2 bits per instruction in the EXEC
+ *                          clause, the low bit seems to control FETCH vs
+ *                          ALU instruction type, the high bit seems to be
+ *                          (S) modifier on instruction (which might make
+ *                          the name SERIALIZE() in optimize-for-adreno.pdf
+ *                          make sense.. although I don't quite understand
+ *                          the meaning yet)
+ *
+ *     dword1:   0..7    -  <UNKNOWN>
+ *               8..15?  -  op 1
+ *              16..27   -  addr 2
+ *              28..31   -  count 2
+ *
+ *     dword2:   0..23   -  <UNKNOWN>
+ *              24..31   -  op 2
+ *
+ */
 
 struct {
 	uint32_t exec;
@@ -455,6 +497,7 @@ struct {
 		INSTR(0x20, "EXEC_END ADDR(0x%x) CNT(0x%x)", 1),
 		INSTR(0xc2, "ALLOC COORD SIZE(0x%x)", 0),
 		INSTR(0xc4, "ALLOC PARAM/PIXEL SIZE(0x%x)", 0),
+#undef INSTR
 };
 
 struct cf {
@@ -539,6 +582,13 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 
 	return idx;
 }
+
+/*
+ * The adreno shader microcode consists of two parts:
+ *   1) A CF (control-flow) program, at the header of the compiled shader,
+ *      which refers to ALU/FETCH instructions that follow it by address.
+ *   2) ALU and FETCH instructions
+ */
 
 int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 {
