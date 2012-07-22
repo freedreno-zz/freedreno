@@ -60,11 +60,10 @@ static const char *levels[] = {
  *
  *     dword0:   0..11   -  addr 1
  *              12..15   -  count 1
- *              16..23   -  sequence.. 2 bits per instruction in the EXEC
+ *              16..31   -  sequence.. 2 bits per instruction in the EXEC
  *                          clause, the low bit seems to control FETCH vs
  *                          ALU instruction type, not sure what the high
  *                          bit controls yet
- *              24..31   -  <UNKNOWN>  (could be sequence2?)
  *
  *     dword1:   0..7    -  <UNKNOWN>
  *               8..15?  -  op 1
@@ -78,10 +77,10 @@ static const char *levels[] = {
  * ----- ----------- ------
  *
  *     dword0:   0..4    -  <UNKNOWN>
- *               5..9?   -  src register
- *              9?..11   -  <UNKNOWN>
- *              12..16?  -  dest register
- *             17?..19   -  <UNKNOWN>
+ *               5..10?  -  src register
+ *                11     -  <UNKNOWN>
+ *              12..17?  -  dest register
+ *             18?..19   -  <UNKNOWN>
  *              20..23?  -  const
  *
  *     dword1:   0..31   -  <UNKNOWN>
@@ -92,10 +91,10 @@ static const char *levels[] = {
  * ALU instruction format:
  * --- ----------- ------
  *
- *     dword0:   0..4?   -  vector dest register
- *              5?..7    -  <UNKNOWN>
- *               8..12?  -  scalar dest register
- *             13?..14   -  <UNKNOWN>
+ *     dword0:   0..5?   -  vector dest register
+ *              6?..7    -  <UNKNOWN>
+ *               8..13?  -  scalar dest register
+ *                14     -  <UNKNOWN>
  *                15     -  export flag
  *              16..19   -  vector dest write mask (xyzw)
  *              20..23   -  scalar dest write mask (xyzw)
@@ -107,8 +106,7 @@ static const char *levels[] = {
  *                            01 - y
  *                            10 - z
  *                            11 - w
- *               2..5    -  <UNKNOWN>
- *     maybe upper bits of scalar src1??
+ *               2..5    -  <UNKNOWN>  (maybe upper bits of scalar src1??)
  *               6..7    -  scalar src2 channel
  *                            01 - x
  *                            10 - y
@@ -124,14 +122,14 @@ static const char *levels[] = {
  *              29..31   -  <UNKNOWN>
  *
  *
- *     dword 2:  0..4?   -  src3 register
- *              5?..6    -  <UNKNOWN>
+ *     dword 2:  0..5?   -  src3 register
+ *                6      -  <UNKNOWN>
  *                7      -  src3 abs (assumed)
- *               8..12?  -  src2 register
- *             13?..14   -  <UNKNOWN>
+ *               8..13?  -  src2 register
+ *                14     -  <UNKNOWN>
  *                15     -  src2 abs
- *              16..20?  -  src1 register
- *             21?.. 22  -  <UNKNOWN>
+ *              16..21?  -  src1 register
+ *                22     -  <UNKNOWN>
  *                23     -  src1 abs
  *              24..28   -  vector operation
  *                29     -  src3 type/bank
@@ -167,14 +165,9 @@ static const char *levels[] = {
  *                10 - y
  *                11 - z
  *
- * Note: .x is same as .xxxx, .y same as .yyyy, etc.  So must be some other
- * bit(s) which control MULv, whether the operand is interpreted as vector
- * or scalar.
- *
  *  still looking for:
- *    scalar opc
  *    scalar src1 reg?  Is there one?
- *    scalar src1 type/back
+ *    scalar src1 type/bank
  *    scalar src1/src2 negate?
  *
  * Shader Outputs:
@@ -187,7 +180,7 @@ static const char *levels[] = {
  *
  */
 
-#define REG_MASK 0x1f	/* not really sure how many regs yet */
+#define REG_MASK 0x3f	/* not really sure how many regs yet */
 #define ADDR_MASK 0xfff
 
 static const char chan_names[] = { 'x', 'y', 'z', 'w' };
@@ -235,8 +228,8 @@ static void print_export_comment(uint32_t num, enum shader_t type)
 	switch (type) {
 	case SHADER_VERTEX:
 		switch (num) {
-		case 30: name = "gl_Position";  break;
-		case 31: name = "gl_PointSize"; break;
+		case 62: name = "gl_Position";  break;
+		case 63: name = "gl_PointSize"; break;
 		}
 		break;
 	case SHADER_FRAGMENT:
@@ -333,7 +326,7 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 		/* hmm, possibly some of these bits have other meanings if
 		 * no scalar op.. like MULADDv?
 		 */
-		if (dwords[0] & 0x00f00000) {
+		if (sdst_mask || !dst_mask) {
 			printf("%08x %08x %08x\t",
 					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
 							(0xf << 20) | 0x00008000 | (0x1f << 27)),
@@ -491,7 +484,7 @@ static void print_cf(struct cf *cf, int idx, int level)
 	if (print_unknown) {
 		if (cf->dwords) {
 		printf("%08x %08x %08x\t",
-				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0xff << 16)),
+				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0x5555 << 16)),
 				cf->dwords[1] & ~((ADDR_MASK << 16) |
 						(0xf << 28) | (0xff << 8)),
 				cf->dwords[2] & ~((0xff << 24)));
@@ -517,7 +510,7 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		struct cf *cf;
 		uint32_t addr  =  dwords[0] & ADDR_MASK;
 		uint32_t cnt   = (dwords[0] >> 12) & 0xf;
-		uint32_t seqn1 = (dwords[0] >> 16) & 0xff;
+		uint32_t seqn1 = (dwords[0] >> 16) & 0xffff;
 		uint32_t op    = (dwords[1] >> 8) & 0xff;
 		uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
 		uint32_t cnt2  = (dwords[1] >> 28) & 0xf;
