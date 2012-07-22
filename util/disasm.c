@@ -440,21 +440,16 @@ static int disasm_fetch(uint32_t *dwords, int level)
 	return 0;
 }
 
-enum cf_opc {
-	NOP = 0x00,
-	EXEC = 0x10,
-	EXEC_END = 0x20,
-};
-
 struct {
 	uint32_t exec;
-	const char *name;
+	const char *fmt;
 } cf_instructions[0xff] = {
-#define INSTR(name, num_srcs) [name] = { num_srcs, #name }
-		INSTR(NOP, 0),
-		INSTR(EXEC, 1),
-		INSTR(EXEC_END, 1),
-#undef INSTR
+#define INSTR(opc, fmt, exec) [opc] = { exec, fmt }
+		INSTR(0x00, "NOP", 0),
+		INSTR(0x10, "EXEC ADDR(0x%x) CNT(0x%x)", 1),
+		INSTR(0x20, "EXEC_END ADDR(0x%x) CNT(0x%x)", 1),
+		INSTR(0xc2, "ALLOC COORD SIZE(0x%x)", 0),
+		INSTR(0xc4, "ALLOC PARAM/PIXEL SIZE(0x%x)", 0),
 };
 
 struct cf {
@@ -493,12 +488,12 @@ static void print_cf(struct cf *cf, int idx, int level)
 		}
 	}
 	printf("%02d  ", idx);
-	if (cf_instructions[cf->op].name) {
-		printf("%s", cf_instructions[cf->op].name);
+	if (cf_instructions[cf->op].fmt) {
+		printf(cf_instructions[cf->op].fmt, cf->addr, cf->cnt);
 	} else {
-		printf("CF(0x%x)", cf->op);
+		printf("CF(0x%x) ADDR(0x%x) CNT(0x%x)", cf->op, cf->addr, cf->cnt);
 	}
-	printf(":\tADDR(0x%x) CNT(0x%x)\n", cf->addr, cf->cnt);
+	printf("\n");
 }
 
 static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
