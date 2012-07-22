@@ -2,6 +2,8 @@
 vec4 aPosition0 = vec4(1.2,2.0,3.0,4.0);
 attribute vec4 aPosition1;
 attribute vec3 aPosition2;
+varying vec4 vColor1;
+varying vec4 vColor2;
 
 void main()
 {
@@ -23,6 +25,9 @@ void main()
 	}
 
 	f = dot(v1, v2);
+
+	vColor1 = v1;
+	vColor2 = v2;
 
 	gl_PointSize = f;
 	gl_Position = f * v1 * v2;

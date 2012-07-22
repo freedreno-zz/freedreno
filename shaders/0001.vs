@@ -2,6 +2,8 @@
 vec4 aPosition0 = vec4(1.2,2.0,3.0,4.0);
 attribute vec4 aPosition1;
 attribute vec3 aPosition2;
+varying vec4 vColor1;
+varying vec4 vColor2;
 
 void main()
 {
@@ -21,6 +23,9 @@ void main()
 	} else {
 		v2 = aPosition1.wzyx;
 	}
+
+	vColor1 = v1;
+	vColor2 = v2;
 
 	f = dot(v1, v2);
 
