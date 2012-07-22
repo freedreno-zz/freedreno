@@ -62,8 +62,11 @@ static const char *levels[] = {
  *              12..15   -  count 1
  *              16..31   -  sequence.. 2 bits per instruction in the EXEC
  *                          clause, the low bit seems to control FETCH vs
- *                          ALU instruction type, not sure what the high
- *                          bit controls yet
+ *                          ALU instruction type, the high bit seems to be
+ *                          (S) modifier on instruction (which might make
+ *                          the name SERIALIZE() in optimize-for-adreno.pdf
+ *                          make sense.. although I don't quite understand
+ *                          the meaning yet)
  *
  *     dword1:   0..7    -  <UNKNOWN>
  *               8..15?  -  op 1
@@ -295,7 +298,7 @@ struct {
 #undef INSTR
 };
 
-static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
+static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 {
 	uint32_t dst_reg   =  dwords[0] & REG_MASK;
 	uint32_t dst_mask  = (dwords[0] >> 16) & 0xf;
@@ -346,10 +349,12 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 		}
 	}
 
+	printf("      %sALU:\t", sync ? "(S)" : "   ");
+
 	if (vector_instructions[vector_op].name) {
-		printf("\tALU:\t%s", vector_instructions[vector_op].name);
+		printf(vector_instructions[vector_op].name);
 	} else {
-		printf("\tALU:\tOP(%u)", vector_op);
+		printf("OP(%u)", vector_op);
 	}
 
 	if (vector_pred) {
@@ -415,7 +420,7 @@ static int disasm_alu(uint32_t *dwords, int level, enum shader_t type)
 	return 0;
 }
 
-static int disasm_fetch(uint32_t *dwords, int level)
+static int disasm_fetch(uint32_t *dwords, int level, int sync)
 {
 	// XXX I guess there are other sorts of fetches too??
 	// XXX write mask?  swizzle?
@@ -435,8 +440,8 @@ static int disasm_fetch(uint32_t *dwords, int level)
 				dwords[2] & ~0x00000000);
 	}
 
-	printf("\tFETCH:\t%s\tR%u = R%u CONST(%u)\n", fetch_type, dst_reg,
-			src_reg, src_const);
+	printf("      %sFETCH:\t%s\tR%u = R%u CONST(%u)\n", sync ? "(S)" : "   ",
+			fetch_type, dst_reg, src_reg, src_const);
 	return 0;
 }
 
@@ -479,7 +484,7 @@ static void print_cf(struct cf *cf, int idx, int level)
 	if (print_unknown) {
 		if (cf->dwords) {
 		printf("%08x %08x %08x\t",
-				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0x5555 << 16)),
+				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0xffff << 16)),
 				cf->dwords[1] & ~((ADDR_MASK << 16) |
 						(0xf << 28) | (0xff << 8)),
 				cf->dwords[2] & ~((0xff << 24)));
@@ -554,9 +559,9 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 			for (i = 0; i < cf->cnt; i++) {
 				uint32_t alu_off = (cf->addr + i) * 3;
 				if (sequence & 0x1) {
-					disasm_fetch(dwords + alu_off, level);
+					disasm_fetch(dwords + alu_off, level, sequence & 0x2);
 				} else {
-					disasm_alu(dwords + alu_off, level, type);
+					disasm_alu(dwords + alu_off, level, sequence & 0x2, type);
 				}
 				sequence >>= 2;
 			}
