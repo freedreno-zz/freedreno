@@ -34,6 +34,10 @@ AM_MAINTAINER_MODE
 # Enable quiet compiles on automake 1.11.
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
+# Initialize lex/yacc:
+AM_PROG_LEX
+AC_PROG_YACC
+
 # Initialize libtool
 AC_PROG_LIBTOOL
 
@@ -80,5 +84,6 @@ AC_SUBST(WARN_CFLAGS)
 
 AC_CONFIG_FILES([
 	Makefile
+	asm/Makefile
 	tests/Makefile])
 AC_OUTPUT

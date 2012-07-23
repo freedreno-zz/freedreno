@@ -21,21 +21,24 @@
 #  SOFTWARE.
 #
 
-ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
-
-SUBDIRS = . asm tests
-
-libfreedreno_la_LTLIBRARIES  = libfreedreno.la
-libfreedreno_ladir           = $(libdir)
-libfreedreno_la_LDFLAGS      = -no-undefined
-libfreedreno_la_LIBADD       = 
-libfreedreno_la_CFLAGS       = \
+AM_CFLAGS = \
 	-O0 -g \
 	$(WARN_CFLAGS) \
-	-I$(top_srcdir)/../includes \
 	-I$(top_srcdir)
 
-libfreedreno_la_SOURCES      = \
-	bmp.c \
-	kgsl.c \
-	freedreno.c
+AM_LDFLAGS = \
+	-static-libtool-libs
+
+AM_YFLAGS = -d -p asm_yy
+AM_LFLAGS = -o$(LEX_OUTPUT_ROOT).c
+
+BUILT_SOURCES = parser.h
+
+noinst_PROGRAMS = fdasm
+noinst_LTLIBRARIES = libasm.la
+
+fdasm_SOURCES = main.c
+fdasm_LDADD   = libasm.la
+
+libasm_la_SOURCES = lexer.l parser.y
+
