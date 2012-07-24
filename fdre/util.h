@@ -37,6 +37,9 @@ typedef enum {
 #define DEBUG_MSG(fmt, ...) \
 		do { printf("[D] "fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
+#define WARN_MSG(fmt, ...) \
+		do { printf("[W] "fmt " (%s:%d)\n", \
+				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 #define ERROR_MSG(fmt, ...) \
 		do { printf("[E] " fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)

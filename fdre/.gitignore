@@ -4,6 +4,8 @@ Makefile
 *.la
 *.lo
 *.o
+*.vo
+*.fo
 *~
 aclocal.m4
 autom4te.cache
