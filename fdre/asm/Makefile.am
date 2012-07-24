@@ -40,5 +40,5 @@ noinst_LTLIBRARIES = libasm.la
 fdasm_SOURCES = main.c
 fdasm_LDADD   = libasm.la
 
-libasm_la_SOURCES = lexer.l parser.y
+libasm_la_SOURCES = ir.c lexer.l parser.y
 

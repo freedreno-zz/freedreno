@@ -27,6 +27,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "ir.h"
+
+static struct ir_shader      *shader;  /* current shader program */
+static struct ir_cf          *cf;      /* current CF block */
+static struct ir_instruction *instr;   /* current ALU/FETCH instruction */
 
 extern int yydebug;
 
@@ -43,14 +48,18 @@ void yyerror(const char *error)
 }
 
 /* TODO return IR data structure */
-void fd_asm_parse(const char *src)
+struct ir_shader * fd_asm_parse(const char *src)
 {
 	YY_BUFFER_STATE buffer = asm_yy_scan_string(src);
 #ifdef YYDEBUG
 	yydebug = 1;
 #endif
-	yyparse();
+	if (yyparse()) {
+		ir_shader_destroy(shader);
+		shader = NULL;
+	}
 	asm_yy_delete_buffer(buffer);
+	return shader;
 }
 %}
 
@@ -58,6 +67,7 @@ void fd_asm_parse(const char *src)
 	int tok;
 	int num;
 	const char *str;
+	struct ir_register *reg;
 }
 
 %{
@@ -112,23 +122,30 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_MUL
 %token <tok> T_ADD
 
+%type <num> number
+%type <reg> reg alu_src_reg reg_or_const reg_or_export
+%type <tok> cf_alloc_type alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
+
 %error-verbose
 
 %start shader
 
 %%
 
-shader:            cfs
+shader:            { shader = ir_shader_create(); } cfs
 
 cfs:               cf
 |                  cf cfs
 
-cf:                T_NOP
-|                  cf_alloc
-|                  cf_exec
-|                  cf_exec_end
+cf:                { cf = ir_cf_create(shader, T_NOP); }      T_NOP
+|                  { cf = ir_cf_create(shader, T_ALLOC); }    cf_alloc
+|                  { cf = ir_cf_create(shader, T_EXEC); }     cf_exec
+|                  { cf = ir_cf_create(shader, T_EXEC_END); } cf_exec_end
 
-cf_alloc:          T_ALLOC cf_alloc_type T_SIZE '(' number ')'
+cf_alloc:          T_ALLOC cf_alloc_type T_SIZE '(' number ')' { 
+                       cf->alloc.type = $2;
+                       cf->alloc.size = $5;
+}
 
 cf_alloc_type:     T_COORD
 |                  T_PARAM_PIXEL
@@ -141,26 +158,45 @@ cf_exec_end:       T_EXEC_END cf_exec_addr_cnt instrs
 |                  T_EXEC_END cf_exec_addr_cnt
 |                  T_EXEC_END
 
-cf_exec_addr_cnt:  T_ADDR '(' number ')' T_CNT '(' number ')'
+cf_exec_addr_cnt:  T_ADDR '(' number ')' T_CNT '(' number ')' { 
+                       cf->exec.addr = $3;
+                       cf->exec.cnt = $7;
+}
 
 instrs:            instr
 |                  instr instrs
 
-instr:             fetch
-|                  alu
-|                  T_SYNC fetch
-|                  T_SYNC alu
+instr:             fetch_or_alu
+|                  T_SYNC fetch_or_alu { instr->sync = 1; }
 
-fetch:             T_FETCH fetch_sample
-|                  T_FETCH fetch_vertex
+fetch_or_alu:      { instr = ir_instr_create(cf, T_FETCH); } T_FETCH fetch
+|                  { instr = ir_instr_create(cf, T_ALU); }   T_ALU   alu
 
-fetch_sample:      T_SAMPLE reg '=' reg T_CONST '(' number ')'
+fetch:             fetch_sample
+|                  fetch_vertex
 
-fetch_vertex:      T_VERTEX reg '=' reg T_CONST '(' number ')'
+/* I'm assuming vertex and sample fetch have some different parameters, 
+ * so keeping them separate for now.. if it turns out to be same, then
+ * combine the grammar nodes later.
+ */
+fetch_sample:      T_SAMPLE reg '=' reg T_CONST '(' number ')' {
+                       instr->fetch.opc = $1;
+                       instr->fetch.constant = $7;
+}
+
+fetch_vertex:      T_VERTEX reg '=' reg T_CONST '(' number ')' {
+                       instr->fetch.opc = $1;
+                       instr->fetch.constant = $7;
+}
 
 /* TODO can we combine a 3src vec op w/ a scalar?? */
-alu:               T_ALU alu_vec
-|                  T_ALU alu_vec alu_scalar
+alu:               alu_vec {
+                       instr->alu.vector_opc = $1;
+}
+|                  alu_vec alu_scalar {
+                       instr->alu.vector_opc = $1;
+                       instr->alu.scalar_opc = $2;
+}
 
 alu_vec:           alu_vec_3src_op reg_or_export '=' alu_src_reg ',' alu_src_reg ',' alu_src_reg
 |                  alu_vec_2src_op reg_or_export '=' alu_src_reg ',' alu_src_reg
@@ -190,21 +226,31 @@ alu_scalar_op:     T_MOV
 |                  T_ADD
 
 alu_src_reg:       reg_or_const
-|                  '-' reg_or_const
-|                  '|' reg_or_const
+|                  '|' reg_or_const      { $2->flags |= IR_REG_ABS; }
+|                  '-' alu_src_reg       { $2->flags |= IR_REG_NEGATE; }
 
-reg:               T_REGISTER
-|                  T_REGISTER T_SWIZZLE
+reg:               T_REGISTER {
+                       $$ = ir_reg_create(instr, $1, NULL, 0);
+}
+|                  T_REGISTER T_SWIZZLE {
+                       $$ = ir_reg_create(instr, $1, $2, 0);
+}
 
-reg_or_const:      T_REGISTER
-|                  T_REGISTER T_SWIZZLE
-|                  T_CONSTANT
-|                  T_CONSTANT T_SWIZZLE
+reg_or_const:      reg
+|                  T_CONSTANT {
+                       $$ = ir_reg_create(instr, $1, NULL, IR_REG_CONST);
+}
+|                  T_CONSTANT T_SWIZZLE {
+                       $$ = ir_reg_create(instr, $1, $2, IR_REG_CONST);
+}
 
-reg_or_export:     T_REGISTER
-|                  T_REGISTER T_SWIZZLE
-|                  T_EXPORT
-|                  T_EXPORT   T_SWIZZLE
+reg_or_export:     reg
+|                  T_EXPORT {
+                       $$ = ir_reg_create(instr, $1, NULL, IR_REG_EXPORT);
+}
+|                  T_EXPORT T_SWIZZLE {
+                       $$ = ir_reg_create(instr, $1, $2, IR_REG_EXPORT);
+}
 
 number:            T_INT
 |                  T_HEX

@@ -31,37 +31,68 @@
 #include <string.h>
 #include <errno.h>
 
-void fd_asm_parse(const char *src);
+#include "ir.h"
+#include "util.h"
+
+struct ir_shader * fd_asm_parse(const char *src);
 
 int main(int argc, char **argv)
 {
+	struct ir_shader *shader;
 	static char src[256 * 1024];
-	char *infile;
+	static uint32_t dwords[64 * 1024];
+	static int sizedwords;
+	char *infile, *outfile;
 	int fd, ret;
 
-	if (argc != 2) {
-		fprintf(stderr, "usage: %s [infile]\n", argv[0]);
+	if (argc != 3) {
+		ERROR_MSG("usage: %s [infile] [outfile]", argv[0]);
 		return -1;
 	}
 
 	infile = argv[1];
+	outfile = argv[2];
+
 	fd = open(infile, O_RDONLY);
 	if (fd < 0) {
-		fprintf(stderr, "could not open '%s': %s\n",
-				infile, strerror(errno));
+		ERROR_MSG("could not open '%s': %s", infile, strerror(errno));
 		return -1;
 	}
 
 	ret = read(fd, src, sizeof(src) - 1);
 	if (ret <= 0) {
-		fprintf(stderr, "could not read '%s': %s\n",
-				infile, strerror(errno));
+		ERROR_MSG("could not read '%s': %s", infile, strerror(errno));
 		return -1;
 	}
 	printf("parsing:\n%s\n", src);
 
-	fd_asm_parse(src);
+	close(fd);
+
+	shader = fd_asm_parse(src);
+	if (!shader) {
+		ERROR_MSG("parse failed");
+		return -1;
+	}
+
+	sizedwords = ir_shader_assemble(shader, dwords, ARRAY_SIZE(dwords));
+	if (sizedwords <= 0) {
+		ERROR_MSG("assembler failed");
+		return -1;
+	}
+
+	fd = open(outfile, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+	if (fd < 0) {
+		ERROR_MSG("could not open '%s': %s", outfile, strerror(errno));
+		return -1;
+	}
+
+	ret = write(fd, dwords, sizedwords * 4);
+	if (ret <= 0) {
+		ERROR_MSG("could not write '%s': %s", outfile, strerror(errno));
+		return -1;
+	}
+
+	ir_shader_destroy(shader);
 
 	return 0;
 }
-
