@@ -37,7 +37,7 @@ extern YYSTYPE asm_yylval;
 ";"[^\n]*"\n"                     ; /* ignore comments */
 [1-9][0-9]*                       asm_yylval.num = strtol(yytext, NULL, 0);    return T_INT;
 "0x"[0-9a-fA-F]*                  asm_yylval.num = strtol(yytext, NULL, 0);    return T_HEX;
-"."[_w-z][_w-z]?[_w-z]?[_w-z]?    asm_yylval.str = yytext;                     return T_SWIZZLE;
+"."[_w-z][_w-z]?[_w-z]?[_w-z]?    asm_yylval.str = yytext + 1;                 return T_SWIZZLE;
 "NOP"                             return TOKEN(T_NOP);
 "EXEC"                            return TOKEN(T_EXEC);
 "EXEC_END"                        return TOKEN(T_EXEC_END);

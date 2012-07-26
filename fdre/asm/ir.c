@@ -25,6 +25,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 #include "util.h"
@@ -33,7 +34,14 @@
 #define ADDR_MASK 0xfff
 
 static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords);
+
 static int instr_emit(struct ir_instruction *instr, uint32_t *dwords);
+
+static uint32_t reg_fetch_src_swiz(struct ir_register *reg);
+static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
+static uint32_t reg_alu_dst_swiz(struct ir_register *reg);
+static uint32_t reg_alu_vector_src_swiz(struct ir_register *reg);
+static uint32_t reg_alu_scalar_src_swiz(struct ir_register *reg, int srcno);
 
 
 /* simple allocator to carve allocations out of an up-front allocated heap,
@@ -46,15 +54,27 @@ static void * ir_alloc(struct ir_shader *shader, int sz)
 	return ptr;
 }
 
+static char * ir_strdup(struct ir_shader *shader, const char *str)
+{
+	char *ptr = NULL;
+	if (str) {
+		int len = strlen(str);
+		ptr = ir_alloc(shader, len+1);
+		memcpy(ptr, str, len);
+		ptr[len] = '\0';
+	}
+	return ptr;
+}
+
 struct ir_shader * ir_shader_create(void)
 {
-	INFO_MSG("");
+	DEBUG_MSG("");
 	return calloc(1, sizeof(struct ir_shader));
 }
 
 void ir_shader_destroy(struct ir_shader *shader)
 {
-	INFO_MSG("");
+	DEBUG_MSG("");
 	free(shader);
 }
 
@@ -87,8 +107,6 @@ static int shader_resolve(struct ir_shader *shader)
 			cf->exec.addr = addr;
 			cf->exec.cnt  = cf->exec.instrs_count;
 			cf->exec.sequence = sequence;
-
-INFO_MSG("ADDR(%d) CNT(%d) SERIALIZE(0x%x)", cf->exec.addr, cf->exec.cnt, cf->exec.sequence);
 
 			addr += cf->exec.instrs_count;
 		}
@@ -147,7 +165,7 @@ int ir_shader_assemble(struct ir_shader *shader,
 struct ir_cf * ir_cf_create(struct ir_shader *shader, int cf_type)
 {
 	struct ir_cf *cf = ir_alloc(shader, sizeof(struct ir_cf));
-	INFO_MSG("%d", cf_type);
+	DEBUG_MSG("%d", cf_type);
 	cf->shader = shader;
 	cf->cf_type = cf_type;
 	assert(shader->cfs_count < ARRAY_SIZE(shader->cfs));
@@ -240,12 +258,55 @@ struct ir_instruction * ir_instr_create(struct ir_cf *cf, int instr_type)
 {
 	struct ir_instruction *instr =
 			ir_alloc(cf->shader, sizeof(struct ir_instruction));
-	INFO_MSG("%d", instr_type);
+	DEBUG_MSG("%d", instr_type);
 	instr->shader = cf->shader;
 	instr->instr_type = instr_type;
 	assert(cf->exec.instrs_count < ARRAY_SIZE(cf->exec.instrs));
 	cf->exec.instrs[cf->exec.instrs_count++] = instr;
 	return instr;
+}
+
+static uint32_t instr_fetch_opc(struct ir_instruction *instr)
+{
+	switch (instr->fetch.opc) {
+	default:
+		ERROR_MSG("invalid fetch: %d\n", instr->fetch.opc);
+	case T_SAMPLE: return 0x01;
+	case T_VERTEX: return 0x00;
+	}
+}
+
+static uint32_t instr_vector_opc(struct ir_instruction *instr)
+{
+	switch (instr->alu.vector_opc) {
+	default:
+		ERROR_MSG("invalid vector: %d\n", instr->alu.vector_opc);
+	case T_ADDv:    return 0x00;
+	case T_MULv:    return 0x01;
+	case T_MAXv:    return 0x02;
+	case T_MINv:    return 0x03;
+	case T_FLOORv:  return 0x0a;
+	case T_MULADDv: return 0x0b;
+	case T_DOT4v:   return 0x0f;
+	case T_DOT3v:   return 0x10;
+	}
+}
+
+static uint32_t instr_scalar_opc(struct ir_instruction *instr)
+{
+	switch (instr->alu.scalar_opc) {
+	default:
+		ERROR_MSG("invalid scalar: %d\n", instr->alu.scalar_opc);
+	case T_MOV:   return 0x02;
+	case T_EXP2:  return 0x07;
+	case T_LOG2:  return 0x08;
+	case T_RCP:   return 0x09;
+	case T_RSQ:   return 0x0b;
+	case T_PSETE: return 0x0d;
+	case T_SQRT:  return 0x14;
+	case T_MUL:   return 0x15;
+	case T_ADD:   return 0x16;
+	}
 }
 
 /*
@@ -275,7 +336,22 @@ struct ir_instruction * ir_instr_create(struct ir_cf *cf, int instr_type)
 
 static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
 {
-	// TODO
+	int reg = 0;
+	struct ir_register *dst_reg = instr->regs[reg++];
+	struct ir_register *src_reg = instr->regs[reg++];
+
+	dwords[0] = dwords[1] = dwords[2] = 0;
+
+	assert(instr->fetch.constant <= 0xf);
+
+	dwords[0] |= instr_fetch_opc(instr)      << 0;
+	dwords[0] |= src_reg->num                << 5;
+	dwords[0] |= dst_reg->num                << 12;
+	dwords[0] |= instr->fetch.constant       << 20;
+	dwords[0] |= reg_fetch_src_swiz(src_reg) << 26;
+
+	dwords[1] |= reg_fetch_dst_swiz(dst_reg) << 0;
+
 	return 0;
 }
 
@@ -288,8 +364,8 @@ static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
  *               8..13?  -  scalar dest register
  *                14     -  <UNKNOWN>
  *                15     -  export flag
- *              16..19   -  vector dest write mask (xyzw)
- *              20..23   -  scalar dest write mask (xyzw)
+ *              16..19   -  vector dest write mask (wxyz)
+ *              20..23   -  scalar dest write mask (wxyz)
  *              24..26   -  <UNKNOWN>
  *              27..31   -  scalar operation
  *
@@ -352,15 +428,74 @@ static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
  *                00 - z
  *                01 - w
  *
- *       chan[3]: 00 - w
- *                01 - x
+ *       chan[3]: 01 - x
  *                10 - y
  *                11 - z
+ *                00 - w
  */
 
 static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 {
-	// TODO
+	int reg = 0;
+	struct ir_register *dst_reg  = instr->regs[reg++];
+	struct ir_register *src1_reg = instr->regs[reg++];
+	struct ir_register *src2_reg = instr->regs[reg++];
+	struct ir_register *src3_reg = NULL;
+
+	dwords[0] = dwords[1] = dwords[2] = 0;
+
+	assert((dst_reg->flags & ~IR_REG_EXPORT) == 0);
+	assert(!dst_reg->swizzle || (strlen(dst_reg->swizzle) == 4));
+	assert((src1_reg->flags & IR_REG_EXPORT) == 0);
+	assert(!src1_reg->swizzle || (strlen(src1_reg->swizzle) == 4));
+	assert((src2_reg->flags & IR_REG_EXPORT) == 0);
+	assert(!src2_reg->swizzle || (strlen(src2_reg->swizzle) == 4));
+
+	dwords[0] |= dst_reg->num                                << 0;
+	dwords[0] |= ((dst_reg->flags & IR_REG_EXPORT) ? 1 : 0)  << 15;
+	dwords[0] |= reg_alu_dst_swiz(dst_reg)                   << 16;
+	dwords[1] |= reg_alu_vector_src_swiz(src2_reg)           << 8;
+	dwords[1] |= reg_alu_vector_src_swiz(src1_reg)           << 16;
+	dwords[1] |= ((src2_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 25;
+	dwords[1] |= ((src1_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 26;
+	// TODO predicate case/condition.. need to add to parser
+	dwords[2] |= src2_reg->num                               << 8;
+	dwords[2] |= ((src2_reg->flags & IR_REG_ABS) ? 1 : 0)    << 15;
+	dwords[2] |= src1_reg->num                               << 16;
+	dwords[2] |= ((src1_reg->flags & IR_REG_ABS) ? 1 : 0)    << 23;
+	dwords[2] |= instr_vector_opc(instr)                     << 24;
+	dwords[2] |= ((src2_reg->flags & IR_REG_CONST) ? 0 : 1)  << 30;
+	dwords[2] |= ((src1_reg->flags & IR_REG_CONST) ? 0 : 1)  << 31;
+
+	/* handle instructions w/ 3 src operands: */
+	if (instr->alu.vector_opc == T_MULADDv) {
+		src3_reg = instr->regs[reg++];
+	}
+
+	if (instr->alu.scalar_opc) {
+		struct ir_register *sdst_reg = instr->regs[reg++];
+
+		assert(sdst_reg->flags == dst_reg->flags);
+
+		if (src3_reg) {
+			assert(src3_reg == instr->regs[reg++]);
+		} else {
+			src3_reg = instr->regs[reg++];
+		}
+
+		dwords[0] |= sdst_reg->num                              << 8;
+		dwords[0] |= reg_alu_dst_swiz(sdst_reg)                 << 20;
+		dwords[0] |= instr_scalar_opc(instr)                    << 27;
+		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 0)       << 0; // XXX should be src4
+		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 1)       << 6;
+	}
+
+	if (src3_reg) {
+		dwords[2] |= src3_reg->num                              << 0;
+		dwords[2] |= ((src3_reg->flags & IR_REG_ABS) ? 1 : 0)   << 7;
+		dwords[2] |= ((src3_reg->flags & IR_REG_CONST) ? 0 : 1) << 29;
+	}
+
 	return 0;
 }
 
@@ -370,6 +505,7 @@ static int instr_emit(struct ir_instruction *instr, uint32_t *dwords)
 	case T_FETCH: return instr_emit_fetch(instr, dwords);
 	case T_ALU:   return instr_emit_alu(instr, dwords);
 	}
+	return -1;
 }
 
 
@@ -378,11 +514,142 @@ struct ir_register * ir_reg_create(struct ir_instruction *instr,
 {
 	struct ir_register *reg =
 			ir_alloc(instr->shader, sizeof(struct ir_register));
-	INFO_MSG("%x, %d, %s", flags, num, swizzle);
+	DEBUG_MSG("%x, %d, %s", flags, num, swizzle);
+	assert(num <= REG_MASK);
 	reg->flags = flags;
 	reg->num = num;
-	reg->swizzle = swizzle;
+	reg->swizzle = ir_strdup(instr->shader, swizzle);
 	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
 	instr->regs[instr->regs_count++] = reg;
 	return reg;
+}
+
+static uint32_t reg_fetch_src_swiz(struct ir_register *reg)
+{
+	uint32_t swiz = 0;
+	int i;
+
+	assert(reg->flags == 0);
+	assert(!reg->swizzle || (strlen(reg->swizzle) == 3));
+
+	DEBUG_MSG("fetch src R%d.%s", reg->num, reg->swizzle);
+
+	if (reg->swizzle) {
+		for (i = 2; i >= 0; i--) {
+			swiz <<= 2;
+			switch (reg->swizzle[i]) {
+			default:
+				ERROR_MSG("invalid fetch src swizzle: %s", reg->swizzle);
+			case 'x': swiz |= 0x0; break;
+			case 'y': swiz |= 0x1; break;
+			case 'z': swiz |= 0x2; break;
+			case 'w': swiz |= 0x3; break;
+			}
+		}
+	} else {
+		swiz = 0x24;
+	}
+
+	return swiz;
+}
+
+static uint32_t reg_fetch_dst_swiz(struct ir_register *reg)
+{
+	uint32_t swiz = 0;
+	int i;
+
+	assert(reg->flags == 0);
+	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
+
+	DEBUG_MSG("fetch dst R%d.%s", reg->num, reg->swizzle);
+
+	if (reg->swizzle) {
+		for (i = 3; i >= 0; i--) {
+			swiz <<= 3;
+			switch (reg->swizzle[i]) {
+			default:
+				ERROR_MSG("invalid dst swizzle: %s", reg->swizzle);
+			case 'x': swiz |= 0x0; break;
+			case 'y': swiz |= 0x1; break;
+			case 'z': swiz |= 0x2; break;
+			case 'w': swiz |= 0x3; break;
+			case '_': swiz |= 0x7; break;
+			}
+		}
+	} else {
+		swiz = 0x688;
+	}
+
+	return swiz;
+}
+
+/* actually, a write-mask */
+static uint32_t reg_alu_dst_swiz(struct ir_register *reg)
+{
+	uint32_t swiz = 0;
+	int i;
+
+	assert((reg->flags & ~IR_REG_EXPORT) == 0);
+	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
+
+	DEBUG_MSG("alu dst R%d.%s", reg->num, reg->swizzle);
+
+	if (reg->swizzle) {
+		for (i = 3; i >= 0; i--) {
+			swiz <<= 1;
+			if (reg->swizzle[i] == "xyzw"[i]) {
+				swiz |= 0x1;
+			} else if (reg->swizzle[i] != '_') {
+				ERROR_MSG("invalid dst swizzle: %s", reg->swizzle);
+				break;
+			}
+		}
+	} else {
+		swiz = 0xf;
+	}
+
+	return swiz;
+}
+
+static uint32_t reg_alu_vector_src_swiz(struct ir_register *reg)
+{
+	uint32_t swiz = 0;
+	int i;
+
+	assert((reg->flags & IR_REG_EXPORT) == 0);
+	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
+
+	DEBUG_MSG("vector src R%d.%s", reg->num, reg->swizzle);
+
+	if (reg->swizzle) {
+		for (i = 3; i >= 0; i--) {
+			swiz <<= 2;
+			switch (reg->swizzle[i]) {
+			default:
+				ERROR_MSG("invalid vector src swizzle: %s", reg->swizzle);
+			case 'x': swiz |= (0x0 - i) & 0x3; break;
+			case 'y': swiz |= (0x1 - i) & 0x3; break;
+			case 'z': swiz |= (0x2 - i) & 0x3; break;
+			case 'w': swiz |= (0x3 - i) & 0x3; break;
+			}
+		}
+	} else {
+		swiz = 0x0;
+	}
+
+	return swiz;
+}
+
+static uint32_t reg_alu_scalar_src_swiz(struct ir_register *reg, int srcno)
+{
+	assert((reg->flags & IR_REG_EXPORT) == 0);
+	assert(reg->swizzle && (strlen(reg->swizzle) == 1));
+	switch (reg->swizzle[0]) {
+	default:
+		ERROR_MSG("invalid vector src swizzle: %s", reg->swizzle);
+	case 'x': return (0x0 + srcno) & 0x3;
+	case 'y': return (0x1 + srcno) & 0x3;
+	case 'z': return (0x2 + srcno) & 0x3;
+	case 'w': return (0x3 + srcno) & 0x3;
+	}
 }
