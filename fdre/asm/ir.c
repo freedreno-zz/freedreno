@@ -82,7 +82,7 @@ void ir_shader_destroy(struct ir_shader *shader)
 static int shader_resolve(struct ir_shader *shader)
 {
 	uint32_t addr;
-	uint32_t i, j;
+	int i, j;
 
 	addr = shader->cfs_count / 2;
 	for (i = 0; i < shader->cfs_count; i++) {
@@ -95,7 +95,7 @@ static int shader_resolve(struct ir_shader *shader)
 			if (cf->exec.cnt && (cf->exec.cnt != cf->exec.instrs_count))
 				WARN_MSG("invalid cnt '%d' at CF %d", cf->exec.cnt, i);
 
-			for (j = 0; j < cf->exec.instrs_count; j++) {
+			for (j = cf->exec.instrs_count - 1; j >= 0; j--) {
 				struct ir_instruction *instr = cf->exec.instrs[j];
 				sequence <<= 2;
 				if (instr->instr_type == T_FETCH)
@@ -438,9 +438,23 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 {
 	int reg = 0;
 	struct ir_register *dst_reg  = instr->regs[reg++];
-	struct ir_register *src1_reg = instr->regs[reg++];
-	struct ir_register *src2_reg = instr->regs[reg++];
-	struct ir_register *src3_reg = NULL;
+	struct ir_register *src1_reg;
+	struct ir_register *src2_reg;
+	struct ir_register *src3_reg;
+
+	/* handle instructions w/ 3 src operands: */
+	if (instr->alu.vector_opc == T_MULADDv) {
+		/* note: disassembler lists 3rd src first, ie:
+		 *   MULADDv Rdst = Rsrc3 + (Rsrc1 * Rsrc2)
+		 * which is the reason for this strange ordering.
+		 */
+		src3_reg = instr->regs[reg++];
+	} else {
+		src3_reg = NULL;
+	}
+
+	src1_reg = instr->regs[reg++];
+	src2_reg = instr->regs[reg++];
 
 	dwords[0] = dwords[1] = dwords[2] = 0;
 
@@ -454,6 +468,7 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	dwords[0] |= dst_reg->num                                << 0;
 	dwords[0] |= ((dst_reg->flags & IR_REG_EXPORT) ? 1 : 0)  << 15;
 	dwords[0] |= reg_alu_dst_swiz(dst_reg)                   << 16;
+	dwords[0] |= 1                                           << 26; /* always set? */
 	dwords[1] |= reg_alu_vector_src_swiz(src2_reg)           << 8;
 	dwords[1] |= reg_alu_vector_src_swiz(src1_reg)           << 16;
 	dwords[1] |= ((src2_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 25;
@@ -466,11 +481,6 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	dwords[2] |= instr_vector_opc(instr)                     << 24;
 	dwords[2] |= ((src2_reg->flags & IR_REG_CONST) ? 0 : 1)  << 30;
 	dwords[2] |= ((src1_reg->flags & IR_REG_CONST) ? 0 : 1)  << 31;
-
-	/* handle instructions w/ 3 src operands: */
-	if (instr->alu.vector_opc == T_MULADDv) {
-		src3_reg = instr->regs[reg++];
-	}
 
 	if (instr->alu.scalar_opc) {
 		struct ir_register *sdst_reg = instr->regs[reg++];
@@ -486,14 +496,24 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 		dwords[0] |= sdst_reg->num                              << 8;
 		dwords[0] |= reg_alu_dst_swiz(sdst_reg)                 << 20;
 		dwords[0] |= instr_scalar_opc(instr)                    << 27;
-		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 0)       << 0; // XXX should be src4
+//		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 0)       << 0; // XXX should be src4
 		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 1)       << 6;
+	} else {
+		/* not sure if this is required, but adreno compiler seems
+		 * to always set scalar opc to MOV if it is not used:
+		 */
+		dwords[0] |= 0x2                                        << 27;
 	}
 
 	if (src3_reg) {
 		dwords[2] |= src3_reg->num                              << 0;
 		dwords[2] |= ((src3_reg->flags & IR_REG_ABS) ? 1 : 0)   << 7;
 		dwords[2] |= ((src3_reg->flags & IR_REG_CONST) ? 0 : 1) << 29;
+	} else {
+		/* not sure if this is required, but adreno compiler seems
+		 * to always set register bank for 3rd src if unused:
+		 */
+		dwords[2] |= 1                                          << 29;
 	}
 
 	return 0;
