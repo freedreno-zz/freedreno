@@ -848,6 +848,11 @@ int main(int argc, char **argv)
 	void *buf = NULL;
 	int fd, sz, i, n = 1;
 
+	if (!strcmp(argv[n], "--verbose")) {
+		disasm_set_debug(PRINT_RAW | PRINT_UNKNOWN);
+		n++;
+	}
+
 	if (!strcmp(argv[n], "--dump-shaders")) {
 		dump_shaders = true;
 		n++;
