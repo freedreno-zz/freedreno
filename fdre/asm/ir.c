@@ -269,9 +269,21 @@ static uint32_t instr_fetch_opc(struct ir_instruction *instr)
 {
 	switch (instr->fetch.opc) {
 	default:
-		ERROR_MSG("invalid fetch: %d\n", instr->fetch.opc);
+		ERROR_MSG("invalid fetch opc: %d\n", instr->fetch.opc);
 	case T_SAMPLE: return 0x01;
 	case T_VERTEX: return 0x00;
+	}
+}
+
+static uint32_t instr_fetch_type(struct ir_instruction *instr)
+{
+	switch (instr->fetch.type) {
+	default:
+		ERROR_MSG("invalid fetch type: %d\n", instr->fetch.type);
+	case T_GL_FLOAT: return 0x39;
+	case T_GL_SHORT: return 0x1a;
+	case T_GL_BYTE:  return 0x06;
+	case T_GL_FIXED: return 0x23;
 	}
 }
 
@@ -279,7 +291,7 @@ static uint32_t instr_vector_opc(struct ir_instruction *instr)
 {
 	switch (instr->alu.vector_opc) {
 	default:
-		ERROR_MSG("invalid vector: %d\n", instr->alu.vector_opc);
+		ERROR_MSG("invalid vector opc: %d\n", instr->alu.vector_opc);
 	case T_ADDv:    return 0x00;
 	case T_MULv:    return 0x01;
 	case T_MAXv:    return 0x02;
@@ -328,9 +340,22 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
  *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
  *                          low two bits of each determine position src channel,
  *                          high bit set 1 to mask
- *              12..31   -  <UNKNOWN>
+ *                12     -  signedness ('1' signed, '0' unsigned)
+ *              13..15   -  <UNKNOWN>
+ *              16..21?  -  type
+ *                            0x39 - GL_FLOAT
+ *                            0x1a - GL_SHORT
+ *                            0x06 - GL_BYTE
+ *                            0x23 - GL_FIXED
+ *             22?..31   -  <UNKNOWN>
  *
- *     dword2:   0..31   -  <UNKNOWN>
+ *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
+ *              16..31   -  <UNKNOWN>
+ *
+ * note: at least VERTEX fetch instructions get patched up at runtime
+ * based on the size of attributes attached.. for example, if vec4, but
+ * size given in glVertexAttribPointer() then the write mask and size
+ * (stride?) is updated
  */
 
 static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
@@ -348,8 +373,21 @@ static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
 	dwords[0] |= dst_reg->num                << 12;
 	dwords[0] |= instr->fetch.constant       << 20;
 	dwords[0] |= reg_fetch_src_swiz(src_reg) << 26;
-
 	dwords[1] |= reg_fetch_dst_swiz(dst_reg) << 0;
+
+	if (instr->fetch.opc == T_VERTEX) {
+		assert(instr->fetch.stride <= 0xff);
+
+		dwords[1] |= ((instr->fetch.sign == T_SIGNED) ? 1 : 0)
+		                                     << 12;
+		dwords[1] |= instr_fetch_type(instr) << 16;
+		dwords[2] |= instr->fetch.stride     << 0;
+
+		/* XXX this seems to always be set, except on the
+		 * internal shaders used for GMEM->MEM blits
+		 */
+		dwords[1] |= 0x1                     << 13;
+	}
 
 	return 0;
 }

@@ -54,6 +54,10 @@ struct ir_instruction {
 		struct {
 			int opc;
 			int constant;
+			/* maybe vertex fetch specific: */
+			int type;   /* T_GL_FLOAT, T_GL_SHORT, etc */
+			int sign;   /* T_SIGNED or T_UNSIGNED */
+			uint32_t stride;
 		} fetch;
 		/* ALU specific: */
 		struct {

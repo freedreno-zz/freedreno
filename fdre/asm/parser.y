@@ -91,6 +91,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_ADDR
 %token <tok> T_CNT
 %token <tok> T_SIZE
+%token <tok> T_STRIDE
 %token <tok> T_CONST
 %token <num> T_REGISTER
 %token <num> T_CONSTANT
@@ -122,9 +123,17 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_MUL
 %token <tok> T_ADD
 
+/* vertex fetch attributes: */
+%token <tok> T_GL_FLOAT
+%token <tok> T_GL_SHORT
+%token <tok> T_GL_BYTE
+%token <tok> T_GL_FIXED
+%token <tok> T_SIGNED
+%token <tok> T_UNSIGNED
+
 %type <num> number
 %type <reg> reg alu_src_reg reg_or_const reg_or_export
-%type <tok> cf_alloc_type alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
+%type <tok> cf_alloc_type type signedness alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
 
 %error-verbose
 
@@ -184,10 +193,21 @@ fetch_sample:      T_SAMPLE reg '=' reg T_CONST '(' number ')' {
                        instr->fetch.constant = $7;
 }
 
-fetch_vertex:      T_VERTEX reg '=' reg T_CONST '(' number ')' {
+fetch_vertex:      T_VERTEX reg '=' reg type signedness T_STRIDE '(' number ')' T_CONST '(' number ')' {
                        instr->fetch.opc = $1;
-                       instr->fetch.constant = $7;
+                       instr->fetch.type = $5;
+                       instr->fetch.sign = $6;
+                       instr->fetch.stride = $9;
+                       instr->fetch.constant = $13;
 }
+
+type:              T_GL_FLOAT
+|                  T_GL_SHORT
+|                  T_GL_BYTE
+|                  T_GL_FIXED
+
+signedness:        T_SIGNED
+|                  T_UNSIGNED
 
 /* TODO can we combine a 3src vec op w/ a scalar?? */
 alu:               alu_vec {
