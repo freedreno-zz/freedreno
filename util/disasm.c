@@ -139,7 +139,11 @@ static enum debug_t debug;
 #define REG_MASK 0x3f	/* not really sure how many regs yet */
 #define ADDR_MASK 0xfff
 
-static const char chan_names[] = { 'x', 'y', 'z', 'w' };
+static const char chan_names[] = {
+		'x', 'y', 'z', 'w',
+		/* these only apply to FETCH dst's: */
+		'0', '1', '?', '_',
+};
 
 static void print_srcreg(uint32_t num, uint32_t type,
 		uint32_t swiz, uint32_t negate)
@@ -440,7 +444,7 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 
 	printf("\tR%u.", dst_reg);
 	for (i = 0; i < 4; i++) {
-		printf("%c", dst_swiz & 0x4 ? '_' : chan_names[dst_swiz & 0x3]);
+		printf("%c", chan_names[dst_swiz & 0x7]);
 		dst_swiz >>= 3;
 	}
 
