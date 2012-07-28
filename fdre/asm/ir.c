@@ -40,8 +40,7 @@ static int instr_emit(struct ir_instruction *instr, uint32_t *dwords);
 static uint32_t reg_fetch_src_swiz(struct ir_register *reg);
 static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_dst_swiz(struct ir_register *reg);
-static uint32_t reg_alu_vector_src_swiz(struct ir_register *reg);
-static uint32_t reg_alu_scalar_src_swiz(struct ir_register *reg, int srcno);
+static uint32_t reg_alu_src_swiz(struct ir_register *reg);
 
 
 /* simple allocator to carve allocations out of an up-front allocated heap,
@@ -369,22 +368,12 @@ static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
  *              24..26   -  <UNKNOWN>
  *              27..31   -  scalar operation
  *
- *     dword 1:  0..1    -  scalar src1 channel
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *               2..5    -  <UNKNOWN>  (maybe upper bits of scalar src1??)
- *               6..7    -  scalar src2 channel
- *                            01 - x
- *                            10 - y
- *                            11 - z
- *                            00 - w
- *               8..15   -  vector src2 swizzle
- *              16..23   -  vector src1 swizzle
- *                24     -  <UNKNOWN>
- *                25     -  vector src2 negate
- *                26     -  vector src1 negate
+ *     dword 1:  0..7    -  src3 swizzle
+ *               8..15   -  src2 swizzle
+ *              16..23   -  src1 swizzle
+ *                24     -  src3 negate
+ *                25     -  src2 negate
+ *                26     -  src1 negate
  *                27     -  predicate case (1 - execute if true, 0 - execute if false)
  *                28     -  predicate (conditional execution)
  *              29..31   -  <UNKNOWN>
@@ -469,8 +458,8 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	dwords[0] |= ((dst_reg->flags & IR_REG_EXPORT) ? 1 : 0)  << 15;
 	dwords[0] |= reg_alu_dst_swiz(dst_reg)                   << 16;
 	dwords[0] |= 1                                           << 26; /* always set? */
-	dwords[1] |= reg_alu_vector_src_swiz(src2_reg)           << 8;
-	dwords[1] |= reg_alu_vector_src_swiz(src1_reg)           << 16;
+	dwords[1] |= reg_alu_src_swiz(src2_reg)                  << 8;
+	dwords[1] |= reg_alu_src_swiz(src1_reg)                  << 16;
 	dwords[1] |= ((src2_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 25;
 	dwords[1] |= ((src1_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 26;
 	// TODO predicate case/condition.. need to add to parser
@@ -496,8 +485,6 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 		dwords[0] |= sdst_reg->num                              << 8;
 		dwords[0] |= reg_alu_dst_swiz(sdst_reg)                 << 20;
 		dwords[0] |= instr_scalar_opc(instr)                    << 27;
-//		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 0)       << 0; // XXX should be src4
-		dwords[1] |= reg_alu_scalar_src_swiz(src3_reg, 1)       << 6;
 	} else {
 		/* not sure if this is required, but adreno compiler seems
 		 * to always set scalar opc to MOV if it is not used:
@@ -506,6 +493,8 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	}
 
 	if (src3_reg) {
+		dwords[1] |= reg_alu_src_swiz(src3_reg)                 << 0;
+		dwords[1] |= ((src3_reg->flags & IR_REG_NEGATE) ? 1 : 0)<< 24;
 		dwords[2] |= src3_reg->num                              << 0;
 		dwords[2] |= ((src3_reg->flags & IR_REG_ABS) ? 1 : 0)   << 7;
 		dwords[2] |= ((src3_reg->flags & IR_REG_CONST) ? 0 : 1) << 29;
@@ -631,7 +620,7 @@ static uint32_t reg_alu_dst_swiz(struct ir_register *reg)
 	return swiz;
 }
 
-static uint32_t reg_alu_vector_src_swiz(struct ir_register *reg)
+static uint32_t reg_alu_src_swiz(struct ir_register *reg)
 {
 	uint32_t swiz = 0;
 	int i;
@@ -658,18 +647,4 @@ static uint32_t reg_alu_vector_src_swiz(struct ir_register *reg)
 	}
 
 	return swiz;
-}
-
-static uint32_t reg_alu_scalar_src_swiz(struct ir_register *reg, int srcno)
-{
-	assert((reg->flags & IR_REG_EXPORT) == 0);
-	assert(reg->swizzle && (strlen(reg->swizzle) == 1));
-	switch (reg->swizzle[0]) {
-	default:
-		ERROR_MSG("invalid vector src swizzle: %s", reg->swizzle);
-	case 'x': return (0x0 + srcno) & 0x3;
-	case 'y': return (0x1 + srcno) & 0x3;
-	case 'z': return (0x2 + srcno) & 0x3;
-	case 'w': return (0x3 + srcno) & 0x3;
-	}
 }
