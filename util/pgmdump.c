@@ -520,9 +520,20 @@ int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
-	int fd, sz, i;
+	const char *infile;
+	int fd, sz, i, raw = 0;
 
 	/* lame argument parsing: */
+	if ((argc > 1) && !strcmp(argv[1], "--verbose")) {
+		disasm_set_debug(PRINT_RAW | PRINT_UNKNOWN);
+		argv++;
+		argc--;
+	}
+	if ((argc > 1) && !strcmp(argv[1], "--raw")) {
+		raw = 1;
+		argv++;
+		argc--;
+	}
 	if ((argc == 3) && !strcmp(argv[1], "--short")) {
 		/* only short dump, original shader, symbol table, and disassembly */
 		full_dump = 0;
@@ -530,12 +541,27 @@ int main(int argc, char **argv)
 		argc--;
 	}
 
-	if (argc != 2)
-		fprintf(stderr, "usage: %s testlog.rd\n", argv[0]);
+	if (argc != 2) {
+		fprintf(stderr, "usage: pgmdump [--verbose] [--raw] [--short] testlog.rd\n");
+		return -1;
+	}
 
-	fd = open(argv[1], O_RDONLY);
+	infile = argv[1];
+
+	fd = open(infile, O_RDONLY);
 	if (fd < 0)
 		fprintf(stderr, "could not open: %s\n", argv[1]);
+
+	if (raw) {
+		enum shader_t shader = 0;
+		if (!strcmp(infile + strlen(infile) - 3, ".vo"))
+			shader = SHADER_VERTEX;
+		else if (!strcmp(infile + strlen(infile) - 3, ".fo"))
+			shader = SHADER_FRAGMENT;
+		buf = calloc(1, 100 * 1024);
+		read(fd, buf, 100 * 1024);
+		return disasm(buf, 100 * 1024, 0, shader);
+	}
 
 	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {
 		free(buf);

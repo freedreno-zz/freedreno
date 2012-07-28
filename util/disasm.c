@@ -51,8 +51,7 @@ static const char *levels[] = {
 		"x",
 };
 
-#define print_raw     1
-#define print_unknown 1   /* raw with already identified bitfields masked */
+static enum debug_t debug;
 
 /*
  * ALU instruction format:
@@ -63,8 +62,8 @@ static const char *levels[] = {
  *               8..13?  -  scalar dest register
  *                14     -  <UNKNOWN>
  *                15     -  export flag
- *              16..19   -  vector dest write mask (xyzw)
- *              20..23   -  scalar dest write mask (xyzw)
+ *              16..19   -  vector dest write mask (wxyz)
+ *              20..23   -  scalar dest write mask (wxyz)
  *              24..26   -  <UNKNOWN>
  *              27..31   -  scalar operation
  *
@@ -127,10 +126,10 @@ static const char *levels[] = {
  *                00 - z
  *                01 - w
  *
- *       chan[3]: 00 - w
- *                01 - x
+ *       chan[3]: 01 - x
  *                10 - y
  *                11 - z
+ *                00 - w
  *
  *  still looking for:
  *    scalar src1 reg?  Is there one?
@@ -285,10 +284,10 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	// TODO add abs
 
 	printf("%s", levels[level]);
-	if (print_raw) {
+	if (debug & PRINT_RAW) {
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
-	if (print_unknown) {
+	if (debug & PRINT_UNKNOWN) {
 		/* hmm, possibly some of these bits have other meanings if
 		 * no scalar op.. like MULADDv?
 		 */
@@ -312,7 +311,7 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 		}
 	}
 
-	printf("      %sALU:\t", sync ? "(S)" : "   ");
+	printf("   %sALU:\t", sync ? "(S)" : "   ");
 
 	if (vector_instructions[vector_op].name) {
 		printf(vector_instructions[vector_op].name);
@@ -357,9 +356,9 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 		uint32_t src3_chan = ((dwords[1] >> 6) + 3) & 0x3;
 
 		printf("%s", levels[level]);
-		if (print_raw)
+		if (debug & PRINT_RAW)
 			printf("                          \t");
-		if (print_unknown)
+		if (debug & PRINT_UNKNOWN)
 			printf("                          \t");
 
 		if (scalar_instructions[scalar_op].name) {
@@ -428,10 +427,10 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 	int i;
 
 	printf("%s", levels[level]);
-	if (print_raw) {
+	if (debug & PRINT_RAW) {
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
-	if (print_unknown) {
+	if (debug & PRINT_UNKNOWN) {
 		printf("%08x %08x %08x\t",
 				dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
 						(0xf << 20) | 0x1f | (0x3f << 26)),
@@ -439,7 +438,7 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 				dwords[2] & ~0x00000000);
 	}
 
-	printf("      %sFETCH:\t", sync ? "(S)" : "   ");
+	printf("   %sFETCH:\t", sync ? "(S)" : "   ");
 	if (fetch_instructions[fetch_opc].name) {
 		printf(fetch_instructions[fetch_opc].name);
 	} else {
@@ -467,7 +466,7 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
  * CF instruction format:
  * -- ----------- ------
  *
- *     dword0:   0..11   -  addr 1
+ *     dword0:   0..11   -  addr/size 1
  *              12..15   -  count 1
  *              16..31   -  sequence.. 2 bits per instruction in the EXEC
  *                          clause, the low bit seems to control FETCH vs
@@ -479,7 +478,7 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
  *
  *     dword1:   0..7    -  <UNKNOWN>
  *               8..15?  -  op 1
- *              16..27   -  addr 2
+ *              16..27   -  addr/size 2
  *              28..31   -  count 2
  *
  *     dword2:   0..23   -  <UNKNOWN>
@@ -513,10 +512,10 @@ struct cf {
 	uint32_t  sequence;
 };
 
-static void print_cf(struct cf *cf, int idx, int level)
+static void print_cf(struct cf *cf, int level)
 {
 	printf("%s", levels[level]);
-	if (print_raw) {
+	if (debug & PRINT_RAW) {
 		if (cf->dwords) {
 			printf("%08x %08x %08x\t",
 					cf->dwords[0], cf->dwords[1], cf->dwords[2]);
@@ -524,7 +523,7 @@ static void print_cf(struct cf *cf, int idx, int level)
 			printf("                          \t");
 		}
 	}
-	if (print_unknown) {
+	if (debug & PRINT_UNKNOWN) {
 		if (cf->dwords) {
 		printf("%08x %08x %08x\t",
 				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0xffff << 16)),
@@ -535,7 +534,6 @@ static void print_cf(struct cf *cf, int idx, int level)
 			printf("                          \t");
 		}
 	}
-	printf("%02d  ", idx);
 	if (cf_instructions[cf->op].fmt) {
 		printf(cf_instructions[cf->op].fmt, cf->addr, cf->cnt);
 	} else {
@@ -603,7 +601,7 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 		uint32_t sequence = cf->sequence;
 		uint32_t i;
 
-		print_cf(cf, idx, level);
+		print_cf(cf, level);
 
 		if (cf_instructions[cf->op].exec) {
 			for (i = 0; i < cf->cnt; i++) {
@@ -619,4 +617,9 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 	}
 
 	return 0;
+}
+
+void disasm_set_debug(enum debug_t d)
+{
+	debug= d;
 }

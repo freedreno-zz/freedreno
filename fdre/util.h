@@ -28,6 +28,8 @@ typedef enum {
 	true = 1, false = 0
 } bool;
 
+#define enable_debug 0  /* TODO make dynamic */
+
 #define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
@@ -35,7 +37,7 @@ typedef enum {
 		do { printf("[I] "fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 #define DEBUG_MSG(fmt, ...) \
-		do { printf("[D] "fmt " (%s:%d)\n", \
+		do if (enable_debug) { printf("[D] "fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 #define WARN_MSG(fmt, ...) \
 		do { printf("[W] "fmt " (%s:%d)\n", \

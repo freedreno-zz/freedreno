@@ -44,6 +44,8 @@ typedef enum {
 	true = 1, false = 0,
 } bool;
 
+static bool dump_shaders = false;
+
 static const char *levels[] = {
 		"\t",
 		"\t\t",
@@ -547,6 +549,7 @@ static void dump_registers(uint32_t regbase,
 
 static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 {
+	const char *ext = NULL;
 	uint32_t start = dwords[1] >> 16;
 	uint32_t size  = dwords[1] & 0xffff;
 	const char *type;
@@ -554,17 +557,29 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 	switch (dwords[0]) {
 	case 0:
 		type = "vertex";
+		ext = "vo";
 		disasm_type = SHADER_VERTEX;
 		break;
 	case 1:
 		type = "fragment";
+		ext = "fo";
 		disasm_type = SHADER_FRAGMENT;
 		break;
 	default:
 		type = "<unknown>"; break;
 	}
 	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
-	disasm(dwords + 2, sizedwords - 2, level, disasm_type);
+	disasm(dwords + 2, sizedwords - 2, level+1, disasm_type);
+
+	/* dump raw shader: */
+	if (ext && dump_shaders) {
+		static int n = 0;
+		char filename[8];
+		int fd;
+		sprintf(filename, "%04d.%s", n++, ext);
+		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+		write(fd, dwords + 2, (sizedwords - 2) * 4);
+	}
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
@@ -831,12 +846,17 @@ int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
-	int fd, sz, i;
+	int fd, sz, i, n = 1;
 
-	if (argc != 2)
-		fprintf(stderr, "usage: %s testlog.rd\n", argv[0]);
+	if (!strcmp(argv[n], "--dump-shaders")) {
+		dump_shaders = true;
+		n++;
+	}
 
-	fd = open(argv[1], O_RDONLY);
+	if (argc-n != 1)
+		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
+
+	fd = open(argv[n], O_RDONLY);
 	if (fd < 0)
 		fprintf(stderr, "could not open: %s\n", argv[1]);
 

@@ -23,6 +23,8 @@ cffdump
 pgmdump
 *.so
 *.o
+*.vo*
+*.fo*
 *.swp
 *.bmp
 *.log

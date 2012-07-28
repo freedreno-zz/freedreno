@@ -29,6 +29,13 @@ enum shader_t {
 	SHADER_FRAGMENT,
 };
 
+/* bitmask of debug flags */
+enum debug_t {
+	PRINT_RAW      = 0x1,    /* dump raw hexdump */
+	PRINT_UNKNOWN  = 0x2,    /* dump raw w/ known bitfields masked out */
+};
+
 int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
+void disasm_set_debug(enum debug_t debug);
 
 #endif /* DISASM_H_ */
