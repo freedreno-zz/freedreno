@@ -67,22 +67,12 @@ static enum debug_t debug;
  *              24..26   -  <UNKNOWN>
  *              27..31   -  scalar operation
  *
- *     dword 1:  0..1    -  scalar src1 channel
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *               2..5    -  <UNKNOWN>  (maybe upper bits of scalar src1??)
- *               6..7    -  scalar src2 channel
- *                            01 - x
- *                            10 - y
- *                            11 - z
- *                            00 - w
- *               8..15   -  vector src2 swizzle
- *              16..23   -  vector src1 swizzle
- *                24     -  <UNKNOWN>
- *                25     -  vector src2 negate
- *                26     -  vector src1 negate
+ *     dword 1:  0..7    -  src3 swizzle
+ *               8..15   -  src2 swizzle
+ *              16..23   -  src1 swizzle
+ *                24     -  src3 negate
+ *                25     -  src2 negate
+ *                26     -  src1 negate
  *                27     -  predicate case (1 - execute if true, 0 - execute if false)
  *                28     -  predicate (conditional execution)
  *              29..31   -  <UNKNOWN>
@@ -165,14 +155,6 @@ static void print_srcreg(uint32_t num, uint32_t type,
 			swiz >>= 2;
 		}
 	}
-}
-
-static void print_scalar_srcreg(uint32_t num, uint32_t type,
-		uint32_t chan, uint32_t negate)
-{
-	if (negate)
-		printf("-");
-	printf("%c%u.%c", type ? 'R' : 'C', num, chan_names[chan]);
 }
 
 static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
@@ -270,8 +252,10 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	uint32_t sdst_mask = (dwords[0] >> 20) & 0xf;
 	uint32_t src1_swiz = (dwords[1] >> 16) & 0xff;
 	uint32_t src2_swiz = (dwords[1] >> 8) & 0xff;
-	uint32_t src1_neg  = (dwords[1] & 0x04000000);
-	uint32_t src2_neg  = (dwords[1] & 0x02000000);
+	uint32_t src3_swiz =  dwords[1] & 0xff;
+	uint32_t src1_neg  = (dwords[1] >> 26) & 0x1;
+	uint32_t src2_neg  = (dwords[1] >> 25) & 0x1;
+	uint32_t src3_neg  = (dwords[1] >> 24) & 0x1;
 	uint32_t src1_reg  = (dwords[2] >> 16) & REG_MASK;
 	uint32_t src2_reg  = (dwords[2] >> 8) & REG_MASK;
 	uint32_t src3_reg  =  dwords[2] & REG_MASK;
@@ -288,27 +272,15 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
 	if (debug & PRINT_UNKNOWN) {
-		/* hmm, possibly some of these bits have other meanings if
-		 * no scalar op.. like MULADDv?
-		 */
-		if (sdst_mask || !dst_mask) {
 			printf("%08x %08x %08x\t",
 					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
 							(0xf << 20) | 0x00008000 | (0x1f << 27)),
-					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
-							0x02000000 | 0x3 | (0x3 << 6) | (0x1 << 27) | (0x1 << 28)),
+					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0xff |
+							(0x1 << 24) | (0x1 << 25) | (0x1 << 26) |
+							(0x1 << 27) | (0x1 << 28)),
 					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
 							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
 							(0x1f << 24) | REG_MASK));
-		} else {
-			printf("%08x %08x %08x\t",
-					dwords[0] & ~(REG_MASK | (0xf << 16) | 0x00008000),
-					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0x04000000 |
-							0x02000000 | (0x1 << 27) | (0x1 << 28)),
-					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
-							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
-							(0x1f << 24) | REG_MASK));
-		}
 	}
 
 	printf("   %sALU:\t", sync ? "(S)" : "   ");
@@ -331,7 +303,7 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	print_dstreg(dst_reg, dst_mask, dst_exp);
 	printf(" = ");
 	if (vector_instructions[vector_op].num_srcs == 3) {
-		print_srcreg(src3_reg, src3_type, 0, 0);
+		print_srcreg(src3_reg, src3_type, src3_swiz, src3_neg);
 		printf(", ");
 	}
 	print_srcreg(src1_reg, src1_type, src1_swiz, src1_neg);
@@ -346,14 +318,6 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	if (sdst_mask || !dst_mask) {
 		/* 2nd optional scalar op: */
 		uint32_t scalar_op =  (dwords[0] >> 27) & 0x1f;
-		uint32_t src4_neg  = 0; // XXX
-		uint32_t src4_reg  = 99; // XXX
-		uint32_t src4_type = 1; // XXX
-		uint32_t src4_chan =   dwords[1] & 0x3;
-
-		/* possibly these are used for 3 src ops, like MULADDv?? */
-		uint32_t src3_neg  = 0; // XXX
-		uint32_t src3_chan = ((dwords[1] >> 6) + 3) & 0x3;
 
 		printf("%s", levels[level]);
 		if (debug & PRINT_RAW)
@@ -369,11 +333,8 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 
 		print_dstreg(sdst_reg, sdst_mask, dst_exp);
 		printf(" = ");
-		print_scalar_srcreg(src3_reg, src3_type, src3_chan, src3_neg);
-		if (scalar_instructions[scalar_op].num_srcs != 1) {
-			printf(", ");
-			print_scalar_srcreg(src4_reg, src4_type, src4_chan, src4_neg);
-		}
+		print_srcreg(src3_reg, src3_type, src3_swiz, src3_neg);
+		// TODO ADD/MUL must have another src?!?
 		if (dst_exp)
 			print_export_comment(sdst_reg, type);
 		printf("\n");
