@@ -620,6 +620,8 @@ static uint32_t reg_fetch_dst_swiz(struct ir_register *reg)
 			case 'y': swiz |= 0x1; break;
 			case 'z': swiz |= 0x2; break;
 			case 'w': swiz |= 0x3; break;
+			case '0': swiz |= 0x4; break;
+			case '1': swiz |= 0x5; break;
 			case '_': swiz |= 0x7; break;
 			}
 		}
