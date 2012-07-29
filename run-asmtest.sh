@@ -1,19 +1,31 @@
-#!/bin/sh
+#!/bin/bash
 
 # a test to disassemble shaders from cmdstream, then re-assemble them and
 # compare the output to spot assembler mistakes or important missing bits
 
 
+tmpdir="/tmp/fd$RANDOM/"
+mkdir -p $tmpdir
+
+origdir=`pwd`
+cd `dirname $0`
+fd=`pwd`
+
+cd $tmpdir
+
 for rd in $*; do
-	rm -f *.vo *.fo
-	./cffdump --dump-shaders $rd > /dev/null
+	prefix=`basename $rd`
+	prefix=${prefix%%.rd}
+	$fd/cffdump --dump-shaders $origdir/$rd > /dev/null
 	for shader in *.vo *.fo; do
-		./pgmdump --raw $shader > $shader.txt
-		./fdre/asm/fdasm $shader.txt fd-$shader
-		./pgmdump --verbose --raw $shader > $shader.txt
-		./pgmdump --verbose --raw fd-$shader > fd-$shader.txt
-		meld fd-$shader.txt $shader.txt
-		rm fd-$shader.txt $shader.txt
+		$fd/pgmdump --raw $shader > $shader.txt
+		$fd/fdre/asm/fdasm $shader.txt fd-$shader
+		$fd/pgmdump --verbose --raw $shader > $prefix-$shader.txt
+		$fd/pgmdump --verbose --raw fd-$shader > fd-$prefix-$shader.txt
+		meld fd-$prefix-$shader.txt $prefix-$shader.txt
 	done
-	rm -f *.vo *.fo
 done
+
+cd $origdir
+rm -rf $tmpdir
+
