@@ -37,7 +37,7 @@ static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords);
 
 static int instr_emit(struct ir_instruction *instr, uint32_t *dwords, uint32_t idx);
 
-static uint32_t reg_fetch_src_swiz(struct ir_register *reg);
+static uint32_t reg_fetch_src_swiz(struct ir_register *reg, uint32_t n);
 static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_src_swiz(struct ir_register *reg);
@@ -119,6 +119,7 @@ int ir_shader_assemble(struct ir_shader *shader,
 {
 	uint32_t i, j;
 	uint32_t *ptr = dwords;
+	uint32_t idx = 0;
 	int ret;
 
 	/* we need an even # of CF's.. insert a NOP if needed */
@@ -147,7 +148,7 @@ int ir_shader_assemble(struct ir_shader *shader,
 		struct ir_cf *cf = shader->cfs[i];
 		if ((cf->cf_type == T_EXEC) || (cf->cf_type == T_EXEC_END)) {
 			for (j = 0; j < cf->exec.instrs_count; j++) {
-				ret = instr_emit(cf->exec.instrs[j], ptr, j);
+				ret = instr_emit(cf->exec.instrs[j], ptr, idx++);
 				if (ret) {
 					ERROR_MSG("instruction emit failed: %d", ret);
 					return ret;
@@ -309,10 +310,43 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
 }
 
 /*
- * FETCH instruction format:
- * ----- ----------- ------
+ * VTX FETCH instruction format:
+ * --- ----- ----------- ------
  *
- *     dword0:   0..4?   -  fetch operation
+ *     dword0:   0..4?   -  fetch operation - 0x00
+ *               5..10?  -  src register
+ *                11     -  <UNKNOWN>
+ *              12..17?  -  dest register
+ *             18?..19   -  <UNKNOWN>
+ *              20..23?  -  const
+ *              24..25   -  <UNKNOWN>  (maybe part of const?)
+ *              25..26   -  src swizzle (x)
+ *                            00 - x
+ *                            01 - y
+ *                            10 - z
+ *                            11 - w
+ *              27..31   -  unknown
+ *
+ *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
+ *                          low two bits of each determine position src channel,
+ *                          high bit set 1 to mask
+ *                12     -  signedness ('1' signed, '0' unsigned)
+ *              13..15   -  <UNKNOWN>
+ *              16..21?  -  type - see 'enum SURFACEFORMAT'
+ *             22?..31   -  <UNKNOWN>
+ *
+ *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
+ *              16..31   -  <UNKNOWN>
+ *
+ * note: at least VERTEX fetch instructions get patched up at runtime
+ * based on the size of attributes attached.. for example, if vec4, but
+ * size given in glVertexAttribPointer() then the write mask and size
+ * (stride?) is updated
+ *
+ * TEX FETCH instruction format:
+ * --- ----- ----------- ------
+ *
+ *     dword0:   0..4?   -  fetch operation - 0x01
  *               5..10?  -  src register
  *                11     -  <UNKNOWN>
  *              12..17?  -  dest register
@@ -328,22 +362,9 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
  *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
  *                          low two bits of each determine position src channel,
  *                          high bit set 1 to mask
- *                12     -  signedness ('1' signed, '0' unsigned)
- *              13..15   -  <UNKNOWN>
- *              16..21?  -  type
- *                            0x39 - GL_FLOAT
- *                            0x1a - GL_SHORT
- *                            0x06 - GL_BYTE
- *                            0x23 - GL_FIXED
- *             22?..31   -  <UNKNOWN>
+ *              12..31   -  <UNKNOWN>
  *
- *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
- *              16..31   -  <UNKNOWN>
- *
- * note: at least VERTEX fetch instructions get patched up at runtime
- * based on the size of attributes attached.. for example, if vec4, but
- * size given in glVertexAttribPointer() then the write mask and size
- * (stride?) is updated
+ *     dword2:   0..31   -  <UNKNOWN>
  */
 
 static int instr_emit_fetch(struct ir_instruction *instr,
@@ -361,17 +382,24 @@ static int instr_emit_fetch(struct ir_instruction *instr,
 	dwords[0] |= src_reg->num                << 5;
 	dwords[0] |= dst_reg->num                << 12;
 	dwords[0] |= instr->fetch.constant       << 20;
-	dwords[0] |= reg_fetch_src_swiz(src_reg) << 26;
 	dwords[1] |= reg_fetch_dst_swiz(dst_reg) << 0;
 
 	if (instr->fetch.opc == T_VERTEX) {
 		assert(instr->fetch.stride <= 0xff);
 		assert(instr->fetch.fmt <= 0x3f);
 
+		dwords[0] |= reg_fetch_src_swiz(src_reg, 1) << 25;
+
 		dwords[1] |= ((instr->fetch.sign == T_SIGNED) ? 1 : 0)
 		                                     << 12;
 		dwords[1] |= instr->fetch.fmt        << 16;
 		dwords[2] |= instr->fetch.stride     << 0;
+
+		/* XXX these bits seems to be always set:
+		 */
+		dwords[0] |= 0x1                     << 19;
+		dwords[0] |= 0x1                     << 24;
+		dwords[0] |= 0x1                     << 28;
 
 		/* XXX this seems to always be set, except on the
 		 * internal shaders used for GMEM->MEM blits
@@ -382,6 +410,9 @@ static int instr_emit_fetch(struct ir_instruction *instr,
 		 * this bit set:
 		 */
 		dwords[1] |= ((idx > 0) ? 0x1 : 0x0) << 30;
+		dwords[0] |= ((idx > 0) ? 0x0 : 0x1) << 27;
+	} else {
+		dwords[0] |= reg_fetch_src_swiz(src_reg, 3) << 26;
 	}
 
 	return 0;
@@ -566,30 +597,26 @@ struct ir_register * ir_reg_create(struct ir_instruction *instr,
 	return reg;
 }
 
-static uint32_t reg_fetch_src_swiz(struct ir_register *reg)
+static uint32_t reg_fetch_src_swiz(struct ir_register *reg, uint32_t n)
 {
 	uint32_t swiz = 0;
 	int i;
 
 	assert(reg->flags == 0);
-	assert(!reg->swizzle || (strlen(reg->swizzle) == 3));
+	assert(reg->swizzle && (strlen(reg->swizzle) == n));
 
 	DEBUG_MSG("fetch src R%d.%s", reg->num, reg->swizzle);
 
-	if (reg->swizzle) {
-		for (i = 2; i >= 0; i--) {
-			swiz <<= 2;
-			switch (reg->swizzle[i]) {
-			default:
-				ERROR_MSG("invalid fetch src swizzle: %s", reg->swizzle);
-			case 'x': swiz |= 0x0; break;
-			case 'y': swiz |= 0x1; break;
-			case 'z': swiz |= 0x2; break;
-			case 'w': swiz |= 0x3; break;
-			}
+	for (i = n-1; i >= 0; i--) {
+		swiz <<= 2;
+		switch (reg->swizzle[i]) {
+		default:
+			ERROR_MSG("invalid fetch src swizzle: %s", reg->swizzle);
+		case 'x': swiz |= 0x0; break;
+		case 'y': swiz |= 0x1; break;
+		case 'z': swiz |= 0x2; break;
+		case 'w': swiz |= 0x3; break;
 		}
-	} else {
-		swiz = 0x24;
 	}
 
 	return swiz;
