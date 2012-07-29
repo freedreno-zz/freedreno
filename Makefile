@@ -20,6 +20,7 @@ TESTS_3D = \
 	test-quad-flat2 \
 	test-strip-smoothed \
 	test-cube \
+	test-vertex \
 	test-triangle-smoothed \
 	test-triangle-quad
 

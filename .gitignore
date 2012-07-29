@@ -14,6 +14,7 @@ test-strip-smoothed
 test-quad-flat
 test-quad-flat2
 test-cube
+test-vertex
 test-enable-disable
 test-compiler
 
@@ -30,5 +31,6 @@ pgmdump
 *.log
 *.dat
 *.rd
+*.rd.txt
 *.html
 *-cffdump.txt
