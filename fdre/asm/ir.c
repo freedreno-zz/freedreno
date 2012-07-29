@@ -521,7 +521,6 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	dwords[0] |= dst_reg->num                                << 0;
 	dwords[0] |= ((dst_reg->flags & IR_REG_EXPORT) ? 1 : 0)  << 15;
 	dwords[0] |= reg_alu_dst_swiz(dst_reg)                   << 16;
-	dwords[0] |= 1                                           << 26; /* always set? */
 	dwords[1] |= reg_alu_src_swiz(src2_reg)                  << 8;
 	dwords[1] |= reg_alu_src_swiz(src1_reg)                  << 16;
 	dwords[1] |= ((src2_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 25;
