@@ -31,7 +31,7 @@
 #include <string.h>
 
 #include "disasm.h"
-
+#include "a2xx_reg.h"
 
 static const char *levels[] = {
 		"\t",
@@ -402,11 +402,21 @@ struct {
 struct {
 	const char *name;
 } fetch_types[0xff] = {
-#define TYPE(id, name) [id] = { name }
-		TYPE(0x39, "GL_FLOAT"),
-		TYPE(0x1a, "GL_SHORT"),
-		TYPE(0x06, "GL_BYTE"),
-		TYPE(0x23, "GL_FIXED"),
+#define TYPE(id) [id] = { #id }
+		TYPE(FMT_1_REVERSE),
+		TYPE(FMT_32_FLOAT),
+		TYPE(FMT_32_32_FLOAT),
+		TYPE(FMT_32_32_32_FLOAT),
+		TYPE(FMT_32_32_32_32_FLOAT),
+		TYPE(FMT_16),
+		TYPE(FMT_16_16),
+		TYPE(FMT_16_16_16_16),
+		TYPE(FMT_8),
+		TYPE(FMT_8_8),
+		TYPE(FMT_8_8_8_8),
+		TYPE(FMT_32),
+		TYPE(FMT_32_32),
+		TYPE(FMT_32_32_32_32),
 #undef TYPE
 };
 
