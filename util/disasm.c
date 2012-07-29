@@ -486,7 +486,7 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
  *
  *     dword0:   0..11   -  addr/size 1
  *              12..15   -  count 1
- *              16..31   -  sequence.. 2 bits per instruction in the EXEC
+ *              16..31   -  sequence 1.. 2 bits per instruction in the EXEC
  *                          clause, the low bit seems to control FETCH vs
  *                          ALU instruction type, the high bit seems to be
  *                          (S) modifier on instruction (which might make
@@ -499,9 +499,9 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
  *              16..27   -  addr/size 2
  *              28..31   -  count 2
  *
- *     dword2:   0..23   -  <UNKNOWN>
+ *     dword2:   0..15   -  sequence 2
+ *              16..23   -  <UNKNOWN>
  *              24..31   -  op 2
- *
  */
 
 struct {
@@ -547,7 +547,7 @@ static void print_cf(struct cf *cf, int level)
 				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0xffff << 16)),
 				cf->dwords[1] & ~((ADDR_MASK << 16) |
 						(0xf << 28) | (0xff << 8)),
-				cf->dwords[2] & ~((0xff << 24)));
+				cf->dwords[2] & ~((0xff << 24) | 0xffff));
 		} else {
 			printf("                          \t");
 		}
@@ -574,6 +574,7 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
 		uint32_t cnt2  = (dwords[1] >> 28) & 0xf;
 		uint32_t op2   = (dwords[2] >> 24) & 0xff;
+		uint32_t seqn2 =  dwords[2] & 0xffff;
 
 		if (!off)
 			off = addr ? addr : addr2;
@@ -590,7 +591,7 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 		cf->addr = addr2;
 		cf->cnt  = cnt2;
 		cf->op   = op2;
-		cf->sequence = 0;  // XXX probably not.. need to find examples
+		cf->sequence = seqn2;
 
 		dwords += 3;
 
