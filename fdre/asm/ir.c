@@ -190,7 +190,7 @@ static uint32_t cf_op(struct ir_cf *cf)
  *
  *     dword0:   0..11   -  addr/size 1
  *              12..15   -  count 1
- *              16..31   -  sequence.. 2 bits per instruction in the EXEC
+ *              16..31   -  sequence 1.. 2 bits per instruction in the EXEC
  *                          clause, the low bit seems to control FETCH vs
  *                          ALU instruction type, the high bit seems to be
  *                          (S) modifier on instruction (which might make
@@ -203,9 +203,9 @@ static uint32_t cf_op(struct ir_cf *cf)
  *              16..27   -  addr/size 2
  *              28..31   -  count 2
  *
- *     dword2:   0..23   -  <UNKNOWN>
+ *     dword2:   0..15   -  sequence 2
+ *              16..23   -  <UNKNOWN>
  *              24..31   -  op 2
- *
  */
 
 static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords)
@@ -240,7 +240,7 @@ static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords)
 		assert(cf2->exec.sequence <= 0xffff);
 		dwords[1] |= cf2->exec.addr << 16;
 		dwords[1] |= cf2->exec.cnt << 28;
-		assert(cf2->exec.sequence == 0);  /* don't know where this goes yet */
+		dwords[2] |= cf2->exec.sequence << 0;
 		break;
 	case T_ALLOC:
 		assert(cf2->alloc.size <= ADDR_MASK);
