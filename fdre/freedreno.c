@@ -38,6 +38,7 @@
 
 #include "msm_kgsl.h"
 #include "freedreno.h"
+#include "ir.h"
 #include "kgsl.h"
 #include "bmp.h"
 
@@ -272,12 +273,31 @@ static void emit_shader(struct fd_state *state, struct fd_shader *shader)
 		OUT_RING(ring, shader->bin[i]);
 }
 
-static int attach_shader(struct fd_shader *shader,
+static int attach_shader_bin(struct fd_shader *shader,
 		const void *bin, uint32_t sz)
 {
 	memset(shader, 0, sizeof(*shader));
 	memcpy(shader->bin, bin, sz);
 	shader->sizedwords = ALIGN(sz, 4) / 4;
+	return 0;
+}
+
+static int attach_shader_asm(struct fd_shader *shader,
+		const char *src, uint32_t sz)
+{
+	struct ir_shader *ir = fd_asm_parse(src);
+	int sizedwords;
+	if (!ir) {
+		ERROR_MSG("parse failed");
+		return -1;
+	}
+	sizedwords = ir_shader_assemble(ir, shader->bin,
+			ARRAY_SIZE(shader->bin));
+	if (sizedwords <= 0) {
+		ERROR_MSG("assembler failed");
+		return -1;
+	}
+	shader->sizedwords = sizedwords;
 	return 0;
 }
 
@@ -409,10 +429,10 @@ struct fd_state * fd_init(void)
 	// the case
 	state->uniforms.bo = kgsl_bo_new(state->fd, 0x20000, 0);
 
-	attach_shader(&state->solid_vertex_shader, solid_vertex_shader_bin,
+	attach_shader_bin(&state->solid_vertex_shader, solid_vertex_shader_bin,
 			sizeof(solid_vertex_shader_bin));
 
-	attach_shader(&state->solid_fragment_shader, solid_fragment_shader_bin,
+	attach_shader_bin(&state->solid_fragment_shader, solid_fragment_shader_bin,
 			sizeof(solid_fragment_shader_bin));
 
 	/* setup initial GL state: */
@@ -473,13 +493,25 @@ void fd_fini(struct fd_state *state)
 int fd_vertex_shader_attach_bin(struct fd_state *state,
 		const void *bin, uint32_t sz)
 {
-	return attach_shader(&state->vertex_shader, bin, sz);
+	return attach_shader_bin(&state->vertex_shader, bin, sz);
 }
 
 int fd_fragment_shader_attach_bin(struct fd_state *state,
 		const void *bin, uint32_t sz)
 {
-	return attach_shader(&state->fragment_shader, bin, sz);
+	return attach_shader_bin(&state->fragment_shader, bin, sz);
+}
+
+int fd_vertex_shader_attach_asm(struct fd_state *state,
+		const char *src, uint32_t sz)
+{
+	return attach_shader_asm(&state->vertex_shader, src, sz);
+}
+
+int fd_fragment_shader_attach_asm(struct fd_state *state,
+		const char *src, uint32_t sz)
+{
+	return attach_shader_asm(&state->fragment_shader, src, sz);
 }
 
 int fd_link(struct fd_state *state)

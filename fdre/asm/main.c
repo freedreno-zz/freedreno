@@ -34,8 +34,6 @@
 #include "ir.h"
 #include "util.h"
 
-struct ir_shader * fd_asm_parse(const char *src);
-
 int main(int argc, char **argv)
 {
 	struct ir_shader *shader;

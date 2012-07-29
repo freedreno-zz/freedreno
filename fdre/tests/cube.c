@@ -166,30 +166,45 @@ int main(int argc, char **argv)
 		"    gl_FragColor = vVaryingColor;  \n"
 		"}                                  \n";
 #else
-	const uint32_t vertex_shader_bin[] = {
-			0x00956003, 0x00001000, 0xc2000000, 0x00006009,
-			0x400f1000, 0x10000000, 0x00000000, 0x5013c400,
-			0x20000000, 0x1d481000, 0x00393e88, 0x0000000c,
-			0x11482000, 0x40393a88, 0x0000000c, 0x13483000,
-			0x40393e88, 0x0000000c, 0x140f0000, 0x001b0000,
-			0xa1020700, 0x140f0000, 0x00c60000, 0xab020600,
-			0x140f0000, 0x00b10000, 0xab020500, 0x140f803e,
-			0x006c0000, 0xab020400, 0x140f0000, 0x001b0000,
-			0xa1020300, 0x140f0000, 0x00c60000, 0xab020200,
-			0x140f0000, 0x00b10000, 0xab020100, 0x140f0000,
-			0x006c0000, 0xab020000, 0x4c170402, 0x00060000,
-			0xa1030a00, 0x14070000, 0x04002c0c, 0xcb00040b,
-			0x14010004, 0x00000000, 0xf0000000, 0x14070002,
-			0x00310000, 0xab030902, 0x14070002, 0x002c0000,
-			0xab030802, 0x58800000, 0x00000040, 0xe2000004,
-			0x14070000, 0x00001b00, 0xe1000000, 0x14010000,
-			0x00000000, 0xf0020000, 0x14010000, 0x00000300,
-			0xa2000b00, 0x148f8000, 0x00002c00, 0xe1010000,
-	};
-	const uint32_t fragment_shader_bin[] = {
-			0x00000000, 0x1001c400, 0x20000000, 0x140f8000,
-			0x00000000, 0xe2000000,
-	};
+	const char *vertex_shader_asm =
+		"EXEC                                                            \n"
+		"      FETCH:  VERTEX  R1.xyz_ = R0.z FMT_32_32_32_FLOAT SIGNED  \n"
+		"                                   STRIDE(12) CONST(4)          \n"
+		"      FETCH:  VERTEX  R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED  \n"
+		"                                   STRIDE(12) CONST(4)          \n"
+		"      FETCH:  VERTEX  R3.xyz_ = R0.y FMT_32_32_32_FLOAT SIGNED  \n"
+		"                                       STRIDE(12) CONST(4)      \n"
+		"   (S)ALU:    MULv    R0 = R2.wwww, C7                          \n"
+		"      ALU:    MULADDv R0 = R0, R2.zzzz, C6                      \n"
+		"      ALU:    MULADDv R0 = R0, R2.yyyy, C5                      \n"
+		"ALLOC COORD SIZE(0x0)                                           \n"
+		"EXEC                                                            \n"
+		"      ALU:    MULADDv export62 = R0, R2.xxxx, C4  ; gl_Position \n"
+		"      ALU:    MULv    R0 = R2.wwww, C3                          \n"
+		"      ALU:    MULADDv R0 = R0, R2.zzzz, C2                      \n"
+		"      ALU:    MULADDv R0 = R0, R2.yyyy, C1                      \n"
+		"      ALU:    MULADDv R0 = R0, R2.xxxx, C0                      \n"
+		"      ALU:    MULv    R2.xyz_ = R3.zzzw, C10                    \n"
+		"              RCP     R4.x___ = R0                              \n"
+		"EXEC                                                            \n"
+		"      ALU:    MULADDv R0.xyz_ = C11.xxzw, -R0, R4.xxxw          \n"
+		"      ALU:    DOT3v   R4.x___ = R0, R0                          \n"
+		"      ALU:    MULADDv R2.xyz_ = R2, R3.yyyw, C9                 \n"
+		"      ALU:    MULADDv R2.xyz_ = R2, R3.xxxw, C8                 \n"
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                     \n"
+		"EXEC_END                                                        \n"
+		"      ALU:    MAXv    R0.____ = R0, R0                          \n"
+		"              RSQ     R0.___w = R4.xyzx                         \n"
+		"      ALU:    MULv    R0.xyz_ = R0, R0.wwww                     \n"
+		"      ALU:    DOT3v   R0.x___ = R2, R0                          \n"
+		"      ALU:    MAXv    R0.x___ = R0, C11.wyzw                    \n"
+		"      ALU:    MULv    export0 = R1, R0.xxxw                     \n"
+		"              MOV     export0.___w = R0       ; vVaryingColor   \n";
+
+	const char *fragment_shader_asm =
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                     \n"
+		"EXEC_END                                                        \n"
+		"      ALU:    MAXv export0 = R0, R0    ; gl_FragColor           \n";
 #endif
 	int width = 352, height = 352;
 	int i, n = 1;
@@ -210,10 +225,10 @@ int main(int argc, char **argv)
 
 	fd_make_current(state, surface);
 
-	fd_vertex_shader_attach_bin(state, vertex_shader_bin,
-			sizeof(vertex_shader_bin));
-	fd_fragment_shader_attach_bin(state, fragment_shader_bin,
-			sizeof(fragment_shader_bin));
+	fd_vertex_shader_attach_asm(state, vertex_shader_asm,
+			sizeof(vertex_shader_asm));
+	fd_fragment_shader_attach_asm(state, fragment_shader_asm,
+			sizeof(fragment_shader_asm));
 
 	fd_link(state);
 

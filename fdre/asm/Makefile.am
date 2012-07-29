@@ -22,7 +22,7 @@
 #
 
 AM_CFLAGS = \
-	-O0 -g \
+	-O0 -g -fPIC \
 	$(WARN_CFLAGS) \
 	-I$(top_srcdir) \
 	-I$(top_srcdir)/../includes

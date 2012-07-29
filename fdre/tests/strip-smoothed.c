@@ -72,18 +72,23 @@ int main(int argc, char **argv)
 		"    gl_FragColor = vColor;   \n"
 		"}                            \n";
 #else
-	const uint32_t vertex_shader_bin[] = {
-			0x00052003, 0x00001000, 0xc2000000, 0x00001005,
-			0x00001000, 0xc4000000, 0x00001006, 0x00002000,
-			0x00000000, 0x1b481000, 0x00263688, 0x00000010,
-			0x11482000, 0x40393a88, 0x0000000c, 0x140f803e,
-			0x00000000, 0xe2020200, 0x140f8000, 0x00000000,
-			0xe2010100,
-	};
-	const uint32_t fragment_shader_bin[] = {
-			0x00000000, 0x1001c400, 0x20000000, 0x140f8000,
-			0x00000000, 0xe2000000,
-	};
+	const char *vertex_shader_asm =
+		"EXEC                                                                \n"
+		"      FETCH:   VERTEX	R1.xyzw = R0.y FMT_32_32_32_32_FLOAT SIGNED  \n"
+		"                                       STRIDE(16) CONST(4)          \n"
+		"      FETCH:   VERTEX	R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED     \n"
+		"                                       STRIDE(12) CONST(4)          \n"
+		"ALLOC COORD SIZE(0x0)                                               \n"
+		"EXEC                                                                \n"
+		"      ALU:     MAXv export62 = R2, R2  ; gl_Position                \n"
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                         \n"
+		"EXEC_END                                                            \n"
+		"      ALU:     MAXv export0 = R1, R1                                \n"
+		"NOP                                                                 \n";
+	const char *fragment_shader_asm =
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                         \n"
+		"EXEC_END                                                            \n"
+		"      ALU:    MAXv export0 = R0, R0    ; gl_FragColor               \n";
 #endif
 
 	DEBUG_MSG("----------------------------------------------------------------");
@@ -99,10 +104,10 @@ int main(int argc, char **argv)
 
 	fd_make_current(state, surface);
 
-	fd_vertex_shader_attach_bin(state, vertex_shader_bin,
-			sizeof(vertex_shader_bin));
-	fd_fragment_shader_attach_bin(state, fragment_shader_bin,
-			sizeof(fragment_shader_bin));
+	fd_vertex_shader_attach_asm(state, vertex_shader_asm,
+			sizeof(vertex_shader_asm));
+	fd_fragment_shader_attach_asm(state, fragment_shader_asm,
+			sizeof(fragment_shader_asm));
 
 	fd_link(state);
 

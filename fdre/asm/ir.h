@@ -33,6 +33,8 @@
 
 struct ir_shader;
 
+struct ir_shader * fd_asm_parse(const char *src);
+
 struct ir_register {
 	enum {
 		IR_REG_CONST  = 0x1,
