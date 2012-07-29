@@ -348,10 +348,72 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 }
 
 /*
- * FETCH instruction format:
- * ----- ----------- ------
+ * VTX FETCH instruction format:
+ * --- ----- ----------- ------
  *
- *     dword0:   0..4?   -  fetch operation
+ * Note: w/ sequence of VERTEX fetches, re-ordered into order of attributes
+ * in memory, I get:
+ *
+ *    +------ bits 25..26
+ *   /     +- dword[0]
+ *  /     /
+ * / /----+---\
+ * 0 11 4 82000 40393a88 0000000c    FETCH:	VERTEX	R2.xyz1 = R0.xyx FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)
+ * 1 1b 4 81000 00263688 00000010    FETCH:	VERTEX	R1.xyzw = R0.zyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(4)
+ * 2 15 4 83000 40263688 00000010    FETCH:	VERTEX	R3.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(4)
+ * 0 11 5 84000 40263688 00000010    FETCH:	VERTEX	R4.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(5)
+ * 1 13 5 86000 40263688 00000010    FETCH:	VERTEX	R6.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(5)
+ * 2 15 5 85000 40263688 00000010    FETCH:	VERTEX	R5.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(5)
+ * 0 11 6 88000 40263688 00000010    FETCH:	VERTEX	R8.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(6)
+ * 1 13 6 87000 40263688 00000010    FETCH:	VERTEX	R7.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(6)
+ * 2 15 6 8b000 40263688 00000010    FETCH:	VERTEX	R11.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(6)
+ * 0 11 7 89000 40263688 00000010    FETCH:	VERTEX	R9.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(7)
+ * 1 13 7 8c000 40263688 00000010    FETCH:	VERTEX	R12.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(7)
+ * 2 15 7 8a000 40263688 00000010    FETCH:	VERTEX	R10.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(7)
+ * 0 11 8 8e000 40263688 00000010    FETCH:	VERTEX	R14.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(8)
+ * 1 13 8 8d000 40263688 00000010    FETCH:	VERTEX	R13.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(8)
+ * 2 15 8 8f000 40263688 00000010    FETCH:	VERTEX	R15.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(8)
+ *
+ * So maybe 25..26 is src reg swizzle, and somewhere in 20..23 is some sort of
+ * offset?
+ *
+ * Note that GL_MAX_VERTEX_ATTRIBS is 16 (although possibly should be 15,
+ * as I get an error binding attribute >14!)
+ *
+ *     dword0:   0..4?   -  fetch operation - 0x00
+ *               5..10?  -  src register
+ *                11     -  <UNKNOWN>
+ *              12..17?  -  dest register
+ *             18?..19   -  <UNKNOWN>
+ *              20..23?  -  const
+ *              24..25   -  <UNKNOWN>  (maybe part of const?)
+ *              25..26   -  src swizzle (x)
+ *                            00 - x
+ *                            01 - y
+ *                            10 - z
+ *                            11 - w
+ *              27..31   -  unknown
+ *
+ *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
+ *                          low two bits of each determine position src channel,
+ *                          high bit set 1 to mask
+ *                12     -  signedness ('1' signed, '0' unsigned)
+ *              13..15   -  <UNKNOWN>
+ *              16..21?  -  type - see 'enum SURFACEFORMAT'
+ *             22?..31   -  <UNKNOWN>
+ *
+ *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
+ *              16..31   -  <UNKNOWN>
+ *
+ * note: at least VERTEX fetch instructions get patched up at runtime
+ * based on the size of attributes attached.. for example, if vec4, but
+ * size given in glVertexAttribPointer() then the write mask and size
+ * (stride?) is updated
+ *
+ * TEX FETCH instruction format:
+ * --- ----- ----------- ------
+ *
+ *     dword0:   0..4?   -  fetch operation - 0x01
  *               5..10?  -  src register
  *                11     -  <UNKNOWN>
  *              12..17?  -  dest register
@@ -368,21 +430,9 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
  *                          low two bits of each determine position src channel,
  *                          high bit set 1 to mask
  *                12     -  signedness ('1' signed, '0' unsigned)
- *              13..15   -  <UNKNOWN>
- *              16..21?  -  type
- *                            0x39 - GL_FLOAT
- *                            0x1a - GL_SHORT
- *                            0x06 - GL_BYTE
- *                            0x23 - GL_FIXED
- *             22?..31   -  <UNKNOWN>
+ *              13..31   -  <UNKNOWN>
  *
- *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
- *              16..31   -  <UNKNOWN>
- *
- * note: at least VERTEX fetch instructions get patched up at runtime
- * based on the size of attributes attached.. for example, if vec4, but
- * size given in glVertexAttribPointer() then the write mask and size
- * (stride?) is updated
+ *     dword2:   0..31   -  <UNKNOWN>
  */
 
 enum fetch_opc {
@@ -426,11 +476,7 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 	uint32_t src_reg   = (dwords[0] >> 5) & REG_MASK;
 	uint32_t dst_reg   = (dwords[0] >> 12) & REG_MASK;
 	uint32_t fetch_opc =  dwords[0] & 0x1f;
-	uint32_t src_swiz  = (dwords[0] >> 26) & 0x3f;
 	uint32_t dst_swiz  =  dwords[1] & 0xfff;
-	uint32_t sign      = (dwords[1] >> 12) & 0x1;
-	uint32_t type      = (dwords[1] >> 16) & 0x3f;
-	uint32_t stride    =  dwords[2] & 0xff;
 	int i;
 
 	printf("%s", levels[level]);
@@ -438,11 +484,20 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
 	if (debug & PRINT_UNKNOWN) {
-		printf("%08x %08x %08x\t",
-				dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
-						(0xf << 20) | 0x1f | (0x3f << 26)),
-				dwords[1] & ~(0xfff | (0x1 << 12) | (0x3f << 16)),
-				dwords[2] & ~(0xff));
+		if (fetch_opc == VERTEX) {
+			printf("%08x %08x %08x\t",
+					dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
+							(0xf << 20) | 0x1f | (0x3 << 25)),
+					dwords[1] & ~(0xfff | (0x1 << 12) | (0x3f << 16)),
+					dwords[2] & ~(0xff));
+
+		} else {
+			printf("%08x %08x %08x\t",
+					dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
+							(0xf << 20) | 0x1f | (0x3f << 26)),
+					dwords[1] & ~(0xfff),
+					dwords[2] & ~(0));
+		}
 	}
 
 	printf("   %sFETCH:\t", sync ? "(S)" : "   ");
@@ -458,14 +513,13 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 		dst_swiz >>= 3;
 	}
 
-	printf(" = R%u.", src_reg);
-	for (i = 0; i < 3; i++) {
-		printf("%c", chan_names[src_swiz & 0x3]);
-		src_swiz >>= 2;
-	}
-
-	/* not sure, these may only apply to VERTEX fetch.. */
 	if (fetch_opc == VERTEX) {
+		uint32_t src_swiz  = (dwords[0] >> 25) & 0x3;
+		uint32_t sign      = (dwords[1] >> 12) & 0x1;
+		uint32_t type      = (dwords[1] >> 16) & 0x3f;
+		uint32_t stride    =  dwords[2] & 0xff;
+		printf(" = R%u.", src_reg);
+		printf("%c", chan_names[src_swiz & 0x3]);
 		if (fetch_types[type].name) {
 			printf(" %s", fetch_types[type].name);
 		} else  {
@@ -473,6 +527,13 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 		}
 		printf(" %s", sign ? "SIGNED" : "UNSIGNED");
 		printf(" STRIDE(%d)", stride);
+	} else {
+		uint32_t src_swiz  = (dwords[0] >> 26) & 0x3f;
+		printf(" = R%u.", src_reg);
+		for (i = 0; i < 3; i++) {
+			printf("%c", chan_names[src_swiz & 0x3]);
+			src_swiz >>= 2;
+		}
 	}
 
 	printf(" CONST(%u)\n", src_const);
