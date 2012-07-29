@@ -66,6 +66,7 @@ struct ir_shader * fd_asm_parse(const char *src)
 %union {
 	int tok;
 	int num;
+	int fmt;
 	const char *str;
 	struct ir_register *reg;
 }
@@ -123,17 +124,31 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_MUL
 %token <tok> T_ADD
 
+/* vertex fetch formats: */
+%token <fmt> T_FMT_1_REVERSE
+%token <fmt> T_GL_FLOAT
+%token <fmt> T_FMT_32_FLOAT
+%token <fmt> T_FMT_32_32_FLOAT
+%token <fmt> T_FMT_32_32_32_FLOAT
+%token <fmt> T_FMT_32_32_32_32_FLOAT
+%token <fmt> T_FMT_16
+%token <fmt> T_FMT_16_16
+%token <fmt> T_FMT_16_16_16_16
+%token <fmt> T_FMT_8
+%token <fmt> T_FMT_8_8
+%token <fmt> T_FMT_8_8_8_8
+%token <fmt> T_FMT_32
+%token <fmt> T_FMT_32_32
+%token <fmt> T_FMT_32_32_32_32
+
 /* vertex fetch attributes: */
-%token <tok> T_GL_FLOAT
-%token <tok> T_GL_SHORT
-%token <tok> T_GL_BYTE
-%token <tok> T_GL_FIXED
-%token <tok> T_SIGNED
 %token <tok> T_UNSIGNED
+%token <tok> T_SIGNED
 
 %type <num> number
 %type <reg> reg alu_src_reg reg_or_const reg_or_export
-%type <tok> cf_alloc_type type signedness alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
+%type <tok> cf_alloc_type signedness alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
+%type <fmt> format
 
 %error-verbose
 
@@ -193,18 +208,28 @@ fetch_sample:      T_SAMPLE reg '=' reg T_CONST '(' number ')' {
                        instr->fetch.constant = $7;
 }
 
-fetch_vertex:      T_VERTEX reg '=' reg type signedness T_STRIDE '(' number ')' T_CONST '(' number ')' {
+fetch_vertex:      T_VERTEX reg '=' reg format signedness T_STRIDE '(' number ')' T_CONST '(' number ')' {
                        instr->fetch.opc = $1;
-                       instr->fetch.type = $5;
+                       instr->fetch.fmt = $5;
                        instr->fetch.sign = $6;
                        instr->fetch.stride = $9;
                        instr->fetch.constant = $13;
 }
 
-type:              T_GL_FLOAT
-|                  T_GL_SHORT
-|                  T_GL_BYTE
-|                  T_GL_FIXED
+format:            T_FMT_1_REVERSE
+|                  T_FMT_32_FLOAT
+|                  T_FMT_32_32_FLOAT
+|                  T_FMT_32_32_32_FLOAT
+|                  T_FMT_32_32_32_32_FLOAT
+|                  T_FMT_16
+|                  T_FMT_16_16
+|                  T_FMT_16_16_16_16
+|                  T_FMT_8
+|                  T_FMT_8_8
+|                  T_FMT_8_8_8_8
+|                  T_FMT_32
+|                  T_FMT_32_32
+|                  T_FMT_32_32_32_32
 
 signedness:        T_SIGNED
 |                  T_UNSIGNED

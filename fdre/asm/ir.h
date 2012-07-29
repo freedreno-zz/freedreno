@@ -25,6 +25,7 @@
 #define IR_H_
 
 #include <stdint.h>
+#include "a2xx_reg.h"
 
 /* low level intermediate representation of an adreno shader program */
 
@@ -55,7 +56,7 @@ struct ir_instruction {
 			int opc;
 			int constant;
 			/* maybe vertex fetch specific: */
-			int type;   /* T_GL_FLOAT, T_GL_SHORT, etc */
+			enum SURFACEFORMAT fmt;
 			int sign;   /* T_SIGNED or T_UNSIGNED */
 			uint32_t stride;
 		} fetch;

@@ -35,7 +35,7 @@
 
 static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords);
 
-static int instr_emit(struct ir_instruction *instr, uint32_t *dwords);
+static int instr_emit(struct ir_instruction *instr, uint32_t *dwords, uint32_t idx);
 
 static uint32_t reg_fetch_src_swiz(struct ir_register *reg);
 static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
@@ -147,7 +147,7 @@ int ir_shader_assemble(struct ir_shader *shader,
 		struct ir_cf *cf = shader->cfs[i];
 		if ((cf->cf_type == T_EXEC) || (cf->cf_type == T_EXEC_END)) {
 			for (j = 0; j < cf->exec.instrs_count; j++) {
-				ret = instr_emit(cf->exec.instrs[j], ptr);
+				ret = instr_emit(cf->exec.instrs[j], ptr, j);
 				if (ret) {
 					ERROR_MSG("instruction emit failed: %d", ret);
 					return ret;
@@ -275,18 +275,6 @@ static uint32_t instr_fetch_opc(struct ir_instruction *instr)
 	}
 }
 
-static uint32_t instr_fetch_type(struct ir_instruction *instr)
-{
-	switch (instr->fetch.type) {
-	default:
-		ERROR_MSG("invalid fetch type: %d\n", instr->fetch.type);
-	case T_GL_FLOAT: return 0x39;
-	case T_GL_SHORT: return 0x1a;
-	case T_GL_BYTE:  return 0x06;
-	case T_GL_FIXED: return 0x23;
-	}
-}
-
 static uint32_t instr_vector_opc(struct ir_instruction *instr)
 {
 	switch (instr->alu.vector_opc) {
@@ -358,7 +346,8 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
  * (stride?) is updated
  */
 
-static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
+static int instr_emit_fetch(struct ir_instruction *instr,
+		uint32_t *dwords, uint32_t idx)
 {
 	int reg = 0;
 	struct ir_register *dst_reg = instr->regs[reg++];
@@ -377,16 +366,22 @@ static int instr_emit_fetch(struct ir_instruction *instr, uint32_t *dwords)
 
 	if (instr->fetch.opc == T_VERTEX) {
 		assert(instr->fetch.stride <= 0xff);
+		assert(instr->fetch.fmt <= 0x3f);
 
 		dwords[1] |= ((instr->fetch.sign == T_SIGNED) ? 1 : 0)
 		                                     << 12;
-		dwords[1] |= instr_fetch_type(instr) << 16;
+		dwords[1] |= instr->fetch.fmt        << 16;
 		dwords[2] |= instr->fetch.stride     << 0;
 
 		/* XXX this seems to always be set, except on the
 		 * internal shaders used for GMEM->MEM blits
 		 */
 		dwords[1] |= 0x1                     << 13;
+
+		/* XXX seems like every FETCH but the first has
+		 * this bit set:
+		 */
+		dwords[1] |= ((idx > 0) ? 0x1 : 0x0) << 30;
 	}
 
 	return 0;
@@ -546,10 +541,10 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	return 0;
 }
 
-static int instr_emit(struct ir_instruction *instr, uint32_t *dwords)
+static int instr_emit(struct ir_instruction *instr, uint32_t *dwords, uint32_t idx)
 {
 	switch (instr->instr_type) {
-	case T_FETCH: return instr_emit_fetch(instr, dwords);
+	case T_FETCH: return instr_emit_fetch(instr, dwords, idx);
 	case T_ALU:   return instr_emit_alu(instr, dwords);
 	}
 	return -1;

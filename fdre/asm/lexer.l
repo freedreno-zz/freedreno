@@ -24,8 +24,10 @@
 %{
 #include <stdlib.h>
 #include "parser.h"
+#include "a2xx_reg.h"
 
 #define TOKEN(t) (asm_yylval.tok = t)
+#define FORMAT(f) asm_yylval.fmt = f; return T_ ## f
 extern YYSTYPE asm_yylval;
 %}
 
@@ -35,7 +37,7 @@ extern YYSTYPE asm_yylval;
 %%
 [ \t\n]                           ; /* ignore whitespace */
 ";"[^\n]*"\n"                     ; /* ignore comments */
-[1-9][0-9]*                       asm_yylval.num = strtol(yytext, NULL, 0);    return T_INT;
+[0-9]*                            asm_yylval.num = strtol(yytext, NULL, 0);    return T_INT;
 "0x"[0-9a-fA-F]*                  asm_yylval.num = strtol(yytext, NULL, 0);    return T_HEX;
 "."[_w-z01][_w-z01]?[_w-z01]?[_w-z01]? asm_yylval.str = yytext + 1;            return T_SWIZZLE;
 "NOP"                             return TOKEN(T_NOP);
@@ -74,10 +76,20 @@ extern YYSTYPE asm_yylval;
 "SQRT"                            return TOKEN(T_SQRT);
 "MUL"                             return TOKEN(T_MUL);
 "ADD"                             return TOKEN(T_ADD);
-"GL_FLOAT"                        return TOKEN(T_GL_FLOAT);
-"GL_SHORT"                        return TOKEN(T_GL_SHORT);
-"GL_BYTE"                         return TOKEN(T_GL_BYTE);
-"GL_FIXED"                        return TOKEN(T_GL_FIXED);
+"FMT_1_REVERSE"                   FORMAT(FMT_1_REVERSE);
+"FMT_32_FLOAT"                    FORMAT(FMT_32_FLOAT);
+"FMT_32_32_FLOAT"                 FORMAT(FMT_32_32_FLOAT);
+"FMT_32_32_32_FLOAT"              FORMAT(FMT_32_32_32_FLOAT);
+"FMT_32_32_32_32_FLOAT"           FORMAT(FMT_32_32_32_32_FLOAT);
+"FMT_16"                          FORMAT(FMT_16);
+"FMT_16_16"                       FORMAT(FMT_16_16);
+"FMT_16_16_16_16"                 FORMAT(FMT_16_16_16_16);
+"FMT_8"                           FORMAT(FMT_8);
+"FMT_8_8"                         FORMAT(FMT_8_8);
+"FMT_8_8_8_8"                     FORMAT(FMT_8_8_8_8);
+"FMT_32"                          FORMAT(FMT_32);
+"FMT_32_32"                       FORMAT(FMT_32_32);
+"FMT_32_32_32_32"                 FORMAT(FMT_32_32_32_32);
 "SIGNED"                          return TOKEN(T_SIGNED);
 "UNSIGNED"                        return TOKEN(T_UNSIGNED);
 "="                               return '=';

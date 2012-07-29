@@ -24,7 +24,8 @@
 AM_CFLAGS = \
 	-O0 -g \
 	$(WARN_CFLAGS) \
-	-I$(top_srcdir)
+	-I$(top_srcdir) \
+	-I$(top_srcdir)/../includes
 
 AM_LDFLAGS = \
 	-static-libtool-libs
