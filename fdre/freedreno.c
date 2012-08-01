@@ -120,6 +120,8 @@ struct fd_state {
 
 	GLenum cull_mode;
 
+	enum COLORFORMATX color_format;
+
 	uint32_t pa_su_sc_mode_cntl;
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
@@ -438,6 +440,8 @@ struct fd_state * fd_init(void)
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
 
+	state->color_format = COLORX_8_8_8_8;
+
 	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST;
 	state->rb_colorcontrol = 0x00000c07 |
 			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
@@ -636,7 +640,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, 0x00000000);				/* RB_COPY_CONTROL */
 	OUT_RING(ring, surface->bo->gpuaddr);	/* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);	/* RB_COPY_DEST_PITCH */
-	OUT_RING(ring, 0x0003c108 | (COLORX_8_8_8_8 << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
+	OUT_RING(ring, 0x0003c108 | (state->color_format << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
 	OUT_RING(ring, 0x0000000);				/* RB_COPY_DEST_OFFSET */
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
@@ -747,7 +751,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_INFO));
-	OUT_RING(ring, 0x200 | COLORX_8_8_8_8);
+	OUT_RING(ring, 0x200 | state->color_format);
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
@@ -823,8 +827,6 @@ int fd_depth_func(struct fd_state *state, GLenum depth_func)
 
 int fd_enable(struct fd_state *state, GLenum cap)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
-
 	/* note: some of this code makes assumptions that mode/func/etc is
 	 * set before enabling, and that the previous state was disabled.
 	 * But this isn't really intended to be a robust GL implementation,
@@ -863,8 +865,6 @@ int fd_enable(struct fd_state *state, GLenum cap)
 
 int fd_disable(struct fd_state *state, GLenum cap)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
-
 	switch (cap) {
 	case GL_CULL_FACE:
 		state->pa_su_sc_mode_cntl &=
@@ -955,7 +955,7 @@ static void emit_uniforms(struct fd_state *state)
 
 	for (n = 0; n < state->uniforms.nparams; n++) {
 		struct fd_param *p = &state->uniforms.params[n];
-		uint32_t *data = p->data;
+		const uint32_t *data = p->data;
 		uint32_t i, j;
 		for (i = 0; i < p->count; i++) {
 			for (j = 0; j < p->size; j++) {
@@ -1135,27 +1135,40 @@ int fd_flush(struct fd_state *state)
 
 /* ************************************************************************* */
 
-struct fd_surface * fd_surface_new(struct fd_state *state,
-		uint32_t width, uint32_t height)
+static int fmt2cpp[] = {
+		[COLORX_8_8_8_8] = 4,
+		[COLORX_32_32_32_32_FLOAT] = 16,
+};
+
+struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
+		uint32_t width, uint32_t height, enum COLORFORMATX color_format)
 {
-	struct fd_surface *surface = calloc(1, sizeof(*surface));
+	struct fd_surface *surface;
+	int cpp = fmt2cpp[color_format];
+
+	if (!cpp) {
+		ERROR_MSG("invalid color format: %d", color_format);
+		return NULL;
+	}
+
+	state->color_format = color_format;
+
+	surface = calloc(1, sizeof(*surface));
 	assert(surface);
 	surface->width  = width;
 	surface->height = height;
 	surface->pitch  = ALIGN(width, 32);
-	surface->cpp    = 4;
-
-	// 64x64 -> 0x4000/0x4000 -> 0x0
-	//       then eglMakeCurrent() -> 0x2000
-	// 400x240 -> 0x61800/0x68000 -> 0x61800
-	//       then eglMakeCurrent() -> 0x34000,0x40000,0x4000,0x10000
-	// 500x240 -> 0x78000/0x80000 -> 0x8000
-	// 400x340 -> 0x8A200/0x8f000 -> 0x4E00
-	// 800x600 -> 0x1D4C00/0x1db000 -> 0x6400
+	surface->cpp    = cpp;
 
 	surface->bo = kgsl_bo_new(state->fd,
 			surface->pitch * surface->height * surface->cpp, 0);
 	return surface;
+}
+
+struct fd_surface * fd_surface_new(struct fd_state *state,
+		uint32_t width, uint32_t height)
+{
+	return fd_surface_new_fmt(state, width, height, COLORX_8_8_8_8);
 }
 
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface)
@@ -1408,11 +1421,11 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));
 #if 0 /* binning */
 	OUT_RING(ring, state->render_target.bin_w);	/* RB_SURFACE_INFO */
-	OUT_RING(ring, COLORX_8_8_8_8);	/* RB_COLOR_INFO */
+	OUT_RING(ring, state->color_format);	/* RB_COLOR_INFO */
 	OUT_RING(ring, state->render_target.bin_w << 10);	/* RB_DEPTH_INFO */ // XXX ???
 #else
 	OUT_RING(ring, surface->width);	/* RB_SURFACE_INFO */
-	OUT_RING(ring, 0x200 | COLORX_8_8_8_8);	/* RB_COLOR_INFO */
+	OUT_RING(ring, 0x200 | state->color_format);	/* RB_COLOR_INFO */
 	OUT_RING(ring, surface->width << 10);	/* RB_DEPTH_INFO */ // XXX ???
 #endif
 
@@ -1421,6 +1434,25 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x88888888);
 
 	kgsl_ringbuffer_flush(ring);
+}
+
+int fd_dump_hex(struct fd_surface *surface)
+{
+	uint32_t *buf = surface->bo->hostptr;
+	uint32_t i;
+
+	for (i = 0; i < surface->bo->size / 4; i++) {
+		if (!(i % 8))
+			printf("\t\t\t%08X:   ", (unsigned int) i*4);
+		printf(" %08x", buf[i]);
+		if ((i % 8) == 7)
+			printf("\n");
+	}
+
+	if (i % 8)
+		printf("\n");
+
+	return 0;
 }
 
 int fd_dump_bmp(struct fd_surface *surface, const char *filename)

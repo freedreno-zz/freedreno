@@ -27,6 +27,7 @@
 #include <GLES2/gl2.h>
 
 #include "util.h"
+#include "a2xx_reg.h"
 
 struct fd_state;
 struct fd_surface;
@@ -61,10 +62,13 @@ int fd_flush(struct fd_state *state);
 
 struct fd_surface * fd_surface_new(struct fd_state *state,
 		uint32_t width, uint32_t height);
+struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
+		uint32_t width, uint32_t height, enum COLORFORMATX color_format);
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface);
 
 void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface);
+int fd_dump_hex(struct fd_surface *surface);
 int fd_dump_bmp(struct fd_surface *surface, const char *filename);
 
 #endif /* FREEDRENO_H_ */
