@@ -36,6 +36,7 @@ LDADD = \
 	$(top_builddir)/libfreedreno.la
 
 TESTS = \
+	regdump \
 	cube \
 	fan-smoothed \
 	strip-smoothed \
@@ -51,3 +52,5 @@ triangle_smoothed_SOURCES = triangle-smoothed.c
 strip_smoothed_SOURCES    = strip-smoothed.c
 fan_smoothed_SOURCES      = fan-smoothed.c
 cube_SOURCES              = cube.c esTransform.c
+regdump_SOURCES           = regdump.c
+

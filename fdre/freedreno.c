@@ -1429,19 +1429,16 @@ void fd_make_current(struct fd_state *state,
 
 int fd_dump_hex(struct fd_surface *surface)
 {
-	uint32_t *buf = surface->bo->hostptr;
+	uint32_t *dbuf = surface->bo->hostptr;
+	float   *fbuf = surface->bo->hostptr;
 	uint32_t i;
 
-	for (i = 0; i < surface->bo->size / 4; i++) {
-		if (!(i % 8))
-			printf("\t\t\t%08X:   ", (unsigned int) i*4);
-		printf(" %08x", buf[i]);
-		if ((i % 8) == 7)
-			printf("\n");
+	for (i = 0; i < surface->bo->size / 4; i+=4) {
+		printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
+				(unsigned int) i*4,
+				dbuf[i], dbuf[i+1], dbuf[i+2], dbuf[i+3],
+				fbuf[i], fbuf[i+1], fbuf[i+2], fbuf[i+3]);
 	}
-
-	if (i % 8)
-		printf("\n");
 
 	return 0;
 }
