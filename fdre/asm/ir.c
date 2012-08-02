@@ -35,13 +35,15 @@
 
 static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords);
 
-static int instr_emit(struct ir_instruction *instr, uint32_t *dwords, uint32_t idx);
+static int instr_emit(struct ir_instruction *instr, uint32_t *dwords,
+		uint32_t idx, struct ir_shader_info *info);
 
 static uint32_t reg_fetch_src_swiz(struct ir_register *reg, uint32_t n);
 static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_src_swiz(struct ir_register *reg);
 
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 /* simple allocator to carve allocations out of an up-front allocated heap,
  * so that we can free everything easily in one shot.
@@ -115,7 +117,8 @@ static int shader_resolve(struct ir_shader *shader)
 }
 
 int ir_shader_assemble(struct ir_shader *shader,
-		uint32_t *dwords, int sizedwords)
+		uint32_t *dwords, int sizedwords,
+		struct ir_shader_info *info)
 {
 	uint32_t i, j;
 	uint32_t *ptr = dwords;
@@ -148,7 +151,7 @@ int ir_shader_assemble(struct ir_shader *shader,
 		struct ir_cf *cf = shader->cfs[i];
 		if ((cf->cf_type == T_EXEC) || (cf->cf_type == T_EXEC_END)) {
 			for (j = 0; j < cf->exec.instrs_count; j++) {
-				ret = instr_emit(cf->exec.instrs[j], ptr, idx++);
+				ret = instr_emit(cf->exec.instrs[j], ptr, idx++, info);
 				if (ret) {
 					ERROR_MSG("instruction emit failed: %d", ret);
 					return ret;
@@ -368,7 +371,8 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
  */
 
 static int instr_emit_fetch(struct ir_instruction *instr,
-		uint32_t *dwords, uint32_t idx)
+		uint32_t *dwords, uint32_t idx,
+		struct ir_shader_info *info)
 {
 	int reg = 0;
 	struct ir_register *dst_reg = instr->regs[reg++];
@@ -377,6 +381,9 @@ static int instr_emit_fetch(struct ir_instruction *instr,
 	dwords[0] = dwords[1] = dwords[2] = 0;
 
 	assert(instr->fetch.constant <= 0xf);
+
+	info->max_reg = max(info->max_reg, dst_reg->num);
+	info->max_reg = max(info->max_reg, src_reg->num);
 
 	dwords[0] |= instr_fetch_opc(instr)      << 0;
 	dwords[0] |= src_reg->num                << 5;
@@ -487,7 +494,8 @@ static int instr_emit_fetch(struct ir_instruction *instr,
  *                00 - w
  */
 
-static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
+static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
+		struct ir_shader_info *info)
 {
 	int reg = 0;
 	struct ir_register *dst_reg  = instr->regs[reg++];
@@ -508,6 +516,10 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 
 	src1_reg = instr->regs[reg++];
 	src2_reg = instr->regs[reg++];
+
+	info->max_reg = max(info->max_reg, dst_reg->num);
+	info->max_reg = max(info->max_reg, src1_reg->num);
+	info->max_reg = max(info->max_reg, src2_reg->num);
 
 	dwords[0] = dwords[1] = dwords[2] = 0;
 
@@ -556,6 +568,8 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	}
 
 	if (src3_reg) {
+		info->max_reg = max(info->max_reg, src3_reg->num);
+
 		dwords[1] |= reg_alu_src_swiz(src3_reg)                 << 0;
 		dwords[1] |= ((src3_reg->flags & IR_REG_NEGATE) ? 1 : 0)<< 24;
 		dwords[2] |= src3_reg->num                              << 0;
@@ -571,11 +585,12 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords)
 	return 0;
 }
 
-static int instr_emit(struct ir_instruction *instr, uint32_t *dwords, uint32_t idx)
+static int instr_emit(struct ir_instruction *instr, uint32_t *dwords,
+		uint32_t idx, struct ir_shader_info *info)
 {
 	switch (instr->instr_type) {
-	case T_FETCH: return instr_emit_fetch(instr, dwords, idx);
-	case T_ALU:   return instr_emit_alu(instr, dwords);
+	case T_FETCH: return instr_emit_fetch(instr, dwords, idx, info);
+	case T_ALU:   return instr_emit_alu(instr, dwords, info);
 	}
 	return -1;
 }

@@ -35,6 +35,10 @@ struct ir_shader;
 
 struct ir_shader * fd_asm_parse(const char *src);
 
+struct ir_shader_info {
+	uint8_t max_reg;    /* highest GPR # used by shader */
+};
+
 struct ir_register {
 	enum {
 		IR_REG_CONST  = 0x1,
@@ -99,7 +103,8 @@ struct ir_shader {
 struct ir_shader * ir_shader_create(void);
 void ir_shader_destroy(struct ir_shader *shader);
 int ir_shader_assemble(struct ir_shader *shader,
-		uint32_t *dwords, int sizedwords);
+		uint32_t *dwords, int sizedwords,
+		struct ir_shader_info *info);
 
 struct ir_cf * ir_cf_create(struct ir_shader *shader, int cf_type);
 

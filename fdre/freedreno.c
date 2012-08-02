@@ -47,6 +47,7 @@
 struct fd_shader {
 	uint32_t bin[256];
 	uint32_t sizedwords;
+	struct ir_shader_info info;
 };
 
 struct fd_param {
@@ -281,20 +282,25 @@ static int attach_shader_bin(struct fd_shader *shader,
 	memset(shader, 0, sizeof(*shader));
 	memcpy(shader->bin, bin, sz);
 	shader->sizedwords = ALIGN(sz, 4) / 4;
+	shader->info.max_reg = 10; /* we don't know.. pick a conservative value */
 	return 0;
 }
 
 static int attach_shader_asm(struct fd_shader *shader,
 		const char *src, uint32_t sz)
 {
-	struct ir_shader *ir = fd_asm_parse(src);
+	struct ir_shader *ir;
 	int sizedwords;
+
+	memset(shader, 0, sizeof(*shader));
+
+	ir = fd_asm_parse(src);
 	if (!ir) {
 		ERROR_MSG("parse failed");
 		return -1;
 	}
 	sizedwords = ir_shader_assemble(ir, shader->bin,
-			ARRAY_SIZE(shader->bin));
+			ARRAY_SIZE(shader->bin), &shader->info);
 	if (sizedwords <= 0) {
 		ERROR_MSG("assembler failed");
 		return -1;
@@ -1037,24 +1043,9 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	// this is a bit of a hack..  triangle-smoothed uses different values
-	// here..  need to try more combinations of shaders w/ different number
-	// of attributes/uniforms/etc to establish the pattern..
-	// XXX this would probably be configuring shader # of GPR, and stack
-	// size.. possibly for both vertex shader and pixel shader?  r600 has
-	// different registers for each, ie. SQ_PGM_RESOURCES_{VS,PS,etc}.  So
-	// my guess is this makes more sense once we disassemble the shader..
-	switch (state->attributes.nparams) {
-	case 1:
-		OUT_RING(ring, 0x10038001);
-		break;
-	case 3:
-		OUT_RING(ring, 0x10030004);
-		break;
-	default:
-		OUT_RING(ring, 0x10030002);
-		break;
-	}
+	OUT_RING(ring, 0x10030000 |    // XXX not sure yet about the high 16 bits
+			(state->fragment_shader.info.max_reg << 16) |
+			(state->vertex_shader.info.max_reg));
 
 	emit_shader(state, &state->fragment_shader);
 

@@ -37,6 +37,7 @@
 int main(int argc, char **argv)
 {
 	struct ir_shader *shader;
+	struct ir_shader_info info;
 	static char src[256 * 1024];
 	static uint32_t dwords[64 * 1024];
 	static int sizedwords;
@@ -72,7 +73,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	sizedwords = ir_shader_assemble(shader, dwords, ARRAY_SIZE(dwords));
+	sizedwords = ir_shader_assemble(shader, dwords, ARRAY_SIZE(dwords), &info);
 	if (sizedwords <= 0) {
 		ERROR_MSG("assembler failed");
 		return -1;
