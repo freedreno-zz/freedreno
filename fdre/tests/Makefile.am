@@ -37,6 +37,7 @@ LDADD = \
 
 TESTS = \
 	regdump \
+	cube-textured \
 	cube \
 	fan-smoothed \
 	strip-smoothed \
@@ -52,5 +53,6 @@ triangle_smoothed_SOURCES = triangle-smoothed.c
 strip_smoothed_SOURCES    = strip-smoothed.c
 fan_smoothed_SOURCES      = fan-smoothed.c
 cube_SOURCES              = cube.c esTransform.c
+cube_textured_SOURCES     = cube-textured.c esTransform.c
 regdump_SOURCES           = regdump.c
 
