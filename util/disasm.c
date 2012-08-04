@@ -230,7 +230,7 @@ struct {
 		INSTR(MULv, 2),
 		INSTR(MAXv, 2),
 		INSTR(MINv, 2),
-		INSTR(FLOORv, 2),
+		INSTR(FLOORv, 1),
 		INSTR(MULADDv, 3),
 		INSTR(DOT4v, 2),
 		INSTR(DOT3v, 2),
@@ -311,8 +311,10 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 		printf(", ");
 	}
 	print_srcreg(src1_reg, src1_type, src1_swiz, src1_neg);
-	printf(", ");
-	print_srcreg(src2_reg, src2_type, src2_swiz, src2_neg);
+	if (vector_instructions[vector_op].num_srcs > 1) {
+		printf(", ");
+		print_srcreg(src2_reg, src2_type, src2_swiz, src2_neg);
+	}
 
 	if (dst_exp)
 		print_export_comment(dst_reg, type);
