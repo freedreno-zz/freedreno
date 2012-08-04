@@ -22,7 +22,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-/* Code copied from strip_smoothed test from lima driver project adapted to the
+/* Code copied from cube test from lima driver project adapted to the
  * logging that I use..
  */
 
@@ -86,47 +86,47 @@ const char *fragment_shader_source =
 		"}                                  \n";
 
 
-void test_strip_smoothed(void)
+void test_cube(void)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
 	EGLint pbuffer_attribute_list[] = {
-		EGL_WIDTH, 400,
-		EGL_HEIGHT, 240,
+		EGL_WIDTH, 256,
+		EGL_HEIGHT, 256,
 		EGL_LARGEST_PBUFFER, EGL_TRUE,
 		EGL_NONE
 	};
 	GLfloat vVertices[] = {
-	  // front
-	  -1.0f, -1.0f, +1.0f, // point blue
-	  +1.0f, -1.0f, +1.0f, // point magenta
-	  -1.0f, +1.0f, +1.0f, // point cyan
-	  +1.0f, +1.0f, +1.0f, // point white
-	  // back
-	  +1.0f, -1.0f, -1.0f, // point red
-	  -1.0f, -1.0f, -1.0f, // point black
-	  +1.0f, +1.0f, -1.0f, // point yellow
-	  -1.0f, +1.0f, -1.0f, // point green
-	  // right
-	  +1.0f, -1.0f, +1.0f, // point magenta
-	  +1.0f, -1.0f, -1.0f, // point red
-	  +1.0f, +1.0f, +1.0f, // point white
-	  +1.0f, +1.0f, -1.0f, // point yellow
-	  // left
-	  -1.0f, -1.0f, -1.0f, // point black
-	  -1.0f, -1.0f, +1.0f, // point blue
-	  -1.0f, +1.0f, -1.0f, // point green
-	  -1.0f, +1.0f, +1.0f, // point cyan
-	  // top
-	  -1.0f, +1.0f, +1.0f, // point cyan
-	  +1.0f, +1.0f, +1.0f, // point white
-	  -1.0f, +1.0f, -1.0f, // point green
-	  +1.0f, +1.0f, -1.0f, // point yellow
-	  // bottom
-	  -1.0f, -1.0f, -1.0f, // point black
-	  +1.0f, -1.0f, -1.0f, // point red
-	  -1.0f, -1.0f, +1.0f, // point blue
-	  +1.0f, -1.0f, +1.0f  // point magenta
+			// front
+			-1.0f, -1.0f, +1.0f, // point blue
+			+1.0f, -1.0f, +1.0f, // point magenta
+			-1.0f, +1.0f, +1.0f, // point cyan
+			+1.0f, +1.0f, +1.0f, // point white
+			// back
+			+1.0f, -1.0f, -1.0f, // point red
+			-1.0f, -1.0f, -1.0f, // point black
+			+1.0f, +1.0f, -1.0f, // point yellow
+			-1.0f, +1.0f, -1.0f, // point green
+			// right
+			+1.0f, -1.0f, +1.0f, // point magenta
+			+1.0f, -1.0f, -1.0f, // point red
+			+1.0f, +1.0f, +1.0f, // point white
+			+1.0f, +1.0f, -1.0f, // point yellow
+			// left
+			-1.0f, -1.0f, -1.0f, // point black
+			-1.0f, -1.0f, +1.0f, // point blue
+			-1.0f, +1.0f, -1.0f, // point green
+			-1.0f, +1.0f, +1.0f, // point cyan
+			// top
+			-1.0f, +1.0f, +1.0f, // point cyan
+			+1.0f, +1.0f, +1.0f, // point white
+			-1.0f, +1.0f, -1.0f, // point green
+			+1.0f, +1.0f, -1.0f, // point yellow
+			// bottom
+			-1.0f, -1.0f, -1.0f, // point black
+			+1.0f, -1.0f, -1.0f, // point red
+			-1.0f, -1.0f, +1.0f, // point blue
+			+1.0f, -1.0f, +1.0f  // point magenta
 	};
 
 	GLfloat vColors[] = {
@@ -241,8 +241,8 @@ void test_strip_smoothed(void)
 	GCHK(glEnableVertexAttribArray(1));
 	GCHK(glFlush());
 
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, vColors);
-	glEnableVertexAttribArray(2);
+	GCHK(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, vColors));
+	GCHK(glEnableVertexAttribArray(2));
 
 	ESMatrix modelview;
 	esMatrixLoadIdentity(&modelview);
@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	test_strip_smoothed();
+	test_cube();
 
 	ECHK(eglTerminate(display));
 }
