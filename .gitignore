@@ -14,6 +14,7 @@ test-strip-smoothed
 test-quad-flat
 test-quad-flat2
 test-cube
+test-cube-textured
 test-vertex
 test-enable-disable
 test-compiler
