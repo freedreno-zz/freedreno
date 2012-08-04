@@ -121,8 +121,6 @@ struct fd_state {
 
 	GLenum cull_mode;
 
-	enum COLORFORMATX color_format;
-
 	uint32_t pa_su_sc_mode_cntl;
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
@@ -133,17 +131,45 @@ struct fd_state {
 		struct fb_fix_screeninfo fix;
 		void *ptr;
 	} fb;
+
+	/* textures: */
+	struct fd_surface *textures[16];
 };
 
 struct fd_surface {
 	struct kgsl_bo *bo;
 	uint32_t cpp;	/* bytes per pixel */
 	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
+	enum COLORFORMATX color
 };
 
 struct fd_shader_const {
 	uint32_t gpuaddr, sz;
 	enum COLORFORMATX format;
+};
+
+/* ************************************************************************* */
+/* color format info */
+
+static int color2cpp[] = {
+		[COLORX_8_8_8_8] = 4,
+		[COLORX_32_32_32_32_FLOAT] = 16,
+};
+
+static enum SURFACEFORMAT color2fmt[] = {
+		[COLORX_4_4_4_4]           = FMT_4_4_4_4,
+		[COLORX_1_5_5_5]           = FMT_1_5_5_5,
+		[COLORX_5_6_5]             = FMT_5_6_5,
+		[COLORX_8]                 = FMT_8,
+		[COLORX_8_8]               = FMT_8_8,
+		[COLORX_8_8_8_8]           = FMT_8_8_8_8,
+		[COLORX_S8_8_8_8]          = FMT_8_8_8_8,
+		[COLORX_16_FLOAT]          = FMT_16_FLOAT,
+		[COLORX_16_16_FLOAT]       = FMT_16_16_FLOAT,
+		[COLORX_16_16_16_16_FLOAT] = FMT_16_16_16_16_FLOAT,
+		[COLORX_32_FLOAT]          = FMT_32_FLOAT,
+		[COLORX_32_32_FLOAT]       = FMT_32_32_FLOAT,
+		[COLORX_32_32_32_32_FLOAT] = FMT_32_32_32_32_FLOAT,
 };
 
 /* ************************************************************************* */
@@ -446,8 +472,6 @@ struct fd_state * fd_init(void)
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
 
-	state->color_format = COLORX_8_8_8_8;
-
 	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST;
 	state->rb_colorcontrol = 0x00000c07 |
 			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
@@ -646,7 +670,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, 0x00000000);				/* RB_COPY_CONTROL */
 	OUT_RING(ring, surface->bo->gpuaddr);	/* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);	/* RB_COPY_DEST_PITCH */
-	OUT_RING(ring, 0x0003c108 | (state->color_format << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
+	OUT_RING(ring, 0x0003c108 | (surface->color << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
 	OUT_RING(ring, 0x0000000);				/* RB_COPY_DEST_OFFSET */
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
@@ -757,7 +781,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_INFO));
-	OUT_RING(ring, 0x200 | state->color_format);
+	OUT_RING(ring, 0x200 | surface->color);
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
@@ -975,6 +999,53 @@ static void emit_uniforms(struct fd_state *state)
 	}
 }
 
+static void emit_textures(struct fd_state *state)
+{
+	struct kgsl_ringbuffer *ring = state->ring;
+	uint32_t n;
+
+	/* this isn't too user-friendly.. you cannot unbind texture
+	 * N without unbinding N+1.  But I think we'd have to patch
+	 * up shader otherwise.  For now the fdre tests just need to
+	 * know to do the right thing.
+	 */
+	for (n = 0; n < ARRAY_SIZE(state->textures) && state->textures[n]; n++) {
+		struct fd_surface *tex = state->textures[n];
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, 7);
+		OUT_RING(ring, 0x00010000);
+
+		/* Texture, FormatXYZW=Unsigned, ClampXYZ=Wrap/Repeat,
+		 * RFMode=ZeroClamp-1, Dim=1:2d, pitch
+		 */
+		OUT_RING(ring, (tex->pitch >> 5) << 22);
+
+		/* Format=6:8888_WZYX, EndianSwap=0:None, ReqSize=0:256bit, DimHi=0,
+		 * NearestClamp=1:OGL Mode
+		 */
+		OUT_RING(ring, color2fmt[tex->color] | tex->bo->gpuaddr);
+
+		/* Width, Height, EndianSwap=0:None */
+		OUT_RING(ring, ((tex->height - 1) << 13) | (tex->width - 1));
+
+		/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
+		 * Mip=2:BaseMap
+		 */
+		//OUT_RING(ring, 0x01281510);  // XXX
+		OUT_RING(ring, 0x01001910);  // XXX
+
+		/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
+		 * Dim3d=0
+		 */
+		OUT_RING(ring, 0x00000000);  // XXX
+
+		/* BorderColor=0:ABGRBlack, ForceBC=0:diable, TriJuice=0, Aniso=0,
+		 * Dim=1:2d, MipPacking=0
+		 */
+		OUT_RING(ring, 0x00000200);  // XXX
+	}
+}
+
 static void emit_cacheflush(struct fd_state *state)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
@@ -1059,6 +1130,8 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	emit_uniforms(state);
 
+	emit_textures(state);
+
 	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
 	OUT_RING(ring, 0x00000001);
 
@@ -1126,26 +1199,20 @@ int fd_flush(struct fd_state *state)
 
 /* ************************************************************************* */
 
-static int fmt2cpp[] = {
-		[COLORX_8_8_8_8] = 4,
-		[COLORX_32_32_32_32_FLOAT] = 16,
-};
-
 struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
 		uint32_t width, uint32_t height, enum COLORFORMATX color_format)
 {
 	struct fd_surface *surface;
-	int cpp = fmt2cpp[color_format];
+	int cpp = color2cpp[color_format];
 
 	if (!cpp) {
 		ERROR_MSG("invalid color format: %d", color_format);
 		return NULL;
 	}
 
-	state->color_format = color_format;
-
 	surface = calloc(1, sizeof(*surface));
 	assert(surface);
+	surface->color  = color_format;
 	surface->width  = width;
 	surface->height = height;
 	surface->pitch  = ALIGN(width, 32);
@@ -1170,6 +1237,19 @@ void fd_surface_del(struct fd_state *state, struct fd_surface *surface)
 		state->render_target.surface = NULL;
 	kgsl_bo_del(surface->bo);
 	free(surface);
+}
+
+void fd_surface_upload(struct fd_surface *surface, const void *data)
+{
+	memcpy(surface->bo->hostptr, data, surface->bo->size);
+}
+
+/* use tex=NULL to clear */
+void fd_set_texture(struct fd_state *state, uint32_t id,
+		struct fd_surface *tex)
+{
+	assert(id < ARRAY_SIZE(state->textures));
+	state->textures[id] = tex;
 }
 
 static void attach_render_target(struct fd_state *state,
@@ -1412,11 +1492,11 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));
 #if 0 /* binning */
 	OUT_RING(ring, state->render_target.bin_w);	/* RB_SURFACE_INFO */
-	OUT_RING(ring, state->color_format);	/* RB_COLOR_INFO */
+	OUT_RING(ring, surface->color);	/* RB_COLOR_INFO */
 	OUT_RING(ring, state->render_target.bin_w << 10);	/* RB_DEPTH_INFO */ // XXX ???
 #else
 	OUT_RING(ring, surface->width);	/* RB_SURFACE_INFO */
-	OUT_RING(ring, 0x200 | state->color_format);	/* RB_COLOR_INFO */
+	OUT_RING(ring, 0x200 | surface->color);	/* RB_COLOR_INFO */
 	OUT_RING(ring, surface->width << 10);	/* RB_DEPTH_INFO */ // XXX ???
 #endif
 

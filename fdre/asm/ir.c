@@ -420,6 +420,11 @@ static int instr_emit_fetch(struct ir_instruction *instr,
 		dwords[0] |= ((idx > 0) ? 0x0 : 0x1) << 27;
 	} else {
 		dwords[0] |= reg_fetch_src_swiz(src_reg, 3) << 26;
+
+		/* XXX not sure about this yet:
+		 */
+		dwords[1] |= 0x1ffff                 << 12;
+		dwords[2] |= 0x1                     << 1;
 	}
 
 	return 0;

@@ -65,6 +65,9 @@ struct fd_surface * fd_surface_new(struct fd_state *state,
 struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
 		uint32_t width, uint32_t height, enum COLORFORMATX color_format);
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface);
+void fd_surface_upload(struct fd_surface *surface, const void *data);
+void fd_set_texture(struct fd_state *state, uint32_t id,
+		struct fd_surface *tex);
 
 void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface);
