@@ -111,7 +111,7 @@ int fd_program_emit_sq_program_cntl(struct fd_program *program,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
 	OUT_RING(ring, 0x10030000 |    // XXX not sure yet about these bits
-			(fs_gprs << 8) | vs_gprs);
+			(fsi->max_input_reg << 20) | (fs_gprs << 8) | vs_gprs);
 
 	return 0;
 }

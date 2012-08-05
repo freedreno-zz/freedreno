@@ -39,7 +39,7 @@ static int instr_emit(struct ir_instruction *instr, uint32_t *dwords,
 		uint32_t idx, struct ir_shader_info *info);
 
 static void reg_update_stats(struct ir_register *reg,
-		struct ir_shader_info *info);
+		struct ir_shader_info *info, bool dest);
 static uint32_t reg_fetch_src_swiz(struct ir_register *reg, uint32_t n);
 static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_dst_swiz(struct ir_register *reg);
@@ -127,7 +127,9 @@ int ir_shader_assemble(struct ir_shader *shader,
 	uint32_t idx = 0;
 	int ret;
 
-	info->max_reg = -1;
+	info->max_reg       = -1;
+	info->max_input_reg = 0;
+	info->regs_written  = 0;
 
 	/* we need an even # of CF's.. insert a NOP if needed */
 	if (shader->cfs_count != ALIGN(shader->cfs_count, 2))
@@ -386,8 +388,8 @@ static int instr_emit_fetch(struct ir_instruction *instr,
 
 	assert(instr->fetch.constant <= 0xf);
 
-	reg_update_stats(dst_reg, info);
-	reg_update_stats(src_reg, info);
+	reg_update_stats(dst_reg, info, true);
+	reg_update_stats(src_reg, info, false);
 
 	dwords[0] |= instr_fetch_opc(instr)      << 0;
 	dwords[0] |= src_reg->num                << 5;
@@ -526,9 +528,9 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 	src1_reg = instr->regs[reg++];
 	src2_reg = instr->regs[reg++];
 
-	reg_update_stats(dst_reg, info);
-	reg_update_stats(src1_reg, info);
-	reg_update_stats(src2_reg, info);
+	reg_update_stats(dst_reg, info, true);
+	reg_update_stats(src1_reg, info, false);
+	reg_update_stats(src2_reg, info, false);
 
 	dwords[0] = dwords[1] = dwords[2] = 0;
 
@@ -577,7 +579,7 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 	}
 
 	if (src3_reg) {
-		reg_update_stats(src3_reg, info);
+		reg_update_stats(src3_reg, info, false);
 
 		dwords[1] |= reg_alu_src_swiz(src3_reg)                 << 0;
 		dwords[1] |= ((src3_reg->flags & IR_REG_NEGATE) ? 1 : 0)<< 24;
@@ -621,10 +623,21 @@ struct ir_register * ir_reg_create(struct ir_instruction *instr,
 }
 
 static void reg_update_stats(struct ir_register *reg,
-		struct ir_shader_info *info)
+		struct ir_shader_info *info, bool dest)
 {
-	if (!(reg->flags & (IR_REG_CONST|IR_REG_EXPORT)))
+	if (!(reg->flags & (IR_REG_CONST|IR_REG_EXPORT))) {
 		info->max_reg = max(info->max_reg, reg->num);
+
+		if (dest) {
+			info->regs_written |= (1 << reg->num);
+		} else if (!(info->regs_written & (1 << reg->num))) {
+			/* for registers that haven't been written, they must be an
+			 * input register that the thread scheduler (presumably?)
+			 * needs to know about:
+			 */
+			info->max_input_reg = max(info->max_input_reg, reg->num);
+		}
+	}
 }
 
 static uint32_t reg_fetch_src_swiz(struct ir_register *reg, uint32_t n)
