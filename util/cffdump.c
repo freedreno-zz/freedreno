@@ -322,6 +322,8 @@ static void reg_bin_size(const char *name, uint32_t dword, int level)
 	printf("%s%s: %dx%d (%08x)\n", levels[level], name, x, y, dword);
 }
 
+static uint32_t type0_reg_vals[0x7fff];
+
 #define REG(x, fxn) [REG_ ## x] = { #x, fxn }
 static const const struct {
 	const char *name;
@@ -537,6 +539,7 @@ static void dump_registers(uint32_t regbase,
 		uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	while (sizedwords--) {
+		type0_reg_vals[regbase] = *dwords;
 		if (type0_reg[regbase].fxn) {
 			type0_reg[regbase].fxn(type0_reg[regbase].name, *dwords, level);
 		} else {
@@ -680,6 +683,21 @@ static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 {
+	static const uint32_t interesting_regs[] = {
+			REG_PA_SC_SCREEN_SCISSOR_TL,
+			REG_PA_SC_SCREEN_SCISSOR_BR,
+			REG_PA_SC_WINDOW_SCISSOR_TL,
+			REG_PA_SC_WINDOW_SCISSOR_BR,
+			REG_PA_CL_VPORT_XSCALE,
+			REG_PA_CL_VPORT_XOFFSET,
+			REG_PA_CL_VPORT_YSCALE,
+			REG_PA_CL_VPORT_YOFFSET,
+			REG_PA_CL_VPORT_ZSCALE,
+			REG_PA_CL_VPORT_ZOFFSET,
+			REG_PA_SC_WINDOW_OFFSET,
+			REG_PA_SU_SC_MODE_CNTL,
+	};
+	uint32_t i;
 	uint32_t prim_type     = dwords[1] & 0x1f;
 	uint32_t source_select = (dwords[1] >> 6) & 0x3;
 	uint32_t num_indices   = dwords[2];
@@ -697,6 +715,19 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 			dump_hex(ptr, 8, level+1);
 			dump_float(ptr, 8, level+1);
 		}
+	}
+
+	/* dump current state of some interesting registers: */
+	printf("%scurrent register values\n", levels[level]);
+	for (i = 0; i < ARRAY_SIZE(interesting_regs); i++) {
+		uint32_t regbase = interesting_regs[i];
+		uint32_t lastval = type0_reg_vals[regbase];
+		if (type0_reg[regbase].fxn) {
+			type0_reg[regbase].fxn(type0_reg[regbase].name, lastval, level+2);
+		} else {
+			printf("%s<%04x>: %08x\n", levels[level+2], regbase, lastval);
+		}
+
 	}
 }
 
