@@ -38,17 +38,11 @@
 
 #include "msm_kgsl.h"
 #include "freedreno.h"
-#include "ir.h"
+#include "program.h"
 #include "kgsl.h"
 #include "bmp.h"
 
 /* ************************************************************************* */
-
-struct fd_shader {
-	uint32_t bin[256];
-	uint32_t sizedwords;
-	struct ir_shader_info info;
-};
 
 struct fd_param {
 	const char *name;
@@ -98,11 +92,11 @@ struct fd_state {
 	/* unknown buffers.. */
 	struct kgsl_bo *bo6601a000, *bo660c8000, *bo660ca000, *bo661a6000;
 
-	/* shaders: */
-	struct fd_shader vertex_shader, fragment_shader;
+	/* shader program: */
+	struct fd_program *program;
 
-	/* shaders used internally for blits/fills */
-	struct fd_shader solid_vertex_shader, solid_fragment_shader;
+	/* program used internally for blits/fills */
+	struct fd_program *solid_program;
 
 	struct fd_parameters attributes, uniforms;
 
@@ -140,7 +134,7 @@ struct fd_surface {
 	struct kgsl_bo *bo;
 	uint32_t cpp;	/* bytes per pixel */
 	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
-	enum COLORFORMATX color
+	enum COLORFORMATX color;
 };
 
 struct fd_shader_const {
@@ -274,57 +268,6 @@ static void emit_shader_const(struct fd_state *state, uint32_t val,
 	}
 }
 
-#if 0
-static void emit_texture_const(struct fd_state *state)
-{
-	struct kgsl_ringbuffer *ring = state->ring;
-
-}
-#endif
-
-static void emit_shader(struct fd_state *state, struct fd_shader *shader)
-{
-	struct kgsl_ringbuffer *ring = state->ring;
-	uint32_t type = (shader == &state->fragment_shader) ? 1 : 0;
-	uint32_t i;
-
-	if ((shader == &state->fragment_shader) ||
-			(shader == &state->solid_fragment_shader)) {
-		type = 1;
-	} else {
-		type = 0;
-	}
-
-	OUT_PKT3(ring, CP_IM_LOAD_IMMEDIATE, 2 + shader->sizedwords);
-	OUT_RING(ring, type);
-	OUT_RING(ring, shader->sizedwords);
-	for (i = 0; i < shader->sizedwords; i++)
-		OUT_RING(ring, shader->bin[i]);
-}
-
-static int attach_shader_asm(struct fd_shader *shader,
-		const char *src, uint32_t sz)
-{
-	struct ir_shader *ir;
-	int sizedwords;
-
-	memset(shader, 0, sizeof(*shader));
-
-	ir = fd_asm_parse(src);
-	if (!ir) {
-		ERROR_MSG("parse failed");
-		return -1;
-	}
-	sizedwords = ir_shader_assemble(ir, shader->bin,
-			ARRAY_SIZE(shader->bin), &shader->info);
-	if (sizedwords <= 0) {
-		ERROR_MSG("assembler failed");
-		return -1;
-	}
-	shader->sizedwords = sizedwords;
-	return 0;
-}
-
 const char *solid_vertex_shader_asm =
 		"EXEC ADDR(0x3) CNT(0x1)                                 \n"
 		"   (S)FETCH:	VERTEX	R1.xyz1 = R0.x                   \n"
@@ -454,11 +397,23 @@ struct fd_state * fd_init(void)
 	/* allocate bo to pass uniforms: */
 	state->uniforms.bo = kgsl_bo_new(state->fd, 0x20000, 0);
 
-	attach_shader_asm(&state->solid_vertex_shader, solid_vertex_shader_asm,
-			sizeof(solid_vertex_shader_asm));
+	state->program = fd_program_new();
 
-	attach_shader_asm(&state->solid_fragment_shader, solid_fragment_shader_asm,
-			sizeof(solid_fragment_shader_asm));
+	state->solid_program = fd_program_new();
+
+	ret = fd_program_attach_asm(state->solid_program,
+			FD_SHADER_VERTEX, solid_vertex_shader_asm);
+	if (ret) {
+		ERROR_MSG("failed to attach solid vertex shader: %d", ret);
+		goto fail;
+	}
+
+	ret = fd_program_attach_asm(state->solid_program,
+			FD_SHADER_FRAGMENT, solid_fragment_shader_asm);
+	if (ret) {
+		ERROR_MSG("failed to attach solid fragment shader: %d", ret);
+		goto fail;
+	}
 
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
@@ -515,16 +470,14 @@ void fd_fini(struct fd_state *state)
 
 /* ************************************************************************* */
 
-int fd_vertex_shader_attach_asm(struct fd_state *state,
-		const char *src, uint32_t sz)
+int fd_vertex_shader_attach_asm(struct fd_state *state, const char *src)
 {
-	return attach_shader_asm(&state->vertex_shader, src, sz);
+	return fd_program_attach_asm(state->program, FD_SHADER_VERTEX, src);
 }
 
-int fd_fragment_shader_attach_asm(struct fd_state *state,
-		const char *src, uint32_t sz)
+int fd_fragment_shader_attach_asm(struct fd_state *state, const char *src)
 {
-	return attach_shader_asm(&state->fragment_shader, src, sz);
+	return fd_program_attach_asm(state->program, FD_SHADER_FRAGMENT, src);
 }
 
 int fd_link(struct fd_state *state)
@@ -585,17 +538,15 @@ static void emit_gmem2mem(struct fd_state *state,
 	emit_shader_const(state, 0x9c, (struct fd_shader_const[]) {
 			{ .format = COLORX_8, .gpuaddr = state->bo660c8000->gpuaddr, .sz = 48 },
 		}, 1 );
-	emit_shader(state, &state->solid_vertex_shader);
+	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000028f);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	OUT_RING(ring, 0x10038001);
+	fd_program_emit_sq_program_cntl(state->program, ring);
 
-	emit_shader(state, &state->solid_fragment_shader);
+	fd_program_emit_shader(state->solid_program, FD_SHADER_FRAGMENT, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
@@ -676,17 +627,15 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	emit_shader_const(state, 0x9c, (struct fd_shader_const[]) {
 			{ .format = COLORX_8, .gpuaddr = state->bo660c8000->gpuaddr, .sz = 48 },
 		}, 1 );
-	emit_shader(state, &state->solid_vertex_shader);
+	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000028f);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	OUT_RING(ring, 0x10038001);
+	fd_program_emit_sq_program_cntl(state->program, ring);
 
-	emit_shader(state, &state->solid_fragment_shader);
+	fd_program_emit_shader(state->solid_program, FD_SHADER_FRAGMENT, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
@@ -1077,7 +1026,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	emit_attributes(state, start, count);
 
-	emit_shader(state, &state->vertex_shader);
+	fd_program_emit_shader(state->program, FD_SHADER_VERTEX, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
@@ -1091,13 +1040,9 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		break;
 	}
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	OUT_RING(ring, 0x10030000 |    // XXX not sure yet about the high 16 bits
-			(state->fragment_shader.info.max_reg << 16) |
-			(state->vertex_shader.info.max_reg));
+	fd_program_emit_sq_program_cntl(state->program, ring);
 
-	emit_shader(state, &state->fragment_shader);
+	fd_program_emit_shader(state->program, FD_SHADER_FRAGMENT, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));

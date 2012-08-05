@@ -98,10 +98,8 @@ int main(int argc, char **argv)
 
 	fd_make_current(state, surface);
 
-	fd_vertex_shader_attach_asm(state, vertex_shader_asm,
-			sizeof(vertex_shader_asm));
-	fd_fragment_shader_attach_asm(state, fragment_shader_asm,
-			sizeof(fragment_shader_asm));
+	fd_vertex_shader_attach_asm(state, vertex_shader_asm);
+	fd_fragment_shader_attach_asm(state, fragment_shader_asm);
 
 	fd_link(state);
 

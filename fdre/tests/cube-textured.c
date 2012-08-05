@@ -237,10 +237,8 @@ int main(int argc, char **argv)
 
 	fd_surface_upload(tex, cube_texture.pixel_data);
 
-	fd_vertex_shader_attach_asm(state, vertex_shader_asm,
-			sizeof(vertex_shader_asm));
-	fd_fragment_shader_attach_asm(state, fragment_shader_asm,
-			sizeof(fragment_shader_asm));
+	fd_vertex_shader_attach_asm(state, vertex_shader_asm);
+	fd_fragment_shader_attach_asm(state, fragment_shader_asm);
 
 	fd_link(state);
 

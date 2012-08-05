@@ -39,4 +39,5 @@ libfreedreno_la_CFLAGS       = \
 libfreedreno_la_SOURCES      = \
 	bmp.c \
 	kgsl.c \
+	program.c \
 	freedreno.c
