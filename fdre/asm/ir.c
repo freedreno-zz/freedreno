@@ -127,6 +127,8 @@ int ir_shader_assemble(struct ir_shader *shader,
 	uint32_t idx = 0;
 	int ret;
 
+	info->max_reg = -1;
+
 	/* we need an even # of CF's.. insert a NOP if needed */
 	if (shader->cfs_count != ALIGN(shader->cfs_count, 2))
 		ir_cf_create(shader, T_NOP);

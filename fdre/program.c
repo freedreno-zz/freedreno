@@ -103,10 +103,15 @@ int fd_program_emit_shader(struct fd_program *program,
 int fd_program_emit_sq_program_cntl(struct fd_program *program,
 		struct kgsl_ringbuffer *ring)
 {
+	struct ir_shader_info *vsi = &get_shader(program, FD_SHADER_VERTEX)->info;
+	struct ir_shader_info *fsi = &get_shader(program, FD_SHADER_FRAGMENT)->info;
+	uint8_t vs_gprs = (vsi->max_reg < 0) ? 0x80 : vsi->max_reg;
+	uint8_t fs_gprs = (fsi->max_reg < 0) ? 0x80 : fsi->max_reg;
+
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	OUT_RING(ring, 0x10030000 |    // XXX not sure yet about the high 16 bits
-			(program->fragment_shader.info.max_reg << 16) |
-			(program->vertex_shader.info.max_reg));
+	OUT_RING(ring, 0x10030000 |    // XXX not sure yet about these bits
+			(fs_gprs << 8) | vs_gprs);
+
 	return 0;
 }

@@ -36,7 +36,7 @@ struct ir_shader;
 struct ir_shader * fd_asm_parse(const char *src);
 
 struct ir_shader_info {
-	uint8_t max_reg;    /* highest GPR # used by shader */
+	int8_t max_reg;     /* highest GPR # used by shader */
 };
 
 struct ir_register {
