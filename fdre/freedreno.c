@@ -544,7 +544,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000028f);
 
-	fd_program_emit_sq_program_cntl(state->program, ring);
+	fd_program_emit_sq_program_cntl(state->solid_program, ring);
 
 	fd_program_emit_shader(state->solid_program, FD_SHADER_FRAGMENT, ring);
 
@@ -633,7 +633,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000028f);
 
-	fd_program_emit_sq_program_cntl(state->program, ring);
+	fd_program_emit_sq_program_cntl(state->solid_program, ring);
 
 	fd_program_emit_shader(state->solid_program, FD_SHADER_FRAGMENT, ring);
 
