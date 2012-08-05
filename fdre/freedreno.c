@@ -108,9 +108,14 @@ struct fd_state {
 	struct {
 		/* render target: */
 		struct fd_surface *surface;
-		/* bin size: */
-		uint16_t bin_w, bin_h;
+		/* for now just keep things simple and split the
+		 * render target into horizontal strips:
+		 */
+		uint16_t bin_h, nbins;
 	} render_target;
+
+	/* have there been any render cmds since last flush? */
+	bool dirty;
 
 	struct {
 		struct {
@@ -232,9 +237,9 @@ static void emit_pa_state(struct fd_state *state)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_PA_CL_GB_VERT_CLIP_ADJ));
-	OUT_RING(ring, f2d(31.0));		/* PA_CL_GB_VERT_CLIP_ADJ */ // XXX ???
+	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_CLIP_ADJ */ // XXX ???
 	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_DISC_ADJ */
-	OUT_RING(ring, f2d(31.0));		/* PA_CL_GB_HORZ_CLIP_ADJ */ // XXX ???
+	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_CLIP_ADJ */ // XXX ???
 	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_DISC_ADJ */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -259,11 +264,10 @@ static void emit_pa_state(struct fd_state *state)
 }
 
 /* val - shader linkage (I think..) */
-static void emit_shader_const(struct fd_state *state, uint32_t val,
+static void emit_shader_const(struct kgsl_ringbuffer *ring, uint32_t val,
 		struct fd_shader_const *consts, uint32_t n)
 {
 	uint32_t i;
-	struct kgsl_ringbuffer *ring = state->ring;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + (2 * n));
 	OUT_RING(ring, (0x1 << 16) | (val & 0xffff));
@@ -411,7 +415,9 @@ struct fd_state * fd_init(void)
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
 
-	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST;
+	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST |
+			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
+			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES);
 	state->rb_colorcontrol = 0x00000c07 |
 			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
@@ -524,11 +530,10 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 
 /* emit cmdstream to blit from GMEM back to the surface */
 static void emit_gmem2mem(struct fd_state *state,
-		struct fd_surface *surface)
+		struct kgsl_ringbuffer *ring,
+		struct fd_surface *surface, uint32_t offset)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
-
-	emit_shader_const(state, 0x9c, (struct fd_shader_const[]) {
+	emit_shader_const(ring, 0x9c, (struct fd_shader_const[]) {
 			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
 		}, 1 );
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
@@ -560,13 +565,14 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
 	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
-			PA_SU_SC_POLYMODE_FRONT_PTYPE(LINES) |
-			PA_SU_SC_POLYMODE_BACK_PTYPE(LINES));
+			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
+			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES));
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
-	OUT_RING(ring, xy2d(0,0) | 0x80000000);	/* PA_SC_WINDOW_SCISSOR_TL | WINDOW_OFFSET_DISABLE */
-	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
+	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
+	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
+	OUT_RING(ring, 0x00000000);             /* PA_SC_WINDOW_OFFSET */
+	OUT_RING(ring, xy2d(0,0) | 0x80000000); /* PA_SC_WINDOW_SCISSOR_TL | WINDOW_OFFSET_DISABLE */
+	OUT_RING(ring, xy2d(surface->width,     /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
@@ -594,7 +600,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, surface->bo->gpuaddr);	/* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);	/* RB_COPY_DEST_PITCH */
 	OUT_RING(ring, 0x0003c108 | (surface->color << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
-	OUT_RING(ring, 0x0000000);				/* RB_COPY_DEST_OFFSET */
+	OUT_RING(ring, offset);					/* RB_COPY_DEST_OFFSET */
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -617,7 +623,9 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
 
-	emit_shader_const(state, 0x9c, (struct fd_shader_const[]) {
+	state->dirty = true;
+
+	emit_shader_const(ring, 0x9c, (struct fd_shader_const[]) {
 			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
 		}, 1 );
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
@@ -667,9 +675,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
-			PA_SU_SC_POLYMODE_FRONT_PTYPE(LINES) |
-			PA_SU_SC_POLYMODE_BACK_PTYPE(LINES));
+	OUT_RING(ring, state->pa_su_sc_mode_cntl);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -681,7 +687,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
-	OUT_RING(ring, xy2d(0,0) | 0x80000000);	/* PA_SC_WINDOW_SCISSOR_TL | WINDOW_OFFSET_DISABLE */
+	OUT_RING(ring, xy2d(0,0));	        /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
@@ -739,7 +745,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
-	OUT_RING(ring, xy2d(0,0) | 0x80000000);	/* PA_SC_WINDOW_SCISSOR_TL | WINDOW_OFFSET_DISABLE */
+	OUT_RING(ring, xy2d(0,0));          /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
@@ -874,7 +880,7 @@ retry:
 	}
 
 	if (n > 0) {
-		emit_shader_const(state, 0x78, shader_const, n);
+		emit_shader_const(state->ring, 0x78, shader_const, n);
 	}
 }
 
@@ -982,6 +988,8 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
 
+	state->dirty = true;
+
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
 	OUT_RING(ring, 0x0000ffff);
@@ -996,7 +1004,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
-	OUT_RING(ring, xy2d(0,0) | 0x80000000);	/* PA_SC_WINDOW_SCISSOR_TL | WINDOW_OFFSET_DISABLE */
+	OUT_RING(ring, xy2d(0,0));          /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
@@ -1104,10 +1112,66 @@ int fd_swap_buffers(struct fd_state *state)
 
 int fd_flush(struct fd_state *state)
 {
-	emit_gmem2mem(state, state->render_target.surface);
-	kgsl_ringbuffer_flush(state->ring);
-	kgsl_ringbuffer_wait(state->ring);
+	struct fd_surface *surface = state->render_target.surface;
+	struct kgsl_ringbuffer *ring;
+
+	if (!state->dirty)
+		return 0;
+
+	if (state->render_target.nbins == 1) {
+		/* no binning needed, just emit the primary ringbuffer: */
+		ring = state->ring;
+		emit_gmem2mem(state, ring, surface, 0);
+	} else {
+		/* binning required, build cmds to setup for each tile in
+		 * the tile ringbuffer, w/ IB's to the primary ringbuffer:
+		 */
+		ring = state->ring_tile;
+		uint32_t i, yoff = 0;
+
+		for (i = 0; i < state->render_target.nbins; i++) {
+			uint32_t bin_w = surface->width;
+			uint32_t bin_h = state->render_target.bin_h;
+			uint32_t offset = surface->pitch * yoff;
+
+			/* clip bin dimensions: */
+			bin_h = min(bin_h, surface->height - yoff);
+
+			DEBUG_MSG("bin_h=%d, yoff=%d, offset=0x%08x, cpp=%d, pitch=%d",
+					bin_h, yoff, offset, surface->cpp, surface->pitch);
+
+			/* setup scissor/offset for current tile: */
+			OUT_PKT3(ring, CP_SET_CONSTANT, 4);
+			OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
+			OUT_RING(ring, (-yoff) << 16);      /* PA_SC_WINDOW_OFFSET */
+			OUT_RING(ring, xy2d(0,0));	        /* PA_SC_WINDOW_SCISSOR_TL */
+			OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
+					surface->height));
+
+			OUT_PKT3(ring, CP_SET_CONSTANT, 3);
+			OUT_RING(ring, CP_REG(REG_PA_SC_SCREEN_SCISSOR_TL));
+			OUT_RING(ring, xy2d(0,0));			/* PA_SC_SCREEN_SCISSOR_TL */
+			OUT_RING(ring, xy2d(bin_w, bin_h)); /* PA_SC_SCREEN_SCISSOR_BR */
+
+			/* emit IB to drawcmds: */
+			kgsl_ringbuffer_emit_ib(ring, state->ring);
+
+			// XXX have some bug somewhere, which this cancels out for 1024x768:
+			offset *= 8;
+
+			/* emit gmem2mem to transfer tile back to system memory: */
+			emit_gmem2mem(state, ring, surface, offset);
+
+			yoff += bin_h;
+		}
+	}
+
+	kgsl_ringbuffer_flush(ring);
+	kgsl_ringbuffer_wait(ring);
 	kgsl_ringbuffer_reset(state->ring);
+	kgsl_ringbuffer_reset(state->ring_tile);
+
+	state->dirty = false;
 
 	return 0;
 }
@@ -1170,7 +1234,7 @@ void fd_set_texture(struct fd_state *state, uint32_t id,
 static void attach_render_target(struct fd_state *state,
 		struct fd_surface *surface)
 {
-	uint32_t nx = 1, ny = 1;
+	uint32_t nbins = 1;
 	uint32_t bin_w, bin_h;
 	uint32_t cpp = color2cpp[surface->color];
 
@@ -1183,22 +1247,25 @@ static void attach_render_target(struct fd_state *state,
 		if ((bin_w * bin_h * cpp) < state->devinfo.gmem_sizebytes)
 			break;
 
-		ny++;
-		bin_h = ALIGN(surface->height / ny, 32);
-
-		if ((bin_w * bin_h * cpp) < state->devinfo.gmem_sizebytes)
-			break;
-
-		nx++;
-		bin_w = ALIGN(surface->width / nx, 32);
+		nbins++;
+		bin_h = ALIGN(surface->height / nbins, 32);
 	}
 
-	DEBUG_MSG("using %d,%d bins of size %dx%d", nx, ny, bin_w, bin_h);
+	if (nbins > 1) {
+		state->pa_su_sc_mode_cntl |= PA_SU_SC_VTX_WINDOW_OFF_ENABLE;
+	} else {
+		state->pa_su_sc_mode_cntl &= ~PA_SU_SC_VTX_WINDOW_OFF_ENABLE;
+	}
 
-	assert(!(bin_h & ~(0x1f*32)));
-	assert(!(bin_w & ~(0x1f*32)));
+	INFO_MSG("using %d bins of size %dx%d", nbins, bin_w, bin_h);
 
-	state->render_target.bin_w = bin_w;
+//if we use hw binning, tile sizes (in multiple of 32) need to
+//fit in 5 bits.. for now don't care because we aren't using
+//that:
+//	assert(!(bin_h/32 & ~0x1f));
+//	assert(!(bin_w/32 & ~0x1f));
+
+	state->render_target.nbins = nbins;
 	state->render_target.bin_h = bin_h;
 }
 

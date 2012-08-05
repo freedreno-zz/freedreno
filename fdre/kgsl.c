@@ -181,8 +181,18 @@ int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords)
 		 */
 		WARN_MSG("unexpected flush");
 		ret = kgsl_ringbuffer_flush(ring);
-		ring->cur = ring->last_start = ring->start;
+		kgsl_ringbuffer_reset(ring);
 		return ret;
 	}
+	return 0;
+}
+
+/* emit branch to dst ring: */
+int kgsl_ringbuffer_emit_ib(struct kgsl_ringbuffer *ring,
+		struct kgsl_ringbuffer *dst_ring)
+{
+	OUT_PKT3(ring, CP_INDIRECT_BUFFER_PFD, 2);
+	OUT_RING(ring, kgsl_bo_gpuaddr(dst_ring->bo, dst_ring->last_start));
+	OUT_RING(ring, dst_ring->cur - dst_ring->last_start);
 	return 0;
 }

@@ -71,6 +71,9 @@ int kgsl_ringbuffer_wait(struct kgsl_ringbuffer *ring);
 int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring);
 int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords);
 
+int kgsl_ringbuffer_emit_ib(struct kgsl_ringbuffer *ring,
+		struct kgsl_ringbuffer *dst_ring);
+
 static inline void
 OUT_RING(struct kgsl_ringbuffer *ring, uint32_t data)
 {

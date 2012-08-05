@@ -46,4 +46,8 @@ typedef enum {
 		do { printf("[E] " fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+
+
 #endif /* UTIL_H_ */

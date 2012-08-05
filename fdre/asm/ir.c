@@ -45,8 +45,6 @@ static uint32_t reg_fetch_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_dst_swiz(struct ir_register *reg);
 static uint32_t reg_alu_src_swiz(struct ir_register *reg);
 
-#define max(a, b) (((a) > (b)) ? (a) : (b))
-
 /* simple allocator to carve allocations out of an up-front allocated heap,
  * so that we can free everything easily in one shot.
  */
