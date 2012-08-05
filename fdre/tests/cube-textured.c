@@ -174,44 +174,44 @@ int main(int argc, char **argv)
 			"}                            \n";
 #else
 	const char *vertex_shader_asm =
-		"EXEC                                                                               \n"
-		"      FETCH:	VERTEX	R1.xy__ = R0.z FMT_32_32_FLOAT SIGNED STRIDE(8) CONST(4)    \n"
-		"      FETCH:	VERTEX	R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)\n"
-		"      FETCH:	VERTEX	R3.xyz_ = R0.y FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)\n"
-		"   (S)ALU:	MULv	R0 = R2.wwww, C7                                                \n"
-		"      ALU:	MULADDv	R0 = R0, R2.zzzz, C6                                            \n"
-		"      ALU:	MULADDv	R0 = R0, R2.yyyy, C5                                            \n"
-		"ALLOC COORD SIZE(0x0)                                                              \n"
-		"EXEC                                                                               \n"
-		"      ALU:	MULADDv	export62 = R0, R2.xxxx, C4	; gl_Position                       \n"
-		"      ALU:	MULv	R0 = R2.wwww, C3                                                \n"
-		"      ALU:	MULADDv	R0 = R0, R2.zzzz, C2                                            \n"
-		"      ALU:	MULADDv	R0 = R0, R2.yyyy, C1                                            \n"
-		"      ALU:	MULADDv	R0 = R0, R2.xxxx, C0                                            \n"
-		"      ALU:	MULv	R2.xyz_ = R3.zzzw, C10                                          \n"
-		"	    	RCP	R4.x___ = R0                                                        \n"
-		"EXEC                                                                               \n"
-		"      ALU:	MULADDv	R0.xyz_ = C11.xxzw, -R0, R4.xxxw                                \n"
-		"      ALU:	DOT3v	R4.x___ = R0, R0                                                \n"
-		"      ALU:	MULADDv	R2.xyz_ = R2, R3.yyyw, C9                                       \n"
-		"      ALU:	MULADDv	R2.xyz_ = R2, R3.xxxw, C8                                       \n"
-		"ALLOC PARAM/PIXEL SIZE(0x1)                                                        \n"
-		"EXEC_END                                                                           \n"
-		"      ALU:	MAXv	export0.xy__ = R1, R1                                           \n"
-		"      ALU:	MAXv	R0.____ = R0, R0                                                \n"
-		"	    	RSQ	R0.___w = R4.xyzx                                                   \n"
-		"      ALU:	MULv	R0.xyz_ = R0, R0.wwww                                           \n"
-		"      ALU:	DOT3v	R0.x___ = R2, R0                                                \n"
-		"      ALU:	MAXv	export1 = R0.xxxw, C11.wwww                                     \n"
-		"	    	MOV	export0.___w = R0                                                   \n";
+		"EXEC                                                                              \n"
+		"      FETCH:  VERTEX  R1.xy11 = R0.z FMT_32_32_FLOAT SIGNED STRIDE(8) CONST(4)    \n"
+		"      FETCH:  VERTEX  R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)\n"
+		"      FETCH:  VERTEX  R3.xyz_ = R0.y FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)\n"
+		"   (S)ALU:    MULv    R0 = R2.wwww, C7                                            \n"
+		"      ALU:    MULADDv R0 = R0, R2.zzzz, C6                                        \n"
+		"      ALU:    MULADDv R0 = R0, R2.yyyy, C5                                        \n"
+		"ALLOC COORD SIZE(0x0)                                                             \n"
+		"EXEC                                                                              \n"
+		"      ALU:    MULADDv export62 = R0, R2.xxxx, C4    ; gl_Position                 \n"
+		"      ALU:    MULv    R0 = R2.wwww, C3                                            \n"
+		"      ALU:    MULADDv R0 = R0, R2.zzzz, C2                                        \n"
+		"      ALU:    MULADDv R0 = R0, R2.yyyy, C1                                        \n"
+		"      ALU:    MULADDv R0 = R0, R2.xxxx, C0                                        \n"
+		"      ALU:    MULv    R2.xyz_ = R3.zzzw, C10                                      \n"
+		"              RCP     R4.x___ = R0                                                \n"
+		"EXEC                                                                              \n"
+		"      ALU:    MULADDv R0.xyz_ = C11.xxzw, -R0, R4.xxxw                            \n"
+		"      ALU:    DOT3v   R4.x___ = R0, R0                                            \n"
+		"      ALU:    MULADDv R2.xyz_ = R2, R3.yyyw, C9                                   \n"
+		"      ALU:    MULADDv R2.xyz_ = R2, R3.xxxw, C8                                   \n"
+		"ALLOC PARAM/PIXEL SIZE(0x1)                                                       \n"
+		"EXEC_END                                                                          \n"
+		"      ALU:    MAXv    export0 = R1, R1                                            \n"
+		"      ALU:    MAXv    R0.____ = R0, R0                                            \n"
+		"              RSQ     R0.___w = R4.xyzx                                           \n"
+		"      ALU:    MULv    R0.xyz_ = R0, R0.wwww                                       \n"
+		"      ALU:    DOT3v   R0.x___ = R2, R0                                            \n"
+		"      ALU:    MAXv    export1.xyz_ = R0.xxxw, C11.wwww                            \n"
+		"      ALU:    MAXv    export1.___w = C12.yxzx, C12.yxzx                           \n";
 
 	const char *fragment_shader_asm =
-		"EXEC                                                                               \n"
-		"   (S)FETCH:	SAMPLE	R0.xyzw = R0.xyx CONST(0)                                   \n"
-		"ALLOC PARAM/PIXEL SIZE(0x0)                                                        \n"
-		"EXEC_END                                                                           \n"
-		"      ALU:	MULv	export0 = R1, R0	; gl_FragColor                              \n"
-		"NOP                                                                                \n";
+		"EXEC                                                                              \n"
+		"   (S)FETCH:  SAMPLE  R0.xyzw = R0.xyx CONST(0)                                   \n"
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                                       \n"
+		"EXEC_END                                                                          \n"
+		"      ALU:    MULv    export0 = R1, R0 ; gl_FragColor                             \n"
+		"NOP                                                                               \n";
 #endif
 	int width = 352, height = 352;
 	int i, n = 1;
@@ -313,7 +313,7 @@ int main(int argc, char **argv)
 
 	fd_flush(state);
 
-	fd_dump_bmp(surface, "cube.bmp");
+	fd_dump_bmp(surface, "cube-textured.bmp");
 
 	fd_fini(state);
 

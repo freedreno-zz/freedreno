@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 		"      ALU:    DOT3v   R0.x___ = R2, R0           ; -> dot(vEyeNormal, vLightDir)                               \n"
 		"      ALU:    MAXv    R0.x___ = R0, C11.wyzw     ; float diff = max(0.0, dot(vEyeNormal, vLightDir))           \n"
 		"      ALU:    MULv    export0.xyz_ = R1, R0.xxxw ; vVaryingColor.xyz_= diff * in_color.rgb                     \n"
-		"              MOV     export0.___w = C12.xyzx    ; vVaryingColor.___w  = 1.0                                   \n";
+		"      ALU:    MAXv    export0.___w = C12.xyzx, C12.xyzx ; vVaryingColor.___w  = 1.0                            \n";
 
 	const char *fragment_shader_asm =
 		"ALLOC PARAM/PIXEL SIZE(0x0)                                     \n"
