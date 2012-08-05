@@ -302,16 +302,6 @@ static void emit_shader(struct fd_state *state, struct fd_shader *shader)
 		OUT_RING(ring, shader->bin[i]);
 }
 
-static int attach_shader_bin(struct fd_shader *shader,
-		const void *bin, uint32_t sz)
-{
-	memset(shader, 0, sizeof(*shader));
-	memcpy(shader->bin, bin, sz);
-	shader->sizedwords = ALIGN(sz, 4) / 4;
-	shader->info.max_reg = 10; /* we don't know.. pick a conservative value */
-	return 0;
-}
-
 static int attach_shader_asm(struct fd_shader *shader,
 		const char *src, uint32_t sz)
 {
@@ -335,17 +325,21 @@ static int attach_shader_asm(struct fd_shader *shader,
 	return 0;
 }
 
-const uint32_t solid_vertex_shader_bin[] = {
-		0x00031003, 0x00001000, 0xc2000000, 0x00001004,
-		0x00001000, 0xc4000000, 0x00000005, 0x00002000,
-		0x00000000, 0x19a81000, 0x00390a88, 0x0000000c,
-		0x140f803e, 0x00000000, 0xe2010100,
-};
+const char *solid_vertex_shader_asm =
+		"EXEC ADDR(0x3) CNT(0x1)                                 \n"
+		"   (S)FETCH:	VERTEX	R1.xyz1 = R0.x                   \n"
+		"        FMT_32_32_32_FLOAT UNSIGNED STRIDE(12) CONST(10)\n"
+		"ALLOC COORD SIZE(0x0)                                   \n"
+		"EXEC ADDR(0x4) CNT(0x1)                                 \n"
+		"      ALU:	MAXv	export62 = R1, R1	; gl_Position    \n"
+		"ALLOC PARAM/PIXEL SIZE(0x0)                             \n"
+		"EXEC_END ADDR(0x5) CNT(0x0)                             \n"
+		"NOP                                                     \n";
 
-const uint32_t solid_fragment_shader_bin[] = {
-		0x00000000, 0x1001c400, 0x20000000, 0x140f8000,
-		0x00000000, 0x22000000,
-};
+const char *solid_fragment_shader_asm =
+		"ALLOC PARAM/PIXEL SIZE(0x0)                             \n"
+		"EXEC_END ADDR(0x1) CNT(0x1)                             \n"
+		"      ALU:	MAXv	export0 = C0, C0	; gl_FragColor   \n";
 
 static float init_shader_const[] = {
 		-1.000000, +1.000000, +1.000000, +1.100000,
@@ -457,17 +451,14 @@ struct fd_state * fd_init(void)
 	/* allocate bo to pass vertices: */
 	state->attributes.bo = kgsl_bo_new(state->fd, 0x20000, 0);
 
-	/* allocate bo to pass vertices: */
-	// TODO currently seems like uniforms are passed in the
-	// cmdstream, not by ptr.. but not sure if that is always
-	// the case
+	/* allocate bo to pass uniforms: */
 	state->uniforms.bo = kgsl_bo_new(state->fd, 0x20000, 0);
 
-	attach_shader_bin(&state->solid_vertex_shader, solid_vertex_shader_bin,
-			sizeof(solid_vertex_shader_bin));
+	attach_shader_asm(&state->solid_vertex_shader, solid_vertex_shader_asm,
+			sizeof(solid_vertex_shader_asm));
 
-	attach_shader_bin(&state->solid_fragment_shader, solid_fragment_shader_bin,
-			sizeof(solid_fragment_shader_bin));
+	attach_shader_asm(&state->solid_fragment_shader, solid_fragment_shader_asm,
+			sizeof(solid_fragment_shader_asm));
 
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
@@ -523,18 +514,6 @@ void fd_fini(struct fd_state *state)
 }
 
 /* ************************************************************************* */
-
-int fd_vertex_shader_attach_bin(struct fd_state *state,
-		const void *bin, uint32_t sz)
-{
-	return attach_shader_bin(&state->vertex_shader, bin, sz);
-}
-
-int fd_fragment_shader_attach_bin(struct fd_state *state,
-		const void *bin, uint32_t sz)
-{
-	return attach_shader_bin(&state->fragment_shader, bin, sz);
-}
 
 int fd_vertex_shader_attach_asm(struct fd_state *state,
 		const char *src, uint32_t sz)

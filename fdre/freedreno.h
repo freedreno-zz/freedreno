@@ -35,10 +35,6 @@ struct fd_surface;
 struct fd_state * fd_init(void);
 void fd_fini(struct fd_state *state);
 
-int fd_vertex_shader_attach_bin(struct fd_state *state,
-		const void *bin, uint32_t sz);
-int fd_fragment_shader_attach_bin(struct fd_state *state,
-		const void *bin, uint32_t sz);
 int fd_vertex_shader_attach_asm(struct fd_state *state,
 		const char *src, uint32_t sz);
 int fd_fragment_shader_attach_asm(struct fd_state *state,
