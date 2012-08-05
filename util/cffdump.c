@@ -256,6 +256,7 @@ static void reg_pa_su_sc_mode_cntl(const char *name, uint32_t dword, int level)
 			levels[level], name, dword,
 			ptype[(dword >> 5) & 0x3], ptype[(dword >> 8) & 0x3],
 			(dword & PA_SU_SC_PROVOKING_VTX_LAST) ? "last" : "first",
+			(dword & PA_SU_SC_VTX_WINDOW_OFF_ENABLE) ? ", vtx-win-off-enable" : "",
 			(dword & PA_SU_SC_CULL_FRONT) ? ", cull-front" : "",
 			(dword & PA_SU_SC_CULL_BACK) ? ", cull-back" : "",
 			(dword & PA_SU_SC_POLY_OFFSET_FRONT) ? ", poly-offset-front" : "",
@@ -301,6 +302,20 @@ static void reg_rb_color_info(const char *name, uint32_t dword, int level)
 	 */
 	printf("%s%s: %08x (%s)\n", levels[level], name, dword,
 			format_name[dword & 0xf]);
+}
+
+/* sign-extend a 2s-compliment signed number of nbits size */
+static int32_t u2i(uint32_t val, int nbits)
+{
+	return ((val >> (nbits-1)) * ~((1 << nbits) - 1)) | val;
+}
+
+static void reg_pa_sc_window_offset(const char *name, uint32_t dword, int level)
+{
+	/* x and y are 15 bit signed numbers: */
+	uint32_t x = (dword >>  0) & 0x7fff;
+	uint32_t y = (dword >> 16) & 0x7fff;
+	printf("%s%s: %d,%d (%08x)\n", levels[level], name, u2i(x, 15), u2i(y, 15), dword);
 }
 
 static void reg_xy(const char *name, uint32_t dword, int level)
@@ -391,7 +406,7 @@ static const const struct {
 		REG(PA_SC_SCREEN_SCISSOR_TL, reg_xy),
 		REG(PA_SC_VIZ_QUERY, reg_hex),
 		REG(PA_SC_VIZ_QUERY_STATUS, reg_hex),
-		REG(PA_SC_WINDOW_OFFSET, reg_xy),		/* ??? */
+		REG(PA_SC_WINDOW_OFFSET, reg_pa_sc_window_offset),
 		REG(PA_SC_WINDOW_SCISSOR_BR, reg_xy),
 		REG(PA_SC_WINDOW_SCISSOR_TL, reg_xy),
 		REG(PA_SU_FACE_DATA, reg_hex),
