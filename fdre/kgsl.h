@@ -58,11 +58,15 @@ struct kgsl_ringbuffer {
 	int size;
 	struct kgsl_bo *bo;
 	uint32_t *cur, *end, *start, *last_start;
+	unsigned int timestamp;
 };
 
 struct kgsl_ringbuffer * kgsl_ringbuffer_new(int fd, uint32_t size,
 		uint32_t drawctxt_id);
 void kgsl_ringbuffer_del(struct kgsl_ringbuffer *ring);
+
+void kgsl_ringbuffer_reset(struct kgsl_ringbuffer *ring);
+int kgsl_ringbuffer_wait(struct kgsl_ringbuffer *ring);
 
 int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring);
 int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords);

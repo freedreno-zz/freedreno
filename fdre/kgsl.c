@@ -113,8 +113,9 @@ struct kgsl_ringbuffer * kgsl_ringbuffer_new(int fd, uint32_t size,
 	ring->fd = fd;
 	ring->size = size;
 	ring->bo = kgsl_bo_new(ring->fd, size, KGSL_MEMFLAGS_GPUREADONLY);
-	ring->cur = ring->start = ring->last_start = ring->bo->hostptr;
+	ring->start = ring->bo->hostptr;
 	ring->end = &(ring->start[size/4]);
+	kgsl_ringbuffer_reset(ring);
 	return ring;
 }
 
@@ -124,6 +125,26 @@ void kgsl_ringbuffer_del(struct kgsl_ringbuffer *ring)
 		return;
 	kgsl_bo_del(ring->bo);
 	free(ring);
+}
+
+void kgsl_ringbuffer_reset(struct kgsl_ringbuffer *ring)
+{
+	ring->cur = ring->last_start = ring->start;
+}
+
+int kgsl_ringbuffer_wait(struct kgsl_ringbuffer *ring)
+{
+	struct kgsl_device_waittimestamp req = {
+			.timestamp = ring->timestamp,
+			.timeout   = 5000,
+	};
+	int ret;
+
+	ret = ioctl(ring->fd, IOCTL_KGSL_DEVICE_WAITTIMESTAMP, &req);
+	if (ret)
+		ERROR_MSG("waittimestamp failed! %d (%s)", ret, strerror(errno));
+
+	return ret;
 }
 
 int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring)
@@ -143,11 +164,10 @@ int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring)
 
 	ret = ioctl(ring->fd, IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS, &req);
 	if (ret)
-		ERROR_MSG("issueibcmds failed!  %d (%s)\n", ret, strerror(errno));
+		ERROR_MSG("issueibcmds failed!  %d (%s)", ret, strerror(errno));
 
+	ring->timestamp  = req.timestamp;
 	ring->last_start = ring->cur;
-
-	// XXX somewhere need to handle wraparound..
 
 	return ret;
 }
@@ -156,6 +176,10 @@ int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords)
 {
 	int ret;
 	if ((ring->cur + dwords) >= ring->end) {
+		/* this probably won't really work if we have multiple tiles..
+		 * need to re-think how this should work.
+		 */
+		WARN_MSG("unexpected flush");
 		ret = kgsl_ringbuffer_flush(ring);
 		ring->cur = ring->last_start = ring->start;
 		return ret;

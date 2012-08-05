@@ -84,19 +84,24 @@ struct fd_state {
 	/* shadow buffer.. not sure if we need this, but blob drivers mmap it.. */
 	struct kgsl_bo *shadow;
 
-	/* not sure if we really need 2nd ring buffer, but just copying what
-	 * libGLESv2_adreno.so does..
+	/* primary cmdstream buffer with render commands: */
+	struct kgsl_ringbuffer *ring;
+
+	/* if render target needs to be broken into tiles/bins, this cmd
+	 * buffer contains the per-tile setup, and then IB calls to the
+	 * primary cmdstream buffer for each tile.  The primary cmdstream
+	 * buffer is executed for each tile.
 	 */
-	struct kgsl_ringbuffer *ring, *ring2;
-
-	/* unknown buffers.. */
-	struct kgsl_bo *bo6601a000, *bo660c8000, *bo660ca000, *bo661a6000;
-
-	/* shader program: */
-	struct fd_program *program;
+	struct kgsl_ringbuffer *ring_tile;
 
 	/* program used internally for blits/fills */
 	struct fd_program *solid_program;
+
+	/* buffer for passing vertices to solid program */
+	struct kgsl_bo *solid_const;
+
+	/* shader program: */
+	struct fd_program *program;
 
 	struct fd_parameters attributes, uniforms;
 
@@ -362,9 +367,6 @@ struct fd_state * fd_init(void)
 			state->shadowprop.gpuaddr,
 			state->shadowprop.size);
 
-	//6601a000/00001000
-	state->bo6601a000 = kgsl_bo_new(state->fd, 0x1000, 0);
-
 	ret = ioctl(state->fd, IOCTL_KGSL_DRAWCTXT_CREATE, &req);
 	if (ret) {
 		ERROR_MSG("failed to allocate context: %d (%s)",
@@ -374,22 +376,13 @@ struct fd_state * fd_init(void)
 
 	state->drawctxt_id = req.drawctxt_id;
 
-	//660a8000/00010000
 	state->ring = kgsl_ringbuffer_new(state->fd, 0x10000,
 			state->drawctxt_id);
 
-	//660b8000/00010000
-	state->ring2 = kgsl_ringbuffer_new(state->fd, 0x10000,
+	state->ring_tile = kgsl_ringbuffer_new(state->fd, 0x10000,
 			state->drawctxt_id);
 
-	//660c8000/00001000
-	state->bo660c8000 = kgsl_bo_new(state->fd, 0x1000, 0);
-
-	//660ca000/00040000
-	state->bo660ca000 = kgsl_bo_new(state->fd, 0x40000, 0);
-
-	//661a6000/00040000
-	state->bo661a6000 = kgsl_bo_new(state->fd, 0x40000, 0);
+	state->solid_const = kgsl_bo_new(state->fd, 0x1000, 0);
 
 	/* allocate bo to pass vertices: */
 	state->attributes.bo = kgsl_bo_new(state->fd, 0x20000, 0);
@@ -536,7 +529,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	struct kgsl_ringbuffer *ring = state->ring;
 
 	emit_shader_const(state, 0x9c, (struct fd_shader_const[]) {
-			{ .format = COLORX_8, .gpuaddr = state->bo660c8000->gpuaddr, .sz = 48 },
+			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
 		}, 1 );
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
@@ -625,7 +618,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	struct fd_surface *surface = state->render_target.surface;
 
 	emit_shader_const(state, 0x9c, (struct fd_shader_const[]) {
-			{ .format = COLORX_8, .gpuaddr = state->bo660c8000->gpuaddr, .sz = 48 },
+			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
 		}, 1 );
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
@@ -765,9 +758,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
-	emit_gmem2mem(state, surface);
-
-	return kgsl_ringbuffer_flush(ring);
+	return 0;
 }
 
 int fd_cull(struct fd_state *state, GLenum mode)
@@ -1086,9 +1077,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	emit_cacheflush(state);
 
-	emit_gmem2mem(state, surface);
-
-	return kgsl_ringbuffer_flush(ring);
+	return 0;
 }
 
 int fd_swap_buffers(struct fd_state *state)
@@ -1115,8 +1104,10 @@ int fd_swap_buffers(struct fd_state *state)
 
 int fd_flush(struct fd_state *state)
 {
-	// TODO wait for render to complete
-	usleep(15*1000);
+	emit_gmem2mem(state, state->render_target.surface);
+	kgsl_ringbuffer_flush(state->ring);
+	kgsl_ringbuffer_wait(state->ring);
+	kgsl_ringbuffer_reset(state->ring);
 
 	return 0;
 }
@@ -1181,7 +1172,7 @@ static void attach_render_target(struct fd_state *state,
 {
 	uint32_t nx = 1, ny = 1;
 	uint32_t bin_w, bin_h;
-	uint32_t cpp = 4;  /* TODO don't assume 32bpp */
+	uint32_t cpp = color2cpp[surface->color];
 
 	state->render_target.surface = surface;
 
@@ -1233,7 +1224,7 @@ void fd_make_current(struct fd_state *state,
 	attach_render_target(state, surface);
 	set_viewport(state, 0, 0, surface->width, surface->height);
 
-	emit_mem_write(state, state->bo660c8000->gpuaddr,
+	emit_mem_write(state, state->solid_const->gpuaddr,
 			init_shader_const, ARRAY_SIZE(init_shader_const));
 
 	OUT_PKT0(ring, REG_TP0_CHICKEN, 1);
