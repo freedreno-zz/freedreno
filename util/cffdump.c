@@ -698,20 +698,6 @@ static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	static const uint32_t interesting_regs[] = {
-			REG_PA_SC_SCREEN_SCISSOR_TL,
-			REG_PA_SC_SCREEN_SCISSOR_BR,
-			REG_PA_SC_WINDOW_SCISSOR_TL,
-			REG_PA_SC_WINDOW_SCISSOR_BR,
-			REG_PA_CL_VPORT_XSCALE,
-			REG_PA_CL_VPORT_XOFFSET,
-			REG_PA_CL_VPORT_YSCALE,
-			REG_PA_CL_VPORT_YOFFSET,
-			REG_PA_CL_VPORT_ZSCALE,
-			REG_PA_CL_VPORT_ZOFFSET,
-			REG_PA_SC_WINDOW_OFFSET,
-			REG_PA_SU_SC_MODE_CNTL,
-	};
 	uint32_t i;
 	uint32_t prim_type     = dwords[1] & 0x1f;
 	uint32_t source_select = (dwords[1] >> 6) & 0x3;
@@ -732,17 +718,19 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 		}
 	}
 
-	/* dump current state of some interesting registers: */
+	/* dump current state of registers: */
 	printf("%scurrent register values\n", levels[level]);
-	for (i = 0; i < ARRAY_SIZE(interesting_regs); i++) {
-		uint32_t regbase = interesting_regs[i];
+	for (i = 0; i < ARRAY_SIZE(type0_reg); i++) {
+		uint32_t regbase = i;
 		uint32_t lastval = type0_reg_vals[regbase];
+		/* skip registers we don't know about or have zero: */
+		if (!(type0_reg[regbase].name && lastval))
+			continue;
 		if (type0_reg[regbase].fxn) {
 			type0_reg[regbase].fxn(type0_reg[regbase].name, lastval, level+2);
 		} else {
 			printf("%s<%04x>: %08x\n", levels[level+2], regbase, lastval);
 		}
-
 	}
 }
 
