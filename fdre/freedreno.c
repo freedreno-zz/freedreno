@@ -596,11 +596,11 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 6);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
-	OUT_RING(ring, 0x00000000);				/* RB_COPY_CONTROL */
-	OUT_RING(ring, surface->bo->gpuaddr);	/* RB_COPY_DEST_BASE */
-	OUT_RING(ring, surface->pitch >> 5);	/* RB_COPY_DEST_PITCH */
+	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
+	OUT_RING(ring, surface->bo->gpuaddr + offset); /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, surface->pitch >> 5);    /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring, 0x0003c108 | (surface->color << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
-	OUT_RING(ring, offset);					/* RB_COPY_DEST_OFFSET */
+	OUT_RING(ring, 0x00000000);             /* RB_COPY_DEST_OFFSET */
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -1132,7 +1132,7 @@ int fd_flush(struct fd_state *state)
 		for (i = 0; i < state->render_target.nbins; i++) {
 			uint32_t bin_w = surface->width;
 			uint32_t bin_h = state->render_target.bin_h;
-			uint32_t offset = surface->pitch * yoff;
+			uint32_t offset = surface->pitch * surface->cpp * yoff;
 
 			/* clip bin dimensions: */
 			bin_h = min(bin_h, surface->height - yoff);
@@ -1155,9 +1155,6 @@ int fd_flush(struct fd_state *state)
 
 			/* emit IB to drawcmds: */
 			kgsl_ringbuffer_emit_ib(ring, state->ring);
-
-			// XXX have some bug somewhere, which this cancels out for 1024x768:
-			offset *= 8;
 
 			/* emit gmem2mem to transfer tile back to system memory: */
 			emit_gmem2mem(state, ring, surface, offset);
