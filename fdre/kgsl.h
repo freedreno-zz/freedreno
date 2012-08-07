@@ -46,8 +46,9 @@ struct kgsl_bo {
 };
 
 struct kgsl_bo * kgsl_bo_new_from_gpuaddr(int fd,
-		uint32_t gpuaddr, uint32_t size);
+		uint32_t gpuaddr, void *hostptr, uint32_t size);
 struct kgsl_bo * kgsl_bo_new(int fd, uint32_t size, uint32_t flags);
+struct kgsl_bo * kgsl_bo_new_hostptr(int fd, void *hostptr, uint32_t size);
 void kgsl_bo_del(struct kgsl_bo *bo);
 
 /* ************************************************************************* */

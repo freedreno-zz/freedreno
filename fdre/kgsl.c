@@ -41,14 +41,18 @@
 /* ************************************************************************* */
 
 struct kgsl_bo * kgsl_bo_new_from_gpuaddr(int fd,
-		uint32_t gpuaddr, uint32_t size)
+		uint32_t gpuaddr, void *hostptr, uint32_t size)
 {
 	struct kgsl_bo *bo = calloc(1, sizeof(*bo));
 	assert(bo);
 	bo->fd = fd;
 	bo->gpuaddr = gpuaddr;
 	bo->size = size;
-	bo->hostptr = mmap(NULL, size, PROT_WRITE|PROT_READ, MAP_SHARED, fd, gpuaddr);
+	if (!hostptr) {
+		hostptr = mmap(NULL, size, PROT_WRITE|PROT_READ,
+				MAP_SHARED, fd, gpuaddr);
+	}
+	bo->hostptr = hostptr;
 	assert(bo->hostptr);
 	return bo;
 }
@@ -66,10 +70,32 @@ struct kgsl_bo * kgsl_bo_new(int fd, uint32_t size, uint32_t flags)
 	ret = ioctl(fd, IOCTL_KGSL_GPUMEM_ALLOC, &req);
 	assert(!ret);
 
-	bo = kgsl_bo_new_from_gpuaddr(fd, req.gpuaddr, size);
+	bo = kgsl_bo_new_from_gpuaddr(fd, req.gpuaddr, NULL, size);
 	assert(bo);
 
 	bo->free_gpuaddr = true;
+
+	return bo;
+}
+
+/* create bo from userptr.. really we just need this right now
+ * to map framebuffer.. when we drm-ify things, this can go away.
+ */
+struct kgsl_bo * kgsl_bo_new_hostptr(int fd, void *hostptr, uint32_t size)
+{
+	struct kgsl_bo *bo;
+	struct kgsl_map_user_mem req = {
+			.len = size,
+			.hostptr = (unsigned int)hostptr,
+			.memtype = KGSL_USER_MEM_TYPE_ADDR,
+	};
+	int ret;
+
+	ret = ioctl(fd, IOCTL_KGSL_MAP_USER_MEM, &req);
+	assert(!ret);
+
+	bo = kgsl_bo_new_from_gpuaddr(fd, req.gpuaddr, hostptr, size);
+	assert(bo);
 
 	return bo;
 }

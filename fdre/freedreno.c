@@ -133,6 +133,7 @@ struct fd_state {
 	struct {
 		struct fb_var_screeninfo var;
 		struct fb_fix_screeninfo fix;
+		struct fd_surface *surface;
 		void *ptr;
 	} fb;
 
@@ -368,7 +369,7 @@ struct fd_state * fd_init(void)
 			state->version.dev_major, state->version.dev_minor);
 
 	state->shadow = kgsl_bo_new_from_gpuaddr(state->fd,
-			state->shadowprop.gpuaddr,
+			state->shadowprop.gpuaddr, NULL,
 			state->shadowprop.size);
 
 	ret = ioctl(state->fd, IOCTL_KGSL_DRAWCTXT_CREATE, &req);
@@ -1093,18 +1094,21 @@ int fd_swap_buffers(struct fd_state *state)
 	struct fd_surface *surface = state->render_target.surface;
 	char *dstptr = state->fb.ptr;
 	char *srcptr = surface->bo->hostptr;
-	int len = surface->pitch * surface->cpp;
-	int i;
+	uint32_t len = surface->pitch * surface->cpp;
+	uint32_t i;
 
 	if (len > state->fb.fix.line_length)
 		len = state->fb.fix.line_length;
 
 	fd_flush(state);
 
-	for (i = 0; i < surface->height; i++) {
-		memcpy(dstptr, srcptr, len);
-		dstptr += state->fb.fix.line_length;
-		srcptr += len;
+	/* if we are rendering to front-buffer, we can skip this */
+	if (surface != state->fb.surface) {
+		for (i = 0; i < surface->height; i++) {
+			memcpy(dstptr, srcptr, len);
+			dstptr += state->fb.fix.line_length;
+			srcptr += len;
+		}
 	}
 
 	return 0;
@@ -1126,8 +1130,8 @@ int fd_flush(struct fd_state *state)
 		/* binning required, build cmds to setup for each tile in
 		 * the tile ringbuffer, w/ IB's to the primary ringbuffer:
 		 */
-		ring = state->ring_tile;
 		uint32_t i, yoff = 0;
+		ring = state->ring_tile;
 
 		for (i = 0; i < state->render_target.nbins; i++) {
 			uint32_t bin_w = surface->width;
@@ -1203,6 +1207,40 @@ struct fd_surface * fd_surface_new(struct fd_state *state,
 		uint32_t width, uint32_t height)
 {
 	return fd_surface_new_fmt(state, width, height, COLORX_8_8_8_8);
+}
+
+/* get framebuffer surface, return width/height */
+struct fd_surface * fd_surface_screen(struct fd_state *state,
+		uint32_t *width, uint32_t *height)
+{
+	struct fd_surface *surface;
+
+	if (!state->fb.surface) {
+		surface = calloc(1, sizeof(*surface));
+		assert(surface);
+
+		/* TODO don't hardcode: */
+		surface->color  = COLORX_8_8_8_8;
+		surface->cpp    = color2cpp[surface->color];
+		surface->width  = state->fb.var.xres;
+		surface->height = state->fb.var.yres;
+		surface->pitch  = state->fb.fix.line_length / surface->cpp;
+
+		surface->bo = kgsl_bo_new_hostptr(state->fd, state->fb.ptr,
+				state->fb.var.yres_virtual * state->fb.fix.line_length);
+
+		state->fb.surface = surface;
+	} else {
+		surface = state->fb.surface;
+	}
+
+	if (width)
+		*width = surface->width;
+
+	if (height)
+		*height = surface->height;
+
+	return surface;
 }
 
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface)

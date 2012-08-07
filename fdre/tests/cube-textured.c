@@ -213,7 +213,7 @@ int main(int argc, char **argv)
 		"      ALU:    MULv    export0 = R1, R0 ; gl_FragColor                             \n"
 		"NOP                                                                               \n";
 #endif
-	int width = 352, height = 352;
+	uint32_t width = 0, height = 0;
 	int i, n = 1;
 
 	if (argc == 2)
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
 	if (!state)
 		return -1;
 
-	surface = fd_surface_new(state, width, height);
+	surface = fd_surface_screen(state, &width, &height);
 	if (!surface)
 		return -1;
 
