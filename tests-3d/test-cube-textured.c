@@ -93,7 +93,8 @@ const char *fragment_shader_source =
 		"}                            \n";
 
 
-void test_cube_textured(void)
+void test_cube_textured(GLint mag_filter, GLint min_filter,
+		GLint wrap_s, GLint wrap_t)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
@@ -205,7 +206,8 @@ void test_cube_textured(void)
 	EGLSurface surface;
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	RD_START("cube-textured", "");
+	RD_START("cube-textured", "mag_filter=%04x, min_filter=%04x, wrap_s=%04x, wrap_t=%04x",
+			mag_filter, min_filter, wrap_s, wrap_t);
 
 	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
 
@@ -293,13 +295,13 @@ void test_cube_textured(void)
 	GCHK(glFlush());
 
 	/* Note: cube turned black until these were defined. */
-	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter));
 	GCHK(glFlush());
-	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter));
 	GCHK(glFlush());
-	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT));
+	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s));
 	GCHK(glFlush());
-	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT));
+	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t));
 	GCHK(glFlush());
 
 	GCHK(modelviewmatrix_handle = glGetUniformLocation(program, "modelviewMatrix"));
@@ -353,7 +355,13 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	test_cube_textured();
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT);
+	test_cube_textured(GL_NEAREST, GL_LINEAR,  GL_REPEAT,          GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_NEAREST, GL_CLAMP_TO_EDGE,   GL_REPEAT);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT);
 
 	ECHK(eglTerminate(display));
 }
