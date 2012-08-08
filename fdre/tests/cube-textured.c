@@ -243,6 +243,8 @@ int main(int argc, char **argv)
 	fd_link(state);
 
 	fd_enable(state, GL_CULL_FACE);
+	fd_tex_param(state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	fd_tex_param(state, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	for (i = 0; i < n; i++) {
 		GLfloat aspect = (GLfloat)height / (GLfloat)width;

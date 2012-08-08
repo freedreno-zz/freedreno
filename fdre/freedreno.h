@@ -49,6 +49,7 @@ int fd_cull(struct fd_state *state, GLenum mode);
 int fd_depth_func(struct fd_state *state, GLenum depth_func);
 int fd_enable(struct fd_state *state, GLenum cap);
 int fd_disable(struct fd_state *state, GLenum cap);
+int fd_tex_param(struct fd_state *state, GLenum name, GLint param);
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		uint32_t start, uint32_t count);
 int fd_swap_buffers(struct fd_state *state);

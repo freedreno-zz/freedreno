@@ -112,6 +112,29 @@
 	((PA_SU_SC_DRAW_##x << 8))
 
 /*
+ * Bits for tex sampler:
+ */
+
+/* dword0 */
+#define SQ_TEX0_WRAP                   0    /* GL_REPEAT */
+#define SQ_TEX0_MIRROR                 1    /* GL_MIRRORED_REPEAT */
+#define SQ_TEX0_CLAMP_LAST_TEXEL       2    /* GL_CLAMP_TO_EDGE */
+#define SQ_TEX0_CLAMP_X(val)           ((val) << 10)
+#define SQ_TEX0_CLAMP_Y(val)           ((val) << 13)
+#define SQ_TEX0_PITCH(val)             (((val) >> 5) << 22)
+
+/* dword2 */
+#define SQ_TEX2_HEIGHT(val)            (((val) - 1) << 13)
+#define SQ_TEX2_WIDTH(val)             ((val) - 1)
+
+/* dword3 */
+#define SQ_TEX3_XY_FILTER_POINT        0
+#define SQ_TEX3_XY_FILTER_BILINEAR     1
+#define SQ_TEX3_XY_FILTER_BICUBIC      2  /* presumed */
+#define SQ_TEX3_XY_MAG_FILTER(val)     ((val) << 19)
+#define SQ_TEX3_XY_MIN_FILTER(val)     ((val) << 21)
+
+/*
  * Bits for RB_COLORCONTROL:
  */
 

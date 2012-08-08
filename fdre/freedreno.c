@@ -138,7 +138,11 @@ struct fd_state {
 	} fb;
 
 	/* textures: */
-	struct fd_surface *textures[16];
+	struct {
+		struct fd_surface *textures[16];
+		uint8_t min_filter, mag_filter;
+		uint8_t clamp_x, clamp_y;
+	} tex;
 };
 
 struct fd_surface {
@@ -422,6 +426,9 @@ struct fd_state * fd_init(void)
 	state->rb_colorcontrol = 0x00000c07 |
 			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
+
+	state->tex.clamp_x = state->tex.clamp_y = SQ_TEX0_WRAP;
+	state->tex.min_filter = state->tex.mag_filter = SQ_TEX3_XY_FILTER_POINT;
 
 	/* open framebuffer for displaying results: */
 	fd = open("/dev/fb0", O_RDWR);
@@ -845,6 +852,56 @@ int fd_disable(struct fd_state *state, GLenum cap)
 	}
 }
 
+static int set_filter(uint8_t *filter, GLint param)
+{
+	switch (param) {
+	case GL_LINEAR:
+		*filter = SQ_TEX3_XY_FILTER_BILINEAR;
+		return 0;
+	case GL_NEAREST:
+		*filter = SQ_TEX3_XY_FILTER_POINT;
+		return 0;
+	default:
+		ERROR_MSG("unsupported param: 0x%04x", param);
+		return -1;
+	}
+}
+
+static int set_clamp(uint8_t *clamp, GLint param)
+{
+	switch (param) {
+	case GL_REPEAT:
+		*clamp = SQ_TEX0_WRAP;
+		return 0;
+	case GL_MIRRORED_REPEAT:
+		*clamp = SQ_TEX0_MIRROR;
+		return 0;
+	case GL_CLAMP_TO_EDGE:
+		*clamp = SQ_TEX0_CLAMP_LAST_TEXEL;
+		return 0;
+	default:
+		ERROR_MSG("unsupported param: 0x%04x", param);
+		return -1;
+	}
+}
+
+int fd_tex_param(struct fd_state *state, GLenum name, GLint param)
+{
+	switch (name) {
+	case GL_TEXTURE_MAG_FILTER:
+		return set_filter(&state->tex.mag_filter, param);
+	case GL_TEXTURE_MIN_FILTER:
+		return set_filter(&state->tex.min_filter, param);
+	case GL_TEXTURE_WRAP_S:
+		return set_clamp(&state->tex.clamp_x, param);
+	case GL_TEXTURE_WRAP_T:
+		return set_clamp(&state->tex.clamp_y, param);
+	default:
+		ERROR_MSG("unsupported name: 0x%04x", name);
+		return -1;
+	}
+}
+
 static void emit_attributes(struct fd_state *state,
 		uint32_t start, uint32_t count)
 {
@@ -935,30 +992,27 @@ static void emit_textures(struct fd_state *state)
 	 * up shader otherwise.  For now the fdre tests just need to
 	 * know to do the right thing.
 	 */
-	for (n = 0; n < ARRAY_SIZE(state->textures) && state->textures[n]; n++) {
-		struct fd_surface *tex = state->textures[n];
+	for (n = 0; n < ARRAY_SIZE(state->tex.textures) && state->tex.textures[n]; n++) {
+		struct fd_surface *tex = state->tex.textures[n];
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 7);
 		OUT_RING(ring, 0x00010000);
 
-		/* Texture, FormatXYZW=Unsigned, ClampXYZ=Wrap/Repeat,
-		 * RFMode=ZeroClamp-1, Dim=1:2d, pitch
-		 */
-		OUT_RING(ring, (tex->pitch >> 5) << 22);
+		OUT_RING(ring, SQ_TEX0_PITCH(tex->pitch) |
+				SQ_TEX0_CLAMP_X(state->tex.clamp_x) |
+				SQ_TEX0_CLAMP_Y(state->tex.clamp_y));
 
-		/* Format=6:8888_WZYX, EndianSwap=0:None, ReqSize=0:256bit, DimHi=0,
-		 * NearestClamp=1:OGL Mode
-		 */
 		OUT_RING(ring, color2fmt[tex->color] | tex->bo->gpuaddr);
 
-		/* Width, Height, EndianSwap=0:None */
-		OUT_RING(ring, ((tex->height - 1) << 13) | (tex->width - 1));
+		OUT_RING(ring, SQ_TEX2_HEIGHT(tex->height) |
+				SQ_TEX2_WIDTH(tex->width));
 
 		/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
 		 * Mip=2:BaseMap
 		 */
-		//OUT_RING(ring, 0x01281510);  // XXX
-		OUT_RING(ring, 0x01001910);  // XXX
+		OUT_RING(ring, 0x01001910 |  // XXX
+				SQ_TEX3_XY_MAG_FILTER(state->tex.mag_filter) |
+				SQ_TEX3_XY_MIN_FILTER(state->tex.min_filter));
 
 		/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
 		 * Dim3d=0
@@ -1262,8 +1316,8 @@ void fd_surface_upload(struct fd_surface *surface, const void *data)
 void fd_set_texture(struct fd_state *state, uint32_t id,
 		struct fd_surface *tex)
 {
-	assert(id < ARRAY_SIZE(state->textures));
-	state->textures[id] = tex;
+	assert(id < ARRAY_SIZE(state->tex.textures));
+	state->tex.textures[id] = tex;
 }
 
 static void attach_render_target(struct fd_state *state,
