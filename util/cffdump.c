@@ -604,6 +604,13 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 {
 	uint32_t w, h, p;
 	uint32_t gpuaddr, flags, mip_gpuaddr, mip_flags;
+	uint32_t min, mag, clamp_x, clamp_y;
+	static const char *filter[] = {
+			"point", "bilinear", "bicubic",
+	};
+	static const char *clamp[] = {
+			"wrap", "mirror", "clamp-last-texel",
+	};
 
 	/* see sys2gmem_tex_const[] in adreno_a2xxx.c */
 
@@ -611,6 +618,8 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	 * RFMode=ZeroClamp-1, Dim=1:2d, pitch
 	 */
 	p = (dwords[0] >> 22) << 5;
+	clamp_x = (dwords[0] >> 10) & 0x3;
+	clamp_y = (dwords[0] >> 13) & 0x3;
 
 	/* Format=6:8888_WZYX, EndianSwap=0:None, ReqSize=0:256bit, DimHi=0,
 	 * NearestClamp=1:OGL Mode
@@ -624,7 +633,8 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
 	 * Mip=2:BaseMap
 	 */
-	// XXX
+	mag = (dwords[3] >> 19) & 0x3;
+	min = (dwords[3] >> 21) & 0x3;
 
 	/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
 	 * Dim3d=0
@@ -637,6 +647,8 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	parse_dword_addr(dwords[5], &mip_gpuaddr, &mip_flags, 0xfff);
 
 	printf("%sset texture const %04x\n", levels[level], val);
+	printf("%sclamp x/y: %s/%s\n", levels[level+1], clamp[clamp_x], clamp[clamp_y]);
+	printf("%sfilter min/mag: %s/%s\n", levels[level+1], filter[min], filter[mag]);
 	printf("%saddr=%08x (flags=%03x), size=%dx%d, pitch=%d, format=%s\n",
 			levels[level+1], gpuaddr, flags, w, h, p,
 			format_name[flags & 0xf]);
