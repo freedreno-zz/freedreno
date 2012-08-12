@@ -19,6 +19,7 @@ TESTS_3D = \
 	test-quad-flat \
 	test-quad-flat2 \
 	test-strip-smoothed \
+	test-cat \
 	test-cube \
 	test-cube-textured \
 	test-vertex \
