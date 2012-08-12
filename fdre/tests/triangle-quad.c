@@ -70,6 +70,7 @@ int main(int argc, char **argv)
 		"}                            \n";
 #else
 	const char *vertex_shader_asm =
+		"@attribute(R1)  aPosition                                       \n"
 		"EXEC                                                            \n"
 		"   (S)FETCH:  VERTEX  R1.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED  \n"
 		"                                       STRIDE(12) CONST(4)      \n"
@@ -80,6 +81,7 @@ int main(int argc, char **argv)
 		"EXEC_END                                                        \n"
 		"NOP                                                             \n";
 	const char *fragment_shader_asm =
+		"@uniform(C0) uColor                                             \n"
 		"ALLOC PARAM/PIXEL SIZE(0x0)                                     \n"
 		"EXEC_END                                                        \n"
 		"      ALU:    MAXv    export0 = C0, C0    ; gl_FragColor        \n";

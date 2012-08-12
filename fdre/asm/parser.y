@@ -66,9 +66,14 @@ struct ir_shader * fd_asm_parse(const char *src)
 %union {
 	int tok;
 	int num;
+	double flt;
 	int fmt;
 	const char *str;
 	struct ir_register *reg;
+	struct {
+		int start;
+		int num;
+	} range;
 }
 
 %{
@@ -82,7 +87,9 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 
 %token <num> T_INT
 %token <num> T_HEX
+%token <flt> T_FLOAT
 %token <str> T_SWIZZLE
+%token <str> T_IDENTIFIER
 %token <tok> T_NOP
 %token <tok> T_EXEC
 %token <tok> T_EXEC_END
@@ -102,6 +109,13 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_SAMPLE
 %token <tok> T_VERTEX
 %token <tok> T_ALU
+
+/* @ headers (@const/@sampler/@uniform/@varying) */
+%token <tok> T_A_ATTRIBUTE
+%token <tok> T_A_CONST
+%token <tok> T_A_SAMPLER
+%token <tok> T_A_UNIFORM
+%token <tok> T_A_VARYING
 
 /* vector instructions: */
 %token <tok> T_ADDv
@@ -149,6 +163,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %type <reg> reg alu_src_reg reg_or_const reg_or_export
 %type <tok> cf_alloc_type signedness alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
 %type <fmt> format
+%type <range> reg_range const_range
 
 %error-verbose
 
@@ -156,7 +171,42 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 
 %%
 
-shader:            { shader = ir_shader_create(); } cfs
+shader:            { shader = ir_shader_create(); } headers cfs
+
+headers:           
+|                  header headers
+
+header:            attribute_header
+|                  const_header
+|                  sampler_header
+|                  uniform_header
+|                  varying_header
+
+attribute_header:  T_A_ATTRIBUTE '(' reg_range ')' T_IDENTIFIER {
+                       ir_attribute_create(shader, $3.start, $3.num, $5);
+}
+
+const_header:      T_A_CONST '(' T_CONSTANT ')' T_FLOAT ',' T_FLOAT ',' T_FLOAT ',' T_FLOAT {
+                       ir_const_create(shader, $3, $5, $7, $9, $11);
+}
+
+sampler_header:    T_A_SAMPLER '(' number ')' T_IDENTIFIER {
+                       ir_sampler_create(shader, $3, $5);
+}
+
+uniform_header:    T_A_UNIFORM '(' const_range ')' T_IDENTIFIER {
+                       ir_uniform_create(shader, $3.start, $3.num, $5);
+}
+
+varying_header:    T_A_VARYING '(' reg_range ')' T_IDENTIFIER {
+                       ir_varying_create(shader, $3.start, $3.num, $5);
+}
+
+reg_range:         T_REGISTER                { $$.start = $1; $$.num = 1; }
+|                  T_REGISTER '-' T_REGISTER { $$.start = $1; $$.num = 1 + $3 - $1; }
+
+const_range:       T_CONSTANT                { $$.start = $1; $$.num = 1; }
+|                  T_CONSTANT '-' T_CONSTANT { $$.start = $1; $$.num = 1 + $3 - $1; }
 
 cfs:               cf
 |                  cf cfs

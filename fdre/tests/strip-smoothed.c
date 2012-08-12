@@ -73,6 +73,9 @@ int main(int argc, char **argv)
 		"}                            \n";
 #else
 	const char *vertex_shader_asm =
+		"@varying(R0)    vColor                                              \n"
+		"@attribute(R2)  aPosition                                           \n"
+		"@attribute(R1)  aColor                                              \n"
 		"EXEC                                                                \n"
 		"      FETCH:   VERTEX	R1.xyzw = R0.y FMT_32_32_32_32_FLOAT SIGNED  \n"
 		"                                       STRIDE(16) CONST(4)          \n"
@@ -86,6 +89,7 @@ int main(int argc, char **argv)
 		"      ALU:     MAXv export0 = R1, R1                                \n"
 		"NOP                                                                 \n";
 	const char *fragment_shader_asm =
+		"@varying(R0)    vColor                                              \n"
 		"ALLOC PARAM/PIXEL SIZE(0x0)                                         \n"
 		"EXEC_END                                                            \n"
 		"      ALU:    MAXv export0 = R0, R0    ; gl_FragColor               \n";

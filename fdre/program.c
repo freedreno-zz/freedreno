@@ -39,6 +39,7 @@ struct fd_shader {
 	uint32_t bin[256];
 	uint32_t sizedwords;
 	struct ir_shader_info info;
+	struct ir_shader *ir;
 };
 
 struct fd_program {
@@ -56,7 +57,7 @@ static struct fd_shader *get_shader(struct fd_program *program,
 	return NULL;
 }
 
-struct fd_program *fd_program_new(void)
+struct fd_program * fd_program_new(void)
 {
 	return calloc(1, sizeof(struct fd_program));
 }
@@ -65,17 +66,19 @@ int fd_program_attach_asm(struct fd_program *program,
 		enum fd_shader_type type, const char *src)
 {
 	struct fd_shader *shader = get_shader(program, type);
-	struct ir_shader *ir;
 	int sizedwords;
+
+	if (shader->ir)
+		ir_shader_destroy(shader->ir);
 
 	memset(shader, 0, sizeof(*shader));
 
-	ir = fd_asm_parse(src);
-	if (!ir) {
+	shader->ir = fd_asm_parse(src);
+	if (!shader->ir) {
 		ERROR_MSG("parse failed");
 		return -1;
 	}
-	sizedwords = ir_shader_assemble(ir, shader->bin,
+	sizedwords = ir_shader_assemble(shader->ir, shader->bin,
 			ARRAY_SIZE(shader->bin), &shader->info);
 	if (sizedwords <= 0) {
 		ERROR_MSG("assembler failed");
@@ -83,6 +86,38 @@ int fd_program_attach_asm(struct fd_program *program,
 	}
 	shader->sizedwords = sizedwords;
 	return 0;
+}
+
+struct ir_attribute ** fd_program_attributes(struct fd_program *program,
+		enum fd_shader_type type, int *cnt)
+{
+	struct fd_shader *shader = get_shader(program, type);
+	*cnt = shader->ir->attributes_count;
+	return shader->ir->attributes;
+}
+
+struct ir_const ** fd_program_consts(struct fd_program *program,
+		enum fd_shader_type type, int *cnt)
+{
+	struct fd_shader *shader = get_shader(program, type);
+	*cnt = shader->ir->consts_count;
+	return shader->ir->consts;
+}
+
+struct ir_sampler ** fd_program_samplers(struct fd_program *program,
+		enum fd_shader_type type, int *cnt)
+{
+	struct fd_shader *shader = get_shader(program, type);
+	*cnt = shader->ir->samplers_count;
+	return shader->ir->samplers;
+}
+
+struct ir_uniform ** fd_program_uniforms(struct fd_program *program,
+		enum fd_shader_type type, int *cnt)
+{
+	struct fd_shader *shader = get_shader(program, type);
+	*cnt = shader->ir->uniforms_count;
+	return shader->ir->uniforms;
 }
 
 int fd_program_emit_shader(struct fd_program *program,

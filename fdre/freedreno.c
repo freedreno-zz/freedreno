@@ -43,30 +43,35 @@
 #include "bmp.h"
 
 /* ************************************************************************* */
+struct fd_surface;
 
 struct fd_param {
 	const char *name;
-	/* user ptr and dimensions for passed in uniform/attribute:
-	 *   elem_size - size of individual element in bytes
-	 *   size      - number of elements per group
-	 *   count     - number of groups
-	 * so total size in bytes is elem_size * size * count
-	 */
-	const void *data;
-	uint32_t elem_size, size, count;
+	enum {
+		FD_PARAM_ATTRIBUTE,
+		FD_PARAM_ATTRIBUTE_VBO,
+		FD_PARAM_TEXTURE,
+		FD_PARAM_UNIFORM,
+	} type;
+	union {
+		struct kgsl_bo *bo;       /* FD_PARAM_ATTRIBUTE_VBO */
+		struct fd_surface *tex;   /* FD_PARAM_TEXTURE */
+		struct { /* FD_PARAM_ATTRIBUTE and FD_PARAM_UNIFORM */
+			/* user ptr and dimensions for passed in uniform/attribute:
+			 *   elem_size - size of individual element in bytes
+			 *   size      - number of elements per group
+			 *   count     - number of groups
+			 * so total size in bytes is elem_size * size * count
+			 */
+			const void *data;
+			uint32_t elem_size, size, count;
+		};
+	};
 };
 
+#define MAX_PARAMS 32
 struct fd_parameters {
-
-	/* gpu buffer used for passing parameters by ptr to the gpu..
-	 * it is used in a circular buffer fashion, wrapping around,
-	 * so we don't immediately overwrite the parameters for the
-	 * last draw cmd which the gpu may still be using:
-	 */
-	struct kgsl_bo *bo;
-	uint32_t off;
-
-	struct fd_param params[4];
+	struct fd_param params[MAX_PARAMS];
 	uint32_t nparams;
 };
 
@@ -103,7 +108,31 @@ struct fd_state {
 	/* shader program: */
 	struct fd_program *program;
 
-	struct fd_parameters attributes, uniforms;
+	/* uniform related params: */
+	struct {
+		struct fd_parameters params;
+	} uniforms;
+
+	/* attribute related params: */
+	struct {
+		/* gpu buffer used for passing parameters by ptr to the gpu..
+		 * it is used in a circular buffer fashion, wrapping around,
+		 * so we don't immediately overwrite the parameters for the
+		 * last draw cmd which the gpu may still be using:
+		 */
+		struct kgsl_bo *bo;
+		uint32_t off;
+
+		struct fd_parameters params;
+	} attributes;
+
+	/* texture related params: */
+	struct {
+		uint8_t min_filter, mag_filter;
+		uint8_t clamp_x, clamp_y;
+
+		struct fd_parameters params;
+	} textures;
 
 	struct {
 		/* render target: */
@@ -136,13 +165,6 @@ struct fd_state {
 		struct fd_surface *surface;
 		void *ptr;
 	} fb;
-
-	/* textures: */
-	struct {
-		struct fd_surface *textures[16];
-		uint8_t min_filter, mag_filter;
-		uint8_t clamp_x, clamp_y;
-	} tex;
 };
 
 struct fd_surface {
@@ -242,9 +264,9 @@ static void emit_pa_state(struct fd_state *state)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_PA_CL_GB_VERT_CLIP_ADJ));
-	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_CLIP_ADJ */ // XXX ???
+	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_CLIP_ADJ */
 	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_DISC_ADJ */
-	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_CLIP_ADJ */ // XXX ???
+	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_CLIP_ADJ */
 	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_DISC_ADJ */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -396,9 +418,6 @@ struct fd_state * fd_init(void)
 	/* allocate bo to pass vertices: */
 	state->attributes.bo = kgsl_bo_new(state->fd, 0x20000, 0);
 
-	/* allocate bo to pass uniforms: */
-	state->uniforms.bo = kgsl_bo_new(state->fd, 0x20000, 0);
-
 	state->program = fd_program_new();
 
 	state->solid_program = fd_program_new();
@@ -427,8 +446,10 @@ struct fd_state * fd_init(void)
 			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
 
-	state->tex.clamp_x = state->tex.clamp_y = SQ_TEX0_WRAP;
-	state->tex.min_filter = state->tex.mag_filter = SQ_TEX3_XY_FILTER_POINT;
+	state->textures.clamp_x = SQ_TEX0_WRAP;
+	state->textures.clamp_y = SQ_TEX0_WRAP;
+	state->textures.min_filter = SQ_TEX3_XY_FILTER_POINT;
+	state->textures.mag_filter = SQ_TEX3_XY_FILTER_POINT;
 
 	/* open framebuffer for displaying results: */
 	fd = open("/dev/fb0", O_RDWR);
@@ -493,47 +514,89 @@ int fd_link(struct fd_state *state)
 	return 0;
 }
 
-static int attach_parameter(struct fd_parameters *parameter,
-		const char *name, uint32_t size, uint32_t count, const void *data)
+static struct fd_param * find_param(struct fd_parameters *params,
+		const char *name)
 {
-	struct fd_param *p = NULL;
 	uint32_t i;
+	struct fd_param *p;
 
 	/* if this param is already bound, just update it: */
-	for (i = 0; i < parameter->nparams; i++) {
-		p = &parameter->params[i];
+	for (i = 0; i < params->nparams; i++) {
+		p = &params->params[i];
 		if (!strcmp(name, p->name)) {
-			break;
+			return p;
 		}
 	}
 
-	if (i == parameter->nparams) {
-		if (parameter->nparams >= ARRAY_SIZE(parameter->params)) {
-			ERROR_MSG("do many params, cannot bind %s", name);
-			return -1;
-		}
-		p = &parameter->params[parameter->nparams++];
+	if (i == ARRAY_SIZE(params->params)) {
+		ERROR_MSG("too many params, cannot bind %s", name);
+		return NULL;
 	}
 
-	p->name  = name;
-	p->elem_size = 4;  /* for now just 32bit types */
-	p->size  = size;
-	p->count = count;
-	p->data  = data;
+	p = &params->params[params->nparams++];
+	p->name = name;
 
+	return p;
+}
+
+/* for VBO's */
+struct kgsl_bo * fd_attribute_bo_new(struct fd_state *state,
+		uint32_t size, const void *data)
+{
+	struct kgsl_bo *bo = kgsl_bo_new(state->fd, size, 0); /* TODO read-only? */
+	memcpy(bo->hostptr, data, size);
+	return bo;
+}
+
+int fd_attribute_bo(struct fd_state *state, const char *name,
+		struct kgsl_bo * bo)
+{
+	struct fd_param *p = find_param(&state->attributes.params, name);
+	if (!p)
+		return -1;
+	p->type = FD_PARAM_ATTRIBUTE_VBO;
+	p->bo   = bo;
 	return 0;
 }
 
 int fd_attribute_pointer(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	return attach_parameter(&state->attributes, name, size, count, data);
+	struct fd_param *p = find_param(&state->attributes.params, name);
+	if (!p)
+		return -1;
+	p->type = FD_PARAM_ATTRIBUTE;
+	p->elem_size = 4;  /* for now just 32bit types */
+	p->size  = size;
+	p->count = count;
+	p->data  = data;
+	return 0;
 }
 
 int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	return attach_parameter(&state->uniforms, name, size, count, data);
+	struct fd_param *p = find_param(&state->uniforms.params, name);
+	if (!p)
+		return -1;
+	p->type = FD_PARAM_UNIFORM;
+	p->elem_size = 4;  /* for now just 32bit types */
+	p->size  = size;
+	p->count = count;
+	p->data  = data;
+	return 0;
+}
+
+/* use tex=NULL to clear */
+int fd_set_texture(struct fd_state *state, const char *name,
+		struct fd_surface *tex)
+{
+	struct fd_param *p = find_param(&state->textures.params, name);
+	if (!p)
+		return -1;
+	p->type = FD_PARAM_TEXTURE;
+	p->tex = tex;
+	return 0;
 }
 
 /* emit cmdstream to blit from GMEM back to the surface */
@@ -889,52 +952,74 @@ int fd_tex_param(struct fd_state *state, GLenum name, GLint param)
 {
 	switch (name) {
 	case GL_TEXTURE_MAG_FILTER:
-		return set_filter(&state->tex.mag_filter, param);
+		return set_filter(&state->textures.mag_filter, param);
 	case GL_TEXTURE_MIN_FILTER:
-		return set_filter(&state->tex.min_filter, param);
+		return set_filter(&state->textures.min_filter, param);
 	case GL_TEXTURE_WRAP_S:
-		return set_clamp(&state->tex.clamp_x, param);
+		return set_clamp(&state->textures.clamp_x, param);
 	case GL_TEXTURE_WRAP_T:
-		return set_clamp(&state->tex.clamp_y, param);
+		return set_clamp(&state->textures.clamp_y, param);
 	default:
 		ERROR_MSG("unsupported name: 0x%04x", name);
 		return -1;
 	}
 }
 
+static int upload_attributes(struct kgsl_bo *bo, uint32_t off,
+		struct fd_param *p, uint32_t start, uint32_t count)
+{
+	uint32_t group_size = p->elem_size * p->size;
+	uint32_t total_size = group_size * count;
+	uint32_t align_size = ALIGN(total_size, 32);
+	uint32_t data_off   = group_size * start;
+
+	if ((off + align_size) > bo->size)
+		return -1;
+
+	memcpy(bo->hostptr + off, p->data + data_off, total_size);
+
+	/* zero pad up to multiple of 32 */
+	memset(bo->hostptr + off + total_size, 0, align_size - total_size);
+
+	return align_size;
+}
+
 static void emit_attributes(struct fd_state *state,
 		uint32_t start, uint32_t count)
 {
 	struct kgsl_bo *bo = state->attributes.bo;
-	struct fd_shader_const shader_const[ARRAY_SIZE(state->attributes.params)];
-	uint32_t n;
+	struct fd_shader_const shader_const[MAX_PARAMS];
+	struct ir_attribute **attributes;
+	int n, attributes_count;
 
+	attributes = fd_program_attributes(state->program,
+			FD_SHADER_VERTEX, &attributes_count);
 retry:
-	for (n = 0; n < state->attributes.nparams; n++) {
-		struct fd_param *p = &state->attributes.params[n];
-		uint32_t group_size = p->elem_size * p->size;
-		uint32_t total_size = group_size * count;
-		uint32_t align_size = ALIGN(total_size, 32);
-		uint32_t bo_off     = state->attributes.off;
-		uint32_t data_off   = group_size * start;
+	for (n = 0; n < attributes_count; n++) {
+		struct fd_param *p = find_param(&state->attributes.params,
+				attributes[n]->name);
 
-		/* if we reach end of bo, then wrap-around: */
-		if ((bo_off + align_size) > bo->size) {
-			state->attributes.off = 0;
-			n = 0;
-			goto retry;
+		if (p->type == FD_PARAM_ATTRIBUTE_VBO) {
+			shader_const[n].gpuaddr = p->bo->gpuaddr;
+			shader_const[n].sz      = p->bo->size;
+		} else {
+			int align_size = upload_attributes(bo, state->attributes.off,
+					p, start, count);
+
+			/* if we reach end of bo, then wrap-around: */
+			if (align_size < 0) {
+				state->attributes.off = 0;
+				n = 0;
+				goto retry;
+			}
+
+			shader_const[n].gpuaddr = bo->gpuaddr + state->attributes.off;
+			shader_const[n].sz      = align_size;
+
+			state->attributes.off += align_size;
 		}
 
-		memcpy(bo->hostptr + bo_off, p->data + data_off, total_size);
-
-		/* zero pad up to multiple of 32 */
-		memset(bo->hostptr + bo_off + total_size, 0, align_size - total_size);
-
-		state->attributes.off += align_size;
-
 		shader_const[n].format  = COLORX_8;
-		shader_const[n].gpuaddr = bo->gpuaddr + bo_off;
-		shader_const[n].sz      = align_size;
 	}
 
 	if (n > 0) {
@@ -942,77 +1027,95 @@ retry:
 	}
 }
 
-static void emit_uniforms(struct fd_state *state)
+/* in the cmdstream, uniforms and conts are the same */
+static void emit_uniconst(struct fd_state *state, enum fd_shader_type type,
+		const void *data, uint32_t size, uint32_t count,
+		uint32_t cstart, uint32_t num)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
-	uint32_t n, size = 0;
+	uint32_t base = (type == FD_SHADER_VERTEX) ? 0x00000080 : 0x00000480;
+	const uint32_t *dwords = data;
+	uint32_t i, j;
 
-	for (n = 0; n < state->uniforms.nparams; n++) {
-		struct fd_param *p = &state->uniforms.params[n];
-		// NOTE: a 3x3 matrix seems to get rounded up to four
-		// entries per row.. probably to meet some alignment
-		// constraint:
-		size += ALIGN(p->size, 4) * p->count;
-	}
+	/* make sure it fits in the # of registers that shader is expecting */
+	assert((ALIGN(size, 4) * count) == (num * 4));
 
-	if (size == 0)
-		return;
+	// NOTE: a 3x3 matrix seems to get rounded up to four
+	// entries per row.. having one vec4 register per row
+	// makes matrix multiplication sane
 
-	/* emit uniforms: */
-	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + size);
+	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + ALIGN(size, 4) * count);
+	OUT_RING(ring, base + (cstart * 4));
 
-	// XXX hack, I guess I'll understand this value better once
-	// I start working on the shaders.. note, the last byte appears
-	// to be an offset..
-	OUT_RING(ring, (state->uniforms.nparams == 1) ? 0x00000480 : 0x00000080);
-
-	for (n = 0; n < state->uniforms.nparams; n++) {
-		struct fd_param *p = &state->uniforms.params[n];
-		const uint32_t *data = p->data;
-		uint32_t i, j;
-		for (i = 0; i < p->count; i++) {
-			for (j = 0; j < p->size; j++) {
-				OUT_RING(ring, *(data++));
-			}
-			/* zero pad, if needed: */
-			for (; j < ALIGN(p->size, 4); j++) {
-				OUT_RING(ring, 0);
-			}
+	for (i = 0; i < count; i++) {
+		for (j = 0; j < size; j++) {
+			OUT_RING(ring, *(dwords++));
 		}
+		/* zero pad, if needed: */
+		for (; j < ALIGN(size, 4); j++) {
+			OUT_RING(ring, 0);
+		}
+	}
+}
+
+static void emit_uniforms(struct fd_state *state, enum fd_shader_type type)
+{
+	struct ir_uniform **uniforms;
+	int n, uniforms_count;
+
+	uniforms = fd_program_uniforms(state->program, type, &uniforms_count);
+
+	for (n = 0; n < uniforms_count; n++) {
+		struct fd_param *p = find_param(&state->uniforms.params,
+				uniforms[n]->name);
+		emit_uniconst(state, type, p->data, p->size, p->count,
+				uniforms[n]->cstart, uniforms[n]->num);
+	}
+}
+
+static void emit_constants(struct fd_state *state, enum fd_shader_type type)
+{
+	struct ir_const **consts;
+	int n, consts_count;
+
+	consts = fd_program_consts(state->program, type, &consts_count);
+
+	for (n = 0; n < consts_count; n++) {
+		emit_uniconst(state, type, consts[n]->val, 4, 1, consts[n]->cstart, 1);
 	}
 }
 
 static void emit_textures(struct fd_state *state)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
-	uint32_t n;
+	struct ir_sampler **samplers;
+	int n, samplers_count;
 
-	/* this isn't too user-friendly.. you cannot unbind texture
-	 * N without unbinding N+1.  But I think we'd have to patch
-	 * up shader otherwise.  For now the fdre tests just need to
-	 * know to do the right thing.
-	 */
-	for (n = 0; n < ARRAY_SIZE(state->tex.textures) && state->tex.textures[n]; n++) {
-		struct fd_surface *tex = state->tex.textures[n];
+	samplers = fd_program_samplers(state->program,
+			FD_SHADER_FRAGMENT, &samplers_count);
+
+	for (n = 0; n < samplers_count; n++) {
+		struct fd_param *p = find_param(&state->textures.params,
+				samplers[n]->name);
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 7);
 		OUT_RING(ring, 0x00010000);
 
-		OUT_RING(ring, SQ_TEX0_PITCH(tex->pitch) |
-				SQ_TEX0_CLAMP_X(state->tex.clamp_x) |
-				SQ_TEX0_CLAMP_Y(state->tex.clamp_y));
+		OUT_RING(ring, SQ_TEX0_PITCH(p->tex->pitch) |
+				SQ_TEX0_CLAMP_X(state->textures.clamp_x) |
+				SQ_TEX0_CLAMP_Y(state->textures.clamp_y));
 
-		OUT_RING(ring, color2fmt[tex->color] | tex->bo->gpuaddr);
+		OUT_RING(ring, color2fmt[p->tex->color] | p->tex->bo->gpuaddr);
 
-		OUT_RING(ring, SQ_TEX2_HEIGHT(tex->height) |
-				SQ_TEX2_WIDTH(tex->width));
+		OUT_RING(ring, SQ_TEX2_HEIGHT(p->tex->height) |
+				SQ_TEX2_WIDTH(p->tex->width));
 
 		/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
 		 * Mip=2:BaseMap
 		 */
 		OUT_RING(ring, 0x01001910 |  // XXX
-				SQ_TEX3_XY_MAG_FILTER(state->tex.mag_filter) |
-				SQ_TEX3_XY_MIN_FILTER(state->tex.min_filter));
+				SQ_TEX3_XY_MAG_FILTER(state->textures.mag_filter) |
+				SQ_TEX3_XY_MIN_FILTER(state->textures.min_filter));
 
 		/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
 		 * Dim3d=0
@@ -1042,6 +1145,12 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
+
+	/*
+	 * vertex shader consts start at 0x80 <-> C0
+	 * fragment shader consts start at 0x480?  Or is this controlled by some reg?
+	 *
+	 */
 
 	state->dirty = true;
 
@@ -1078,6 +1187,9 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
+	emit_constants(state, FD_SHADER_VERTEX);
+	emit_constants(state, FD_SHADER_FRAGMENT);
+
 	emit_attributes(state, start, count);
 
 	fd_program_emit_shader(state->program, FD_SHADER_VERTEX, ring);
@@ -1085,7 +1197,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
 	// XXX this is not understood:
-	switch (state->attributes.nparams) {
+	switch (state->attributes.params.nparams) {
 	case 3:
 		OUT_RING(ring, 0x0000003b);
 		break;
@@ -1106,7 +1218,8 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
-	emit_uniforms(state);
+	emit_uniforms(state, FD_SHADER_VERTEX);
+	emit_uniforms(state, FD_SHADER_FRAGMENT);
 
 	emit_textures(state);
 
@@ -1310,14 +1423,6 @@ void fd_surface_del(struct fd_state *state, struct fd_surface *surface)
 void fd_surface_upload(struct fd_surface *surface, const void *data)
 {
 	memcpy(surface->bo->hostptr, data, surface->bo->size);
-}
-
-/* use tex=NULL to clear */
-void fd_set_texture(struct fd_state *state, uint32_t id,
-		struct fd_surface *tex)
-{
-	assert(id < ARRAY_SIZE(state->tex.textures));
-	state->tex.textures[id] = tex;
 }
 
 static void attach_render_target(struct fd_state *state,

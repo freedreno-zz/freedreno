@@ -174,6 +174,16 @@ int main(int argc, char **argv)
 			"}                            \n";
 #else
 	const char *vertex_shader_asm =
+		"@varying(R0)     vTexCoord                                                        \n"
+		"@varying(R1)     vVaryingColor                                                    \n"
+		"@attribute(R2)   in_position                                                      \n"
+		"@attribute(R3)   in_normal                                                        \n"
+		"@attribute(R1)   in_TexCoord                                                      \n"
+		"@uniform(C0-C3)  modelviewMatrix                                                  \n"
+		"@uniform(C4-C7)  modelviewprojectionMatrix                                        \n"
+		"@uniform(C8-C10) normalMatrix                                                     \n"
+		"@const(C11)      2.000000, 2.000000, 20.000000, 0.000000                          \n"
+		"@const(C12)      1.000000, 1.000000, 1.000000, 0.000000                           \n"
 		"EXEC                                                                              \n"
 		"      FETCH:  VERTEX  R1.xy11 = R0.z FMT_32_32_FLOAT SIGNED STRIDE(8) CONST(4)    \n"
 		"      FETCH:  VERTEX  R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)\n"
@@ -206,6 +216,9 @@ int main(int argc, char **argv)
 		"      ALU:    MAXv    export1.___w = C12.yxzx, C12.yxzx                           \n";
 
 	const char *fragment_shader_asm =
+		"@varying(R0)    vTexCoord                                                         \n"
+		"@varying(R1)    vVaryingColor                                                     \n"
+		"@sampler(0)     uTexture                                                          \n"
 		"EXEC                                                                              \n"
 		"   (S)FETCH:  SAMPLE  R0.xyzw = R0.xyx CONST(0)                                   \n"
 		"ALLOC PARAM/PIXEL SIZE(0x0)                                                       \n"
@@ -256,9 +269,9 @@ int main(int argc, char **argv)
 
 		esMatrixLoadIdentity(&modelview);
 		esTranslate(&modelview, 0.0f, 0.0f, -8.0f);
-		esRotate(&modelview, 45.0f + (0.5f * i), 1.0f, 0.0f, 0.0f);
-		esRotate(&modelview, 45.0f - (0.5f * i), 0.0f, 1.0f, 0.0f);
-		esRotate(&modelview, 10.0f + (0.5f * i), 0.0f, 0.0f, 1.0f);
+		esRotate(&modelview, 45.0f + (0.25f * i), 1.0f, 0.0f, 0.0f);
+		esRotate(&modelview, 45.0f - (0.15f * i), 0.0f, 1.0f, 0.0f);
+		esRotate(&modelview, 10.0f + (0.25f * i), 0.0f, 0.0f, 1.0f);
 
 		esMatrixLoadIdentity(&projection);
 		esFrustum(&projection,
@@ -281,7 +294,7 @@ int main(int argc, char **argv)
 
 		fd_clear(state, 0xff404040);
 
-		fd_set_texture(state, 0, tex);
+		fd_set_texture(state, "uTexture", tex);
 
 		fd_attribute_pointer(state, "in_position", 3, 24, vVertices);
 		fd_attribute_pointer(state, "in_normal", 3, 24, vNormals);
@@ -293,15 +306,6 @@ int main(int argc, char **argv)
 				4, 4,  &modelviewprojection.m[0][0]);
 		fd_uniform_attach(state, "normalMatrix",
 				3, 3, normal);
-
-		/* since we aren't hooked up to the compiler yet, manually
-		 * emit the consts needed by the compiled vertex shader as
-		 * uniforms:
-		 */
-		fd_uniform_attach(state, "constants", 1, 8, (float[]){
-			2.0f,  2.0f, 20.0f,  0.0f,
-			1.0f,  1.0f,  1.0f,  0.0f,
-		});
 
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 4, 4);

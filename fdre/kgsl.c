@@ -62,7 +62,7 @@ struct kgsl_bo * kgsl_bo_new(int fd, uint32_t size, uint32_t flags)
 {
 	struct kgsl_bo *bo;
 	struct kgsl_gpumem_alloc req = {
-			.size = size,
+			.size = ALIGN(size, 4096),
 			.flags = flags,
 	};
 	int ret;
@@ -70,7 +70,7 @@ struct kgsl_bo * kgsl_bo_new(int fd, uint32_t size, uint32_t flags)
 	ret = ioctl(fd, IOCTL_KGSL_GPUMEM_ALLOC, &req);
 	assert(!ret);
 
-	bo = kgsl_bo_new_from_gpuaddr(fd, req.gpuaddr, NULL, size);
+	bo = kgsl_bo_new_from_gpuaddr(fd, req.gpuaddr, NULL, req.size);
 	assert(bo);
 
 	bo->free_gpuaddr = true;

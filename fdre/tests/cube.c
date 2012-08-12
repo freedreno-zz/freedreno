@@ -167,23 +167,19 @@ int main(int argc, char **argv)
 		"}                                  \n";
 #else
 	const char *vertex_shader_asm =
-		" ;;;; const/register assignment:                                \n"
-		" ; R0: vVaryingColor                                            \n"
-		" ; R1, CONST(1): in_color                                       \n"
-		" ; R3, CONST(2): in_normal                                      \n"
-		" ; R2, CONST(3): in_position                                    \n"
-		" ; C0+: modelviewMatrix                                         \n"
-		" ; C4+: modelviewprojectionMatrix                               \n"
-		" ; C8+: normalMatrix                                            \n"
-		" ; C11: 2.000000, 2.000000, 20.000000, 0.000000                 \n"
-		" ; C12: 1.000000, 0.000000, 0.000000, 0.000000                  \n"
-		"EXEC                                                            \n"
-		"      FETCH:  VERTEX  R1.xyz_ = R0.z FMT_32_32_32_FLOAT SIGNED  \n"
-		"                                   STRIDE(12) CONST(4)          \n"
-		"      FETCH:  VERTEX  R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED  \n"
-		"                                   STRIDE(12) CONST(4)          \n"
-		"      FETCH:  VERTEX  R3.xyz_ = R0.y FMT_32_32_32_FLOAT SIGNED  \n"
-		"                                       STRIDE(12) CONST(4)      \n"
+		"@varying(R0)     vVaryingColor                                                                                 \n"
+		"@attribute(R2)   in_position                                                                                   \n"
+		"@attribute(R3)   in_normal                                                                                     \n"
+		"@attribute(R1)   in_color                                                                                      \n"
+		"@uniform(C0-C3)  modelviewMatrix                                                                               \n"
+		"@uniform(C4-C7)  modelviewprojectionMatrix                                                                     \n"
+		"@uniform(C8-C10) normalMatrix                                                                                  \n"
+		"@const(C11)      2.000000, 2.000000, 20.000000, 0.000000                                                       \n"
+		"@const(C12)      1.000000, 0.000000, 0.000000, 0.000000                                                        \n"
+		"EXEC                                                                                                           \n"
+		"      FETCH:  VERTEX  R1.xyz_ = R0.z FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)                             \n"
+		"      FETCH:  VERTEX  R2.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)                             \n"
+		"      FETCH:  VERTEX  R3.xyz_ = R0.y FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)                             \n"
 		"   (S)ALU:    MULv    R0 = R2.wwww, C7           ; -> modelviewprojectionMatrix * in_position                  \n"
 		"      ALU:    MULADDv R0 = R0, R2.zzzz, C6       ; -> modelviewprojectionMatrix * in_position                  \n"
 		"      ALU:    MULADDv R0 = R0, R2.yyyy, C5       ; -> modelviewprojectionMatrix * in_position                  \n"
@@ -212,6 +208,7 @@ int main(int argc, char **argv)
 		"      ALU:    MAXv    export0.___w = C12.xyzx, C12.xyzx ; vVaryingColor.___w  = 1.0                            \n";
 
 	const char *fragment_shader_asm =
+		"@varying(R0)    vVaryingColor                                   \n"
 		"ALLOC PARAM/PIXEL SIZE(0x0)                                     \n"
 		"EXEC_END                                                        \n"
 		"      ALU:    MAXv export0 = R0, R0    ; gl_FragColor           \n";
@@ -287,15 +284,6 @@ int main(int argc, char **argv)
 				4, 4,  &modelviewprojection.m[0][0]);
 		fd_uniform_attach(state, "normalMatrix",
 				3, 3, normal);
-
-		/* since we aren't hooked up to the compiler yet, manually
-		 * emit the consts needed by the compiled vertex shader as
-		 * uniforms:
-		 */
-		fd_uniform_attach(state, "constants", 1, 8, (float[]){
-			2.0f,  2.0f, 20.0f,  0.0f,
-			1.0f,  0.0f,  0.0f,  0.0f,
-		});
 
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 4, 4);

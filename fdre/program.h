@@ -25,6 +25,7 @@
 #define PROGRAM_H_
 
 #include "kgsl.h"
+#include "ir.h"
 
 struct fd_program;
 
@@ -33,10 +34,19 @@ enum fd_shader_type {
 	FD_SHADER_FRAGMENT = 1,
 };
 
-struct fd_program *fd_program_new(void);
+struct fd_program * fd_program_new(void);
 
 int fd_program_attach_asm(struct fd_program *program,
 		enum fd_shader_type type, const char *src);
+
+struct ir_attribute ** fd_program_attributes(struct fd_program *program,
+		enum fd_shader_type type, int *cnt);
+struct ir_const ** fd_program_consts(struct fd_program *program,
+		enum fd_shader_type type, int *cnt);
+struct ir_sampler ** fd_program_samplers(struct fd_program *program,
+		enum fd_shader_type type, int *cnt);
+struct ir_uniform ** fd_program_uniforms(struct fd_program *program,
+		enum fd_shader_type type, int *cnt);
 
 int fd_program_emit_shader(struct fd_program *program,
 		enum fd_shader_type type, struct kgsl_ringbuffer *ring);

@@ -31,6 +31,7 @@
 
 struct fd_state;
 struct fd_surface;
+struct kgsl_bo;
 
 struct fd_state * fd_init(void);
 void fd_fini(struct fd_state *state);
@@ -39,10 +40,15 @@ int fd_vertex_shader_attach_asm(struct fd_state *state, const char *src);
 int fd_fragment_shader_attach_asm(struct fd_state *state, const char *src);
 int fd_link(struct fd_state *state);
 
+struct kgsl_bo * fd_attribute_bo_new(struct fd_state *state,
+		uint32_t size, const void *data);
+int fd_attribute_bo(struct fd_state *state, const char *name, struct kgsl_bo * bo);
 int fd_attribute_pointer(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data);
 int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data);
+int fd_set_texture(struct fd_state *state, const char *name,
+		struct fd_surface *tex);
 
 int fd_clear(struct fd_state *state, uint32_t color);
 int fd_cull(struct fd_state *state, GLenum mode);
@@ -63,8 +69,6 @@ struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
 		uint32_t width, uint32_t height, enum COLORFORMATX color_format);
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface);
 void fd_surface_upload(struct fd_surface *surface, const void *data);
-void fd_set_texture(struct fd_state *state, uint32_t id,
-		struct fd_surface *tex);
 
 void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface);

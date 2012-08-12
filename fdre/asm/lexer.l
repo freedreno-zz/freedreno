@@ -37,9 +37,15 @@ extern YYSTYPE asm_yylval;
 %%
 [ \t\n]                           ; /* ignore whitespace */
 ";"[^\n]*"\n"                     ; /* ignore comments */
+[0-9]+"."[0-9]+                   asm_yylval.flt = strtod(yytext, NULL);       return T_FLOAT;
 [0-9]*                            asm_yylval.num = strtol(yytext, NULL, 0);    return T_INT;
 "0x"[0-9a-fA-F]*                  asm_yylval.num = strtol(yytext, NULL, 0);    return T_HEX;
 "."[_w-z01][_w-z01]?[_w-z01]?[_w-z01]? asm_yylval.str = yytext + 1;            return T_SWIZZLE;
+"@attribute"                      return TOKEN(T_A_ATTRIBUTE);
+"@const"                          return TOKEN(T_A_CONST);
+"@sampler"                        return TOKEN(T_A_SAMPLER);
+"@uniform"                        return TOKEN(T_A_UNIFORM);
+"@varying"                        return TOKEN(T_A_VARYING);
 "NOP"                             return TOKEN(T_NOP);
 "EXEC"                            return TOKEN(T_EXEC);
 "EXEC_END"                        return TOKEN(T_EXEC_END);
@@ -98,5 +104,6 @@ extern YYSTYPE asm_yylval;
 ","                               return ',';
 "-"                               return '-';
 "|"                               return '|';
+[a-zA-Z_][a-zA-Z_0-9]*            asm_yylval.str = yytext;                     return T_IDENTIFIER;
 .                                 printf("Unknown token: %s\n", yytext); yyterminate();
 %%
