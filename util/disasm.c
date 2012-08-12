@@ -210,6 +210,7 @@ enum vector_opc {
 };
 
 enum scalar_opc {
+	MUL2 = 0,
 	MOV = 2,
 	EXP2 = 7,
 	LOG2 = 8,
@@ -235,6 +236,7 @@ struct {
 		INSTR(DOT4v, 2),
 		INSTR(DOT3v, 2),
 }, scalar_instructions[0x20] = {
+		INSTR(MUL2, 1),
 		INSTR(MOV, 1),  // todo doesn’t seem was can do a scalar max?? so I assume this is a single src MOV
 		INSTR(EXP2, 1),
 		INSTR(LOG2, 1),
