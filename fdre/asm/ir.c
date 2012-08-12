@@ -372,6 +372,7 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
 	switch (instr->alu.scalar_opc) {
 	default:
 		ERROR_MSG("invalid scalar: %d\n", instr->alu.scalar_opc);
+	case T_MUL2:  return 0x00;
 	case T_MOV:   return 0x02;
 	case T_EXP2:  return 0x07;
 	case T_LOG2:  return 0x08;

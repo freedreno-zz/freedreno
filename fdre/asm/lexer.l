@@ -73,6 +73,7 @@ extern YYSTYPE asm_yylval;
 "MULADDv"                         return TOKEN(T_MULADDv);
 "DOT4v"                           return TOKEN(T_DOT4v);
 "DOT3v"                           return TOKEN(T_DOT3v);
+"MUL2"                            return TOKEN(T_MUL2);
 "MOV"                             return TOKEN(T_MOV);
 "EXP2"                            return TOKEN(T_EXP2);
 "LOG2"                            return TOKEN(T_LOG2);

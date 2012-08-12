@@ -128,6 +128,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_DOT3v 
 
 /* scalar instructions: */
+%token <tok> T_MUL2
 %token <tok> T_MOV
 %token <tok> T_EXP2
 %token <tok> T_LOG2
@@ -310,7 +311,8 @@ alu_vec_2src_op:   T_ADDv
 |                  T_DOT3v
 
 /* MUL/ADD should take 2 srcs */
-alu_scalar_op:     T_MOV
+alu_scalar_op:     T_MUL2
+|                  T_MOV
 |                  T_EXP2
 |                  T_LOG2
 |                  T_RCP
