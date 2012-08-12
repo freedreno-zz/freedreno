@@ -73,5 +73,7 @@ void dump_all_buffers(void) __attribute__((weak));
 #undef ALIGN
 #define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 #endif /* REDUMP_H_ */

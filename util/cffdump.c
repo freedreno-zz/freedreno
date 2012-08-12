@@ -670,8 +670,12 @@ static void dump_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t va
 					gpuaddr, size, format_name[flags & 0xf]);
 			// TODO maybe dump these as bytes instead of dwords?
 			size = (size + 3) / 4; // for now convert to dwords
-			dump_hex(addr, size, level + 1);
-			dump_float(addr, size, level + 1);
+			dump_hex(addr, min(size, 64), level + 1);
+			if (size > min(size, 64))
+				printf("%s\t\t...\n", levels[level+1]);
+			dump_float(addr, min(size, 64), level + 1);
+			if (size > min(size, 64))
+				printf("%s\t\t...\n", levels[level+1]);
 		}
 	}
 }
