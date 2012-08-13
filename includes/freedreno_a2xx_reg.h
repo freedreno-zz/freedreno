@@ -112,6 +112,13 @@
 	((PA_SU_SC_DRAW_##x << 8))
 
 /*
+ * Bits for PA_SC_WINDOW_OFFSET:
+ * (seems to be same as r600)
+ */
+#define PA_SC_WINDOW_OFFSET_X(val)    ((val) & 0x7fff)
+#define PA_SC_WINDOW_OFFSET_Y(val)    (((val) & 0x7fff) << 16)
+
+/*
  * Bits for tex sampler:
  */
 
@@ -149,5 +156,13 @@
 #define RB_DEPTHCONTROL_FUNC_MASK      0x00000070
 #define RB_DEPTH_CONTROL_FUNC(depth_func) \
 	((((depth_func) - GL_NEVER) << 4) & RB_DEPTHCONTROL_FUNC_MASK)
+
+
+/*
+ * Bits for RB_COPY_DEST_OFFSET:
+ */
+
+#define RB_COPY_DEST_OFFSET_X(val)    ((val) & 0x3fff)
+#define RB_COPY_DEST_OFFSET_Y(val)    (((val) & 0x3fff) << 13)
 
 #endif /* FREEDRENO_A2XX_REG_H_ */

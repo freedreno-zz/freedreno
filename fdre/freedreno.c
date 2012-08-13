@@ -140,7 +140,8 @@ struct fd_state {
 		/* for now just keep things simple and split the
 		 * render target into horizontal strips:
 		 */
-		uint16_t bin_h, nbins;
+		uint16_t bin_h, nbins_y;
+		uint16_t bin_w, nbins_x;
 	} render_target;
 
 	/* have there been any render cmds since last flush? */
@@ -601,8 +602,8 @@ int fd_set_texture(struct fd_state *state, const char *name,
 
 /* emit cmdstream to blit from GMEM back to the surface */
 static void emit_gmem2mem(struct fd_state *state,
-		struct kgsl_ringbuffer *ring,
-		struct fd_surface *surface, uint32_t offset)
+		struct kgsl_ringbuffer *ring, struct fd_surface *surface,
+		uint32_t xoff, uint32_t yoff)
 {
 	emit_shader_const(ring, 0x9c, (struct fd_shader_const[]) {
 			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
@@ -668,10 +669,11 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 6);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
-	OUT_RING(ring, surface->bo->gpuaddr + offset); /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, surface->bo->gpuaddr);   /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);    /* RB_COPY_DEST_PITCH */
-	OUT_RING(ring, 0x0003c108 | (surface->color << 4));	/* RB_COPY_DEST_FORMAT */ // XXX
-	OUT_RING(ring, 0x00000000);             /* RB_COPY_DEST_OFFSET */
+	OUT_RING(ring, 0x0003c108 | (surface->color << 4)); /* RB_COPY_DEST_FORMAT */ // XXX
+	OUT_RING(ring, RB_COPY_DEST_OFFSET_X(xoff) | /* RB_COPY_DEST_OFFSET */
+			RB_COPY_DEST_OFFSET_Y(yoff));
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -693,6 +695,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
+	bool clear_depth = !!(state->rb_depthcontrol & RB_DEPTHCONTROL_ENABLE);
 
 	state->dirty = true;
 
@@ -730,15 +733,20 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
-	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, clear_depth ? 0x000000f8 : 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTH_CLEAR));
-	OUT_RING(ring, 0x00000000);
+	OUT_RING(ring, clear_depth ? 0xffffffff : 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	OUT_RING(ring, 0x00000008);
+	if (clear_depth) {
+		OUT_RING(ring, RB_DEPTH_CONTROL_FUNC(GL_ALWAYS) |
+				RB_DEPTHCONTROL_ENABLE);
+	} else {
+		OUT_RING(ring, RB_DEPTH_CONTROL_FUNC(GL_NEVER));
+	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
@@ -1289,10 +1297,11 @@ int fd_flush(struct fd_state *state)
 	if (!state->dirty)
 		return 0;
 
-	if (state->render_target.nbins == 1) {
+	if ((state->render_target.nbins_x == 1) &&
+			(state->render_target.nbins_y == 1)) {
 		/* no binning needed, just emit the primary ringbuffer: */
 		ring = state->ring;
-		emit_gmem2mem(state, ring, surface, 0);
+		emit_gmem2mem(state, ring, surface, 0, 0);
 	} else {
 		/* binning required, build cmds to setup for each tile in
 		 * the tile ringbuffer, w/ IB's to the primary ringbuffer:
@@ -1300,35 +1309,44 @@ int fd_flush(struct fd_state *state)
 		uint32_t i, yoff = 0;
 		ring = state->ring_tile;
 
-		for (i = 0; i < state->render_target.nbins; i++) {
-			uint32_t bin_w = surface->width;
+		for (i = 0; i < state->render_target.nbins_y; i++) {
+			uint32_t j, xoff = 0;
 			uint32_t bin_h = state->render_target.bin_h;
-			uint32_t offset = surface->pitch * surface->cpp * yoff;
 
-			/* clip bin dimensions: */
+			/* clip bin height: */
 			bin_h = min(bin_h, surface->height - yoff);
 
-			DEBUG_MSG("bin_h=%d, yoff=%d, offset=0x%08x, cpp=%d, pitch=%d",
-					bin_h, yoff, offset, surface->cpp, surface->pitch);
+			for (j = 0; j < state->render_target.nbins_x; j++) {
+				uint32_t bin_w = state->render_target.bin_w;
 
-			/* setup scissor/offset for current tile: */
-			OUT_PKT3(ring, CP_SET_CONSTANT, 4);
-			OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
-			OUT_RING(ring, (-yoff) << 16);      /* PA_SC_WINDOW_OFFSET */
-			OUT_RING(ring, xy2d(0,0));	        /* PA_SC_WINDOW_SCISSOR_TL */
-			OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
-					surface->height));
+				/* clip bin width: */
+				bin_w = min(bin_w, surface->width - xoff);
 
-			OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-			OUT_RING(ring, CP_REG(REG_PA_SC_SCREEN_SCISSOR_TL));
-			OUT_RING(ring, xy2d(0,0));			/* PA_SC_SCREEN_SCISSOR_TL */
-			OUT_RING(ring, xy2d(bin_w, bin_h)); /* PA_SC_SCREEN_SCISSOR_BR */
+				DEBUG_MSG("bin_h=%d, yoff=%d, bin_w=%d, xoff=%d",
+						bin_h, yoff, bin_w, xoff);
 
-			/* emit IB to drawcmds: */
-			kgsl_ringbuffer_emit_ib(ring, state->ring);
+				/* setup scissor/offset for current tile: */
+				OUT_PKT3(ring, CP_SET_CONSTANT, 4);
+				OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
+				OUT_RING(ring, PA_SC_WINDOW_OFFSET_X(-xoff) |
+						PA_SC_WINDOW_OFFSET_Y(-yoff));/* PA_SC_WINDOW_OFFSET */
+				OUT_RING(ring, xy2d(0,0));            /* PA_SC_WINDOW_SCISSOR_TL */
+				OUT_RING(ring, xy2d(surface->width,   /* PA_SC_WINDOW_SCISSOR_BR */
+						surface->height));
 
-			/* emit gmem2mem to transfer tile back to system memory: */
-			emit_gmem2mem(state, ring, surface, offset);
+				OUT_PKT3(ring, CP_SET_CONSTANT, 3);
+				OUT_RING(ring, CP_REG(REG_PA_SC_SCREEN_SCISSOR_TL));
+				OUT_RING(ring, xy2d(0,0));            /* PA_SC_SCREEN_SCISSOR_TL */
+				OUT_RING(ring, xy2d(bin_w, bin_h));   /* PA_SC_SCREEN_SCISSOR_BR */
+
+				/* emit IB to drawcmds: */
+				kgsl_ringbuffer_emit_ib(ring, state->ring);
+
+				/* emit gmem2mem to transfer tile back to system memory: */
+				emit_gmem2mem(state, ring, surface, xoff, yoff);
+
+				xoff += bin_w;
+			}
 
 			yoff += bin_h;
 		}
@@ -1428,30 +1446,44 @@ void fd_surface_upload(struct fd_surface *surface, const void *data)
 static void attach_render_target(struct fd_state *state,
 		struct fd_surface *surface)
 {
-	uint32_t nbins = 1;
+	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
 	uint32_t cpp = color2cpp[surface->color];
+	uint32_t gmem_size = state->devinfo.gmem_sizebytes;
+	uint32_t max_width = 992;
+
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_ENABLE) {
+		gmem_size /= 2;
+		max_width = 256;
+	}
 
 	state->render_target.surface = surface;
 
 	bin_w = ALIGN(surface->width, 32);
 	bin_h = ALIGN(surface->height, 32);
 
-	while (true) {
-		if ((bin_w * bin_h * cpp) < state->devinfo.gmem_sizebytes)
-			break;
-
-		nbins++;
-		bin_h = ALIGN(surface->height / nbins, 32);
+	/* first, find a bin width that satisfies the maximum width
+	 * restrictions:
+	 */
+	while (bin_w > max_width) {
+		nbins_x++;
+		bin_w = ALIGN(surface->width / nbins_x, 32);
 	}
 
-	if (nbins > 1) {
+	/* then find a bin height that satisfies the memory constraints:
+	 */
+	while ((bin_w * bin_h * cpp) > gmem_size) {
+		nbins_y++;
+		bin_h = ALIGN(surface->height / nbins_y, 32);
+	}
+
+	if ((nbins_x > 1) || (nbins_y > 1)) {
 		state->pa_su_sc_mode_cntl |= PA_SU_SC_VTX_WINDOW_OFF_ENABLE;
 	} else {
 		state->pa_su_sc_mode_cntl &= ~PA_SU_SC_VTX_WINDOW_OFF_ENABLE;
 	}
 
-	INFO_MSG("using %d bins of size %dx%d", nbins, bin_w, bin_h);
+	INFO_MSG("using %d bins of size %dx%d", nbins_x*nbins_y, bin_w, bin_h);
 
 //if we use hw binning, tile sizes (in multiple of 32) need to
 //fit in 5 bits.. for now don't care because we aren't using
@@ -1459,7 +1491,9 @@ static void attach_render_target(struct fd_state *state,
 //	assert(!(bin_h/32 & ~0x1f));
 //	assert(!(bin_w/32 & ~0x1f));
 
-	state->render_target.nbins = nbins;
+	state->render_target.nbins_x = nbins_x;
+	state->render_target.nbins_y = nbins_y;
+	state->render_target.bin_w = bin_w;
 	state->render_target.bin_h = bin_h;
 }
 
@@ -1547,7 +1581,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_DEST_FORMAT));
-	OUT_RING(ring, 0x0003c000 | (COLORX_4_4_4_4 << 4));
+	OUT_RING(ring, 0x0003c000 | (COLORX_8_8_8_8 << 4));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_SQ_WRAPPING_0));
@@ -1666,15 +1700,14 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));
-#if 0 /* binning */
-	OUT_RING(ring, state->render_target.bin_w);	/* RB_SURFACE_INFO */
-	OUT_RING(ring, surface->color);	/* RB_COLOR_INFO */
-	OUT_RING(ring, state->render_target.bin_w << 10);	/* RB_DEPTH_INFO */ // XXX ???
-#else
-	OUT_RING(ring, surface->width);	/* RB_SURFACE_INFO */
-	OUT_RING(ring, 0x200 | surface->color);	/* RB_COLOR_INFO */
-	OUT_RING(ring, surface->width << 10);	/* RB_DEPTH_INFO */ // XXX ???
-#endif
+	OUT_RING(ring, state->render_target.bin_w);  /* RB_SURFACE_INFO */
+	OUT_RING(ring, 0x200 | surface->color);      /* RB_COLOR_INFO */
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_ENABLE) {
+		/* leave an extra 50% for depth buffer */
+		OUT_RING(ring, ((state->render_target.bin_w*3)/2) << 10);/* RB_DEPTH_INFO */
+	} else {
+		OUT_RING(ring, state->render_target.bin_w << 10);        /* RB_DEPTH_INFO */
+	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_SAMPLE_POS));
