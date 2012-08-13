@@ -1204,15 +1204,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
-	// XXX this is not understood:
-	switch (state->attributes.params.nparams) {
-	case 3:
-		OUT_RING(ring, 0x0000003b);
-		break;
-	default:
-		OUT_RING(ring, 0x0000028f);
-		break;
-	}
+	OUT_RING(ring, 0x0000003b);
 
 	fd_program_emit_sq_program_cntl(state->program, ring);
 
