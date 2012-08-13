@@ -318,6 +318,13 @@ static void reg_pa_sc_window_offset(const char *name, uint32_t dword, int level)
 	printf("%s%s: %d,%d (%08x)\n", levels[level], name, u2i(x, 15), u2i(y, 15), dword);
 }
 
+static void reg_rb_copy_dest_offset(const char *name, uint32_t dword, int level)
+{
+	uint32_t x = (dword >>  0) & 0x3fff;
+	uint32_t y = (dword >> 13) & 0x3fff;
+	printf("%s%s: %d,%d (%08x)\n", levels[level], name, x, y, dword);
+}
+
 static void reg_xy(const char *name, uint32_t dword, int level)
 {
 	/* note: window_offset is 14 bits, scissors are 13 bits (at least in
@@ -443,7 +450,7 @@ static const const struct {
 		REG(RB_COPY_DEST_BASE, reg_gpuaddr),
 		REG(RB_COPY_DEST_PITCH, reg_rb_copy_dest_pitch),
 		REG(RB_COPY_DEST_FORMAT, reg_rb_copy_dest_format),
-		REG(RB_COPY_DEST_OFFSET, reg_hex),
+		REG(RB_COPY_DEST_OFFSET, reg_rb_copy_dest_offset),
 		REG(RB_DEPTHCONTROL, reg_rb_depthcontrol),
 		REG(RB_EDRAM_INFO, reg_hex),
 		REG(RB_MODECONTROL, reg_hex),
