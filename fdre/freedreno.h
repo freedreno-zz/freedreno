@@ -28,6 +28,7 @@
 
 #include "util.h"
 #include "a2xx_reg.h"
+#include "program.h"
 
 struct fd_state;
 struct fd_surface;
@@ -39,6 +40,7 @@ void fd_fini(struct fd_state *state);
 int fd_vertex_shader_attach_asm(struct fd_state *state, const char *src);
 int fd_fragment_shader_attach_asm(struct fd_state *state, const char *src);
 int fd_link(struct fd_state *state);
+int fd_set_program(struct fd_state *state, struct fd_program *program);
 
 struct kgsl_bo * fd_attribute_bo_new(struct fd_state *state,
 		uint32_t size, const void *data);
@@ -55,6 +57,7 @@ int fd_cull(struct fd_state *state, GLenum mode);
 int fd_depth_func(struct fd_state *state, GLenum depth_func);
 int fd_enable(struct fd_state *state, GLenum cap);
 int fd_disable(struct fd_state *state, GLenum cap);
+int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor);
 int fd_tex_param(struct fd_state *state, GLenum name, GLint param);
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		uint32_t start, uint32_t count);

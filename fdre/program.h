@@ -25,7 +25,6 @@
 #define PROGRAM_H_
 
 #include "kgsl.h"
-#include "ir.h"
 
 struct fd_program;
 
@@ -38,6 +37,11 @@ struct fd_program * fd_program_new(void);
 
 int fd_program_attach_asm(struct fd_program *program,
 		enum fd_shader_type type, const char *src);
+
+struct ir_attribute;
+struct ir_const;
+struct ir_sampler;
+struct ir_uniform;
 
 struct ir_attribute ** fd_program_attributes(struct fd_program *program,
 		enum fd_shader_type type, int *cnt);

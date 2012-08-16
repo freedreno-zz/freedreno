@@ -142,6 +142,28 @@
 #define SQ_TEX3_XY_MIN_FILTER(val)     ((val) << 21)
 
 /*
+ * Bits for RB_BLEND_CONTROL:
+ */
+#define RB_BLEND_ZERO                  0x0
+#define RB_BLEND_ONE                   0x1
+#define RB_BLEND_SRC_COLOR             0x4
+#define RB_BLEND_ONE_MINUS_SRC_COLOR   0x5
+#define RB_BLEND_SRC_ALPHA             0x6
+#define RB_BLEND_ONE_MINUS_SRC_ALPHA   0x7
+#define RB_BLEND_DST_COLOR             0x8
+#define RB_BLEND_ONE_MINUS_DST_COLOR   0x9
+#define RB_BLEND_DST_ALPHA             0xa
+#define RB_BLEND_ONE_MINUS_DST_ALPHA   0xb
+#define RB_BLEND_CONST_COLOR           0xc
+#define RB_BLEND_CONST_ALPHA           0xe
+#define RB_BLEND_ONE_MINUS_CONST_ALPHA 0xf
+
+#define RB_BLEND_CONTROL_COLOR_SRC(val)  ((val) << 0)
+#define RB_BLEND_CONTROL_COLOR_DST(val)  ((val) << 8)
+#define RB_BLEND_CONTROL_ALPHA_SRC(val)  ((val) << 16)
+#define RB_BLEND_CONTROL_ALPHA_DST(val)  ((val) << 24)
+
+/*
  * Bits for RB_COLORCONTROL:
  */
 

@@ -40,6 +40,7 @@
 #include "freedreno.h"
 #include "program.h"
 #include "kgsl.h"
+#include "ir.h"
 #include "bmp.h"
 
 /* ************************************************************************* */
@@ -156,6 +157,7 @@ struct fd_state {
 	GLenum cull_mode;
 
 	uint32_t pa_su_sc_mode_cntl;
+	uint32_t rb_blend_control;
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
 
@@ -452,6 +454,14 @@ struct fd_state * fd_init(void)
 	state->textures.min_filter = SQ_TEX3_XY_FILTER_POINT;
 	state->textures.mag_filter = SQ_TEX3_XY_FILTER_POINT;
 
+	state->rb_blend_control =
+			RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE) |
+			RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE) |
+			RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ZERO) |
+			RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ZERO);
+
+	fd_blend_func(state, GL_ONE, GL_ZERO);
+
 	/* open framebuffer for displaying results: */
 	fd = open("/dev/fb0", O_RDWR);
 	ret = ioctl(fd, FBIOGET_VSCREENINFO, &state->fb.var);
@@ -511,8 +521,14 @@ int fd_fragment_shader_attach_asm(struct fd_state *state, const char *src)
 
 int fd_link(struct fd_state *state)
 {
-	ERROR_MSG("TODO");
+	/* nothing really to do yet */
 	return 0;
+}
+
+int fd_set_program(struct fd_state *state, struct fd_program *program)
+{
+	state->program = program;
+	return fd_link(state);
 }
 
 static struct fd_param * find_param(struct fd_parameters *params,
@@ -923,6 +939,121 @@ int fd_disable(struct fd_state *state, GLenum cap)
 	}
 }
 
+int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor)
+{
+	uint32_t bc = 0;
+
+	/* sfactor					dfactor
+	 * GL_ZERO					GL_ZERO						-> 0000 0000
+	 * GL_ZERO					GL_ONE						-> 0100 0100
+	 * GL_ONE					GL_ZERO						-> 0001 0001
+	 * GL_DST_COLOR				GL_DST_COLOR	 			-> 0808 0808
+	 * GL_ONE_MINUS_DST_COLOR	GL_ONE_MINUS_DST_COLOR		-> 0909 0909
+	 * GL_DST_ALPHA				GL_ONE_MINUS_DST_ALPHA		-> 0b0a 0b0a
+	 * GL_SRC_ALPHA_SATURATE	GL_CONSTANT_COLOR			-> 0c01 0c10  <-- are there some special cases?
+	 * GL_CONSTANT_ALPHA		GL_ONE_MINUS_CONSTANT_ALPHA	-> 0f0e 0f0e
+	 * GL_SRC_COLOR				GL_ONE_MINUS_SRC_COLOR		-> 0504 0504
+	 * GL_SRC_ALPHA				GL_CONSTANT_COLOR			-> 0c06 0c06
+	 * GL_ONE_MINUS_SRC_ALPHA	GL_ONE_MINUS_CONSTANT_ALPHA	-> 0f07 0f07
+	 */
+
+	switch (sfactor) {
+	case GL_ZERO:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ZERO);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ZERO);
+		break;
+	case GL_ONE:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE);
+		break;
+	case GL_SRC_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_SRC_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_SRC_COLOR);
+		break;
+	case GL_ONE_MINUS_SRC_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		break;
+	case GL_SRC_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_SRC_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_SRC_ALPHA);
+		break;
+	case GL_ONE_MINUS_SRC_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		break;
+	case GL_DST_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_DST_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_DST_COLOR);
+		break;
+	case GL_ONE_MINUS_DST_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_DST_COLOR);
+		break;
+	case GL_DST_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_DST_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_DST_ALPHA);
+		break;
+	case GL_ONE_MINUS_DST_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		break;
+	default:
+		ERROR_MSG("invalid sfactor: 0x%04x", sfactor);
+		return -1;
+	}
+
+	switch (dfactor) {
+	case GL_ZERO:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ZERO);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ZERO);
+		break;
+	case GL_ONE:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE);
+		break;
+	case GL_SRC_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_SRC_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_SRC_COLOR);
+		break;
+	case GL_ONE_MINUS_SRC_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		break;
+	case GL_SRC_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_SRC_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_SRC_ALPHA);
+		break;
+	case GL_ONE_MINUS_SRC_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		break;
+	case GL_DST_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_DST_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_DST_COLOR);
+		break;
+	case GL_ONE_MINUS_DST_COLOR:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_DST_COLOR);
+		break;
+	case GL_DST_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_DST_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_DST_ALPHA);
+		break;
+	case GL_ONE_MINUS_DST_ALPHA:
+		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		break;
+	default:
+		ERROR_MSG("invalid dfactor: 0x%04x", sfactor);
+		return -1;
+	}
+
+	state->rb_blend_control = bc;
+
+	return 0;
+}
+
 static int set_filter(uint8_t *filter, GLint param)
 {
 	switch (param) {
@@ -1217,6 +1348,10 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
+	OUT_RING(ring, state->rb_blend_control);
 
 	emit_uniforms(state, FD_SHADER_VERTEX);
 	emit_uniforms(state, FD_SHADER_FRAGMENT);
@@ -1557,7 +1692,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
-	OUT_RING(ring, 0x00010001);
+	OUT_RING(ring, state->rb_blend_control);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
