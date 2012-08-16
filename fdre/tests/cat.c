@@ -28,13 +28,16 @@
 #include "redump.h"
 #include "esUtil.h"
 #include "cat-model.h"
+#include "lolstex1.h"
+#include "lolstex2.h"
 
 int main(int argc, char **argv)
 {
 	struct fd_state *state;
-	struct fd_surface *surface;
+	struct fd_surface *surface, *lolstex1, *lolstex2;
+	struct fd_program *cat_program, *tex_program;
 	struct kgsl_bo *position_vbo, *normal_vbo;
-	const char *vertex_shader_asm =
+	const char *cat_vertex_shader_asm =
 		"@varying(R0)     vertex_normal                                                      \n"
 		"@varying(R1)     vertex_position                                                    \n"
 		"@attribute(R1)   normal                                                             \n"
@@ -65,7 +68,7 @@ int main(int argc, char **argv)
 		"      ALU:      MULADDv export1 = R3, R2.xxxx, C0                                   \n"
 		"      ALU:      MULv    export0.xyz_ = R0, R0.wwww                                  \n";
 
-	const char *fragment_shader_asm =
+	const char *cat_fragment_shader_asm =
 /*
 precision mediump float;
 const vec4 MaterialDiffuse = vec4(0.000000, 0.000000, 1.000000, 1.000000);
@@ -142,6 +145,54 @@ void main(void)
 		"      ALU:      MULADDv export0 = R1.xxxw, R0.xxxx, C3.xxzw     ; gl_FragColor                               \n"
 		"NOP                                                                                                          \n";
 
+	static const GLfloat texcoords[] = {
+			0.0f, 1.0f,
+			1.0f, 1.0f,
+			0.0f, 0.0f,
+			1.0f, 0.0f,
+	};
+
+	static const GLfloat tex1_vertices[] = {
+			-0.95, +0.45, -1.0,
+			+0.45, +0.45, -1.0,
+			-0.95, +0.95, -1.0,
+			+0.45, +0.95, -1.0
+	};
+
+	static const GLfloat tex2_vertices[] = {
+			-0.45, -0.95, -1.0,
+			+0.95, -0.95, -1.0,
+			-0.45, -0.45, -1.0,
+			+0.95, -0.45, -1.0
+	};
+
+	const char *tex_vertex_shader_asm =
+		"@attribute(R1)  aPosition                                        \n"
+		"@attribute(R2)  aTexCoord                                        \n"
+		"@varying(R0)    vTexCoord                                        \n"
+		"EXEC                                                             \n"
+		"      FETCH:   VERTEX   R2.xy11 = R0.y FMT_32_32_FLOAT SIGNED    \n"
+		"                                      STRIDE(8) CONST(4)         \n"
+		"   (S)FETCH:   VERTEX   R1.xyz1 = R0.x FMT_32_32_32_FLOAT SIGNED \n"
+		"                                      STRIDE(12) CONST(4)        \n"
+		"ALLOC COORD SIZE(0x0)                                            \n"
+		"EXEC                                                             \n"
+		"      ALU:   MAXv   export62 = R1, R1   ; gl_Position            \n"
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                      \n"
+		"EXEC_END                                                         \n"
+		"      ALU:   MAXv   export0 = R2, R2    ; vTexCoord              \n"
+		"NOP                                                              \n";
+
+	const char *tex_fragment_shader_asm =
+		"@varying(R0)    vTexCoord                                        \n"
+		"@sampler(0)     uTexture                                         \n"
+		"EXEC                                                             \n"
+		"   (S)FETCH:  SAMPLE  R0.xyzw = R0.xyx CONST(0)                  \n"
+		"ALLOC PARAM/PIXEL SIZE(0x0)                                      \n"
+		"EXEC_END                                                         \n"
+		"      ALU:    MAXv    export0 = R0, R0 ; gl_FragColor            \n"
+		"NOP                                                              \n";
+
 	uint32_t width = 0, height = 0;
 	int i, n = 1;
 
@@ -159,22 +210,40 @@ void main(void)
 	if (!surface)
 		return -1;
 
+	/* load textures: */
+	lolstex1 = fd_surface_new_fmt(state, lolstex1_image.width, lolstex1_image.height,
+			COLORX_8_8_8_8);
+	fd_surface_upload(lolstex1, lolstex1_image.pixel_data);
+
+	lolstex2 = fd_surface_new_fmt(state, lolstex2_image.width, lolstex2_image.height,
+			COLORX_8_8_8_8);
+	fd_surface_upload(lolstex2, lolstex2_image.pixel_data);
+
 	fd_enable(state, GL_CULL_FACE);
 	fd_depth_func(state, GL_LEQUAL);
 	fd_enable(state, GL_DEPTH_TEST);
+	fd_tex_param(state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	fd_tex_param(state, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	fd_blend_func(state, GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR);
 
 	/* this needs to come after enabling depth test as enabling depth test
 	 * effects bin sizes:
 	 */
 	fd_make_current(state, surface);
 
-	fd_vertex_shader_attach_asm(state, vertex_shader_asm);
-	fd_fragment_shader_attach_asm(state, fragment_shader_asm);
+	/* construct the two shader programs: */
+	cat_program = fd_program_new();
+	fd_program_attach_asm(cat_program, FD_SHADER_VERTEX, cat_vertex_shader_asm);
+	fd_program_attach_asm(cat_program, FD_SHADER_FRAGMENT, cat_fragment_shader_asm);
+
+	tex_program = fd_program_new();
+	fd_program_attach_asm(tex_program, FD_SHADER_VERTEX, tex_vertex_shader_asm);
+	fd_program_attach_asm(tex_program, FD_SHADER_FRAGMENT, tex_fragment_shader_asm);
 
 	fd_link(state);
 
-	position_vbo = fd_attribute_bo_new(state, sizeof(cat_position), cat_position);
-	normal_vbo = fd_attribute_bo_new(state, sizeof(cat_normal), cat_normal);
+	position_vbo = fd_attribute_bo_new(state, cat_position_sz, cat_position);
+	normal_vbo = fd_attribute_bo_new(state, cat_normal_sz, cat_normal);
 
 	for (i = 0; i < n; i++) {
 		GLfloat aspect = (GLfloat)height / (GLfloat)width;
@@ -219,14 +288,32 @@ void main(void)
 		fd_uniform_attach(state, "NormalMatrix",
 				3, 3, normal);
 
+		/* draw cat: */
+		fd_disable(state, GL_BLEND);
+		fd_set_program(state, cat_program);
 		fd_draw_arrays(state, GL_TRIANGLES, 0, cat_vertices);
+
+		/* setup to draw text (common to tex1 and tex2): */
+		fd_enable(state, GL_BLEND);
+		fd_set_program(state, tex_program);
+		fd_attribute_pointer(state, "aTexCoord", 2, 4, texcoords);
+
+		/* draw tex1: */
+		fd_set_texture(state, "uTexture", lolstex1);
+		fd_attribute_pointer(state, "aPosition", 3, 4, tex1_vertices);
+		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
+
+		/* draw tex2: */
+		fd_set_texture(state, "uTexture", lolstex2);
+		fd_attribute_pointer(state, "aPosition", 3, 4, tex2_vertices);
+		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
 		fd_swap_buffers(state);
 	}
 
 	fd_flush(state);
 
-	fd_dump_bmp(surface, "cat.bmp");
+	fd_dump_bmp(surface, "lolscat.bmp");
 
 	fd_fini(state);
 
