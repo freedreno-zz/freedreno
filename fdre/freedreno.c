@@ -460,8 +460,6 @@ struct fd_state * fd_init(void)
 			RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ZERO) |
 			RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ZERO);
 
-	fd_blend_func(state, GL_ONE, GL_ZERO);
-
 	/* open framebuffer for displaying results: */
 	fd = open("/dev/fb0", O_RDWR);
 	ret = ioctl(fd, FBIOGET_VSCREENINFO, &state->fb.var);
