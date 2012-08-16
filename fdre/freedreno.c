@@ -1567,7 +1567,15 @@ void fd_surface_del(struct fd_state *state, struct fd_surface *surface)
 
 void fd_surface_upload(struct fd_surface *surface, const void *data)
 {
-	memcpy(surface->bo->hostptr, data, surface->bo->size);
+	uint32_t i;
+	uint8_t *surfp = surface->bo->hostptr;
+	const uint8_t *datap = data;
+
+	for (i = 0; i < surface->height; i++) {
+		memcpy(surfp, datap, surface->width * surface->cpp);
+		surfp += surface->pitch * surface->cpp;
+		datap += surface->width * surface->cpp;
+	}
 }
 
 static void attach_render_target(struct fd_state *state,
