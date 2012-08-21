@@ -31,7 +31,7 @@
 #include "esUtil.h"
 #include "esTransform.c"
 
-#include "../fdre/tests/cat-model.h"
+#include "../fdre/tests/cat-model.c"
 
 static EGLint const config_attribute_list[] = {
 	EGL_RED_SIZE, 8,
