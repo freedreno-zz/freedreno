@@ -64,8 +64,8 @@ static enum debug_t debug;
  *                15     -  export flag
  *              16..19   -  vector dest write mask (wxyz)
  *              20..23   -  scalar dest write mask (wxyz)
- *              24..26   -  <UNKNOWN>
- *              27..31   -  scalar operation
+ *              24..25   -  <UNKNOWN>
+ *              26..31   -  scalar operation
  *
  *     dword 1:  0..7    -  src3 swizzle
  *               8..15   -  src2 swizzle
@@ -198,54 +198,92 @@ static void print_export_comment(uint32_t num, enum shader_t type)
 	}
 }
 
-enum vector_opc {
-	ADDv = 0,
-	MULv = 1,
-	MAXv = 2,
-	MINv = 3,
-	FLOORv = 10,
-	MULADDv = 11,
-	DOT4v = 15,
-	DOT3v = 16,
-};
-
-enum scalar_opc {
-	MUL2 = 0,
-	MOV = 2,
-	EXP2 = 7,
-	LOG2 = 8,
-	RCP = 9,
-	RSQ = 11,
-	PSETE = 13,    /* called PRED_SETE in r600isa.pdf */
-	SQRT = 20,
-	MUL = 21,
-	ADD = 22,
-};
-
 struct {
 	uint32_t num_srcs;
 	const char *name;
 } vector_instructions[0x20] = {
-#define INSTR(name, num_srcs) [name] = { num_srcs, #name }
-		INSTR(ADDv, 2),
-		INSTR(MULv, 2),
-		INSTR(MAXv, 2),
-		INSTR(MINv, 2),
-		INSTR(FLOORv, 1),
-		INSTR(MULADDv, 3),
-		INSTR(DOT4v, 2),
-		INSTR(DOT3v, 2),
-}, scalar_instructions[0x20] = {
-		INSTR(MUL2, 1),
-		INSTR(MOV, 1),  // todo doesn’t seem was can do a scalar max?? so I assume this is a single src MOV
-		INSTR(EXP2, 1),
-		INSTR(LOG2, 1),
-		INSTR(RCP, 1),
-		INSTR(RSQ, 1),
-		INSTR(PSETE, 1),
-		INSTR(SQRT, 1),
-		INSTR(MUL, 2),
-		INSTR(ADD, 2),
+#define INSTR(name, val, num_srcs) [val] = { num_srcs, #name }
+		INSTR(ADDv, 0, 2),
+		INSTR(MULv, 1, 2),
+		INSTR(MAXv, 2, 2),
+		INSTR(MINv, 3, 2),
+		INSTR(SETEv, 4, 2),
+		INSTR(SETGTv, 5, 2),
+		INSTR(SETGTEv, 6, 2),
+		INSTR(SETNEv, 7, 2),
+		INSTR(FRACv, 8, 1),
+		INSTR(TRUNCv, 9, 1),
+		INSTR(FLOORv, 10, 1),
+		INSTR(MULADDv, 11, 3),
+		INSTR(CNDEv, 12, 2),
+		INSTR(CNDGTEv, 13, 2),
+		INSTR(CNDGTv, 14, 2),
+		INSTR(DOT4v, 15, 2),
+		INSTR(DOT3v, 16, 2),
+		INSTR(DOT2ADDv, 17, 3),  // ???
+		INSTR(CUBEv, 18, 2),
+		INSTR(MAX4v, 19, 1),
+		INSTR(PRED_SETE_PUSHv, 20, 2),
+		INSTR(PRED_SETNE_PUSHv, 21, 2),
+		INSTR(PRED_SETGT_PUSHv, 22, 2),
+		INSTR(PRED_SETGTE_PUSHv, 23, 2),
+		INSTR(KILLEv, 24, 2),
+		INSTR(KILLGTv, 25, 2),
+		INSTR(KILLGTEv, 26, 2),
+		INSTR(KILLNEv, 27, 2),
+		INSTR(DSTv, 28, 2),
+		INSTR(MOVAv, 29, 1),
+}, scalar_instructions[0x40] = {
+		INSTR(ADDs, 0, 1),
+		INSTR(ADD_PREVs, 1, 1),
+		INSTR(MULs, 2, 1),
+		INSTR(MUL_PREVs, 3, 1),
+		INSTR(MUL_PREV2s, 4, 1),
+		INSTR(MAXs, 5, 1),
+		INSTR(MINs, 6, 1),
+		INSTR(SETEs, 7, 1),
+		INSTR(SETGTs, 8, 1),
+		INSTR(SETGTEs, 9, 1),
+		INSTR(SETNEs, 10, 1),
+		INSTR(FRACs, 11, 1),
+		INSTR(TRUNCs, 12, 1),
+		INSTR(FLOORs, 13, 1),
+		INSTR(EXP_IEEE, 14, 1),
+		INSTR(LOG_CLAMP, 15, 1),
+		INSTR(LOG_IEEE, 16, 1),
+		INSTR(RECIP_CLAMP, 17, 1),
+		INSTR(RECIP_FF, 18, 1),
+		INSTR(RECIP_IEEE, 19, 1),
+		INSTR(RECIPSQ_CLAMP, 20, 1),
+		INSTR(RECIPSQ_FF, 21, 1),
+		INSTR(RECIPSQ_IEEE, 22, 1),
+		INSTR(MOVAs, 23, 1),
+		INSTR(MOVA_FLOORs, 24, 1),
+		INSTR(SUBs, 25, 1),
+		INSTR(SUB_PREVs, 26, 1),
+		INSTR(PRED_SETEs, 27, 1),
+		INSTR(PRED_SETNEs, 28, 1),
+		INSTR(PRED_SETGTs, 29, 1),
+		INSTR(PRED_SETGTEs, 30, 1),
+		INSTR(PRED_SET_INVs, 31, 1),
+		INSTR(PRED_SET_POPs, 32, 1),
+		INSTR(PRED_SET_CLRs, 33, 1),
+		INSTR(PRED_SET_RESTOREs, 34, 1),
+		INSTR(KILLEs, 35, 1),
+		INSTR(KILLGTs, 36, 1),
+		INSTR(KILLGTEs, 37, 1),
+		INSTR(KILLNEs, 38, 1),
+		INSTR(KILLONEs, 39, 1),
+		INSTR(SQRT_IEEE, 40, 1),
+		INSTR(MUL_CONST_0, 42, 1),
+		INSTR(MUL_CONST_1, 43, 1),
+		INSTR(ADD_CONST_0, 44, 1),
+		INSTR(ADD_CONST_1, 45, 1),
+		INSTR(SUB_CONST_0, 46, 1),
+		INSTR(SUB_CONST_1, 47, 1),
+		INSTR(SIN, 48, 1),
+		INSTR(COS, 49, 1),
+		INSTR(RETAIN_PREV, 50, 1),
 #undef INSTR
 };
 
@@ -280,7 +318,7 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	if (debug & PRINT_UNKNOWN) {
 			printf("%08x %08x %08x\t",
 					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
-							(0xf << 20) | 0x00008000 | (0x1f << 27)),
+							(0xf << 20) | 0x00008000 | (0x3f << 26)),
 					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0xff |
 							(0x1 << 24) | (0x1 << 25) | (0x1 << 26) |
 							(0x1 << 27) | (0x1 << 28)),
@@ -325,7 +363,7 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 
 	if (sdst_mask || !dst_mask) {
 		/* 2nd optional scalar op: */
-		uint32_t scalar_op =  (dwords[0] >> 27) & 0x1f;
+		uint32_t scalar_op =  (dwords[0] >> 26) & 0x3f;
 
 		printf("%s", levels[level]);
 		if (debug & PRINT_RAW)
