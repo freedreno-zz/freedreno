@@ -356,14 +356,36 @@ static uint32_t instr_vector_opc(struct ir_instruction *instr)
 	switch (instr->alu.vector_opc) {
 	default:
 		ERROR_MSG("invalid vector opc: %d\n", instr->alu.vector_opc);
-	case T_ADDv:    return 0x00;
-	case T_MULv:    return 0x01;
-	case T_MAXv:    return 0x02;
-	case T_MINv:    return 0x03;
-	case T_FLOORv:  return 0x0a;
-	case T_MULADDv: return 0x0b;
-	case T_DOT4v:   return 0x0f;
-	case T_DOT3v:   return 0x10;
+	case T_ADDv:              return  0;
+	case T_MULv:              return  1;
+	case T_MAXv:              return  2;
+	case T_MINv:              return  3;
+	case T_SETEv:             return  4;
+	case T_SETGTv:            return  5;
+	case T_SETGTEv:           return  6;
+	case T_SETNEv:            return  7;
+	case T_FRACv:             return  8;
+	case T_TRUNCv:            return  9;
+	case T_FLOORv:            return  10;
+	case T_MULADDv:           return  11;
+	case T_CNDEv:             return  12;
+	case T_CNDGTEv:           return  13;
+	case T_CNDGTv:            return  14;
+	case T_DOT4v:             return  15;
+	case T_DOT3v:             return  16;
+	case T_DOT2ADDv:          return  17;
+	case T_CUBEv:             return  18;
+	case T_MAX4v:             return  19;
+	case T_PRED_SETE_PUSHv:   return  20;
+	case T_PRED_SETNE_PUSHv:  return  21;
+	case T_PRED_SETGT_PUSHv:  return  22;
+	case T_PRED_SETGTE_PUSHv: return  23;
+	case T_KILLEv:            return  24;
+	case T_KILLGTv:           return  25;
+	case T_KILLGTEv:          return  26;
+	case T_KILLNEv:           return  27;
+	case T_DSTv:              return  28;
+	case T_MOVAv:             return  29;
 	}
 }
 
@@ -372,16 +394,56 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
 	switch (instr->alu.scalar_opc) {
 	default:
 		ERROR_MSG("invalid scalar: %d\n", instr->alu.scalar_opc);
-	case T_MUL2:  return 0x00;
-	case T_MOV:   return 0x02;
-	case T_EXP2:  return 0x07;
-	case T_LOG2:  return 0x08;
-	case T_RCP:   return 0x09;
-	case T_RSQ:   return 0x0b;
-	case T_PSETE: return 0x0d;
-	case T_SQRT:  return 0x14;
-	case T_MUL:   return 0x15;
-	case T_ADD:   return 0x16;
+	case T_ADDs:              return 0;
+	case T_ADD_PREVs:         return 1;
+	case T_MULs:              return 2;
+	case T_MUL_PREVs:         return 3;
+	case T_MUL_PREV2s:        return 4;
+	case T_MAXs:              return 5;
+	case T_MINs:              return 6;
+	case T_SETEs:             return 7;
+	case T_SETGTs:            return 8;
+	case T_SETGTEs:           return 9;
+	case T_SETNEs:            return 10;
+	case T_FRACs:             return 11;
+	case T_TRUNCs:            return 12;
+	case T_FLOORs:            return 13;
+	case T_EXP_IEEE:          return 14;
+	case T_LOG_CLAMP:         return 15;
+	case T_LOG_IEEE:          return 16;
+	case T_RECIP_CLAMP:       return 17;
+	case T_RECIP_FF:          return 18;
+	case T_RECIP_IEEE:        return 19;
+	case T_RECIPSQ_CLAMP:     return 20;
+	case T_RECIPSQ_FF:        return 21;
+	case T_RECIPSQ_IEEE:      return 22;
+	case T_MOVAs:             return 23;
+	case T_MOVA_FLOORs:       return 24;
+	case T_SUBs:              return 25;
+	case T_SUB_PREVs:         return 26;
+	case T_PRED_SETEs:        return 27;
+	case T_PRED_SETNEs:       return 28;
+	case T_PRED_SETGTs:       return 29;
+	case T_PRED_SETGTEs:      return 30;
+	case T_PRED_SET_INVs:     return 31;
+	case T_PRED_SET_POPs:     return 32;
+	case T_PRED_SET_CLRs:     return 33;
+	case T_PRED_SET_RESTOREs: return 34;
+	case T_KILLEs:            return 35;
+	case T_KILLGTs:           return 36;
+	case T_KILLGTEs:          return 37;
+	case T_KILLNEs:           return 38;
+	case T_KILLONEs:          return 39;
+	case T_SQRT_IEEE:         return 40;
+	case T_MUL_CONST_0:       return 42;
+	case T_MUL_CONST_1:       return 43;
+	case T_ADD_CONST_0:       return 44;
+	case T_ADD_CONST_1:       return 45;
+	case T_SUB_CONST_0:       return 46;
+	case T_SUB_CONST_1:       return 47;
+	case T_SIN:               return 48;
+	case T_COS:               return 49;
+	case T_RETAIN_PREV:       return 50;
 	}
 }
 
@@ -514,8 +576,8 @@ static int instr_emit_fetch(struct ir_instruction *instr,
  *                15     -  export flag
  *              16..19   -  vector dest write mask (wxyz)
  *              20..23   -  scalar dest write mask (wxyz)
- *              24..26   -  <UNKNOWN>
- *              27..31   -  scalar operation
+ *              24..25   -  <UNKNOWN>
+ *              26..31   -  scalar operation
  *
  *     dword 1:  0..7    -  src3 swizzle
  *               8..15   -  src2 swizzle
@@ -637,12 +699,12 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 
 		dwords[0] |= sdst_reg->num                              << 8;
 		dwords[0] |= reg_alu_dst_swiz(sdst_reg)                 << 20;
-		dwords[0] |= instr_scalar_opc(instr)                    << 27;
+		dwords[0] |= instr_scalar_opc(instr)                    << 26;
 	} else {
 		/* not sure if this is required, but adreno compiler seems
-		 * to always set scalar opc to MOV if it is not used:
+		 * to always set scalar opc to MAXs if it is not used:
 		 */
-		dwords[0] |= 0x2                                        << 27;
+		dwords[0] |= 5                                          << 26;
 	}
 
 	if (src3_reg) {

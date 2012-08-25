@@ -122,22 +122,84 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_MULv
 %token <tok> T_MAXv
 %token <tok> T_MINv
+%token <tok> T_SETEv
+%token <tok> T_SETGTv
+%token <tok> T_SETGTEv
+%token <tok> T_SETNEv
+%token <tok> T_FRACv
+%token <tok> T_TRUNCv
 %token <tok> T_FLOORv
 %token <tok> T_MULADDv
+%token <tok> T_CNDEv
+%token <tok> T_CNDGTEv
+%token <tok> T_CNDGTv
 %token <tok> T_DOT4v
-%token <tok> T_DOT3v 
+%token <tok> T_DOT3v
+%token <tok> T_DOT2ADDv
+%token <tok> T_CUBEv
+%token <tok> T_MAX4v
+%token <tok> T_PRED_SETE_PUSHv
+%token <tok> T_PRED_SETNE_PUSHv
+%token <tok> T_PRED_SETGT_PUSHv
+%token <tok> T_PRED_SETGTE_PUSHv
+%token <tok> T_KILLEv
+%token <tok> T_KILLGTv
+%token <tok> T_KILLGTEv
+%token <tok> T_KILLNEv
+%token <tok> T_DSTv
+%token <tok> T_MOVAv
 
 /* scalar instructions: */
-%token <tok> T_MUL2
-%token <tok> T_MOV
-%token <tok> T_EXP2
-%token <tok> T_LOG2
-%token <tok> T_RCP
-%token <tok> T_RSQ
-%token <tok> T_PSETE
-%token <tok> T_SQRT
-%token <tok> T_MUL
-%token <tok> T_ADD
+%token <tok> T_ADDs
+%token <tok> T_ADD_PREVs
+%token <tok> T_MULs
+%token <tok> T_MUL_PREVs
+%token <tok> T_MUL_PREV2s
+%token <tok> T_MAXs
+%token <tok> T_MINs
+%token <tok> T_SETEs
+%token <tok> T_SETGTs
+%token <tok> T_SETGTEs
+%token <tok> T_SETNEs
+%token <tok> T_FRACs
+%token <tok> T_TRUNCs
+%token <tok> T_FLOORs
+%token <tok> T_EXP_IEEE
+%token <tok> T_LOG_CLAMP
+%token <tok> T_LOG_IEEE
+%token <tok> T_RECIP_CLAMP
+%token <tok> T_RECIP_FF
+%token <tok> T_RECIP_IEEE
+%token <tok> T_RECIPSQ_CLAMP
+%token <tok> T_RECIPSQ_FF
+%token <tok> T_RECIPSQ_IEEE
+%token <tok> T_MOVAs
+%token <tok> T_MOVA_FLOORs
+%token <tok> T_SUBs
+%token <tok> T_SUB_PREVs
+%token <tok> T_PRED_SETEs
+%token <tok> T_PRED_SETNEs
+%token <tok> T_PRED_SETGTs
+%token <tok> T_PRED_SETGTEs
+%token <tok> T_PRED_SET_INVs
+%token <tok> T_PRED_SET_POPs
+%token <tok> T_PRED_SET_CLRs
+%token <tok> T_PRED_SET_RESTOREs
+%token <tok> T_KILLEs
+%token <tok> T_KILLGTs
+%token <tok> T_KILLGTEs
+%token <tok> T_KILLNEs
+%token <tok> T_KILLONEs
+%token <tok> T_SQRT_IEEE
+%token <tok> T_MUL_CONST_0
+%token <tok> T_MUL_CONST_1
+%token <tok> T_ADD_CONST_0
+%token <tok> T_ADD_CONST_1
+%token <tok> T_SUB_CONST_0
+%token <tok> T_SUB_CONST_1
+%token <tok> T_SIN
+%token <tok> T_COS
+%token <tok> T_RETAIN_PREV
 
 /* vertex fetch formats: */
 %token <fmt> T_FMT_1_REVERSE
@@ -162,7 +224,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 
 %type <num> number
 %type <reg> reg alu_src_reg reg_or_const reg_or_export
-%type <tok> cf_alloc_type signedness alu_vec alu_vec_3src_op alu_vec_2src_op alu_scalar alu_scalar_op
+%type <tok> cf_alloc_type signedness alu_vec alu_vec_3src_op alu_vec_2src_op alu_vec_1src_op alu_scalar alu_scalar_op
 %type <fmt> format
 %type <range> reg_range const_range
 
@@ -296,31 +358,95 @@ alu:               alu_vec {
 
 alu_vec:           alu_vec_3src_op reg_or_export '=' alu_src_reg ',' alu_src_reg ',' alu_src_reg
 |                  alu_vec_2src_op reg_or_export '=' alu_src_reg ',' alu_src_reg
+|                  alu_vec_1src_op reg_or_export '=' alu_src_reg
 
 /* TODO how do ADD/MUL scalar work.. which should take 2 src ops */
 alu_scalar:        alu_scalar_op   reg_or_export '=' alu_src_reg
 
 alu_vec_3src_op:   T_MULADDv
+|                  T_DOT2ADDv
 
 alu_vec_2src_op:   T_ADDv
 |                  T_MULv
 |                  T_MAXv
 |                  T_MINv
-|                  T_FLOORv
+|                  T_SETEv
+|                  T_SETGTv
+|                  T_SETGTEv
+|                  T_SETNEv
+|                  T_CNDEv
+|                  T_CNDGTEv
+|                  T_CNDGTv
 |                  T_DOT4v
 |                  T_DOT3v
+|                  T_CUBEv
+|                  T_PRED_SETE_PUSHv
+|                  T_PRED_SETNE_PUSHv
+|                  T_PRED_SETGT_PUSHv
+|                  T_PRED_SETGTE_PUSHv
+|                  T_KILLEv
+|                  T_KILLGTv
+|                  T_KILLGTEv
+|                  T_KILLNEv
+|                  T_DSTv
+
+alu_vec_1src_op:   T_FRACv
+|                  T_TRUNCv
+|                  T_FLOORv
+|                  T_MAX4v
+|                  T_MOVAv
 
 /* MUL/ADD should take 2 srcs */
-alu_scalar_op:     T_MUL2
-|                  T_MOV
-|                  T_EXP2
-|                  T_LOG2
-|                  T_RCP
-|                  T_RSQ
-|                  T_PSETE
-|                  T_SQRT
-|                  T_MUL
-|                  T_ADD
+alu_scalar_op:     T_ADDs
+|                  T_ADD_PREVs
+|                  T_MULs
+|                  T_MUL_PREVs
+|                  T_MUL_PREV2s
+|                  T_MAXs
+|                  T_MINs
+|                  T_SETEs
+|                  T_SETGTs
+|                  T_SETGTEs
+|                  T_SETNEs
+|                  T_FRACs
+|                  T_TRUNCs
+|                  T_FLOORs
+|                  T_EXP_IEEE
+|                  T_LOG_CLAMP
+|                  T_LOG_IEEE
+|                  T_RECIP_CLAMP
+|                  T_RECIP_FF
+|                  T_RECIP_IEEE
+|                  T_RECIPSQ_CLAMP
+|                  T_RECIPSQ_FF
+|                  T_RECIPSQ_IEEE
+|                  T_MOVAs
+|                  T_MOVA_FLOORs
+|                  T_SUBs
+|                  T_SUB_PREVs
+|                  T_PRED_SETEs
+|                  T_PRED_SETNEs
+|                  T_PRED_SETGTs
+|                  T_PRED_SETGTEs
+|                  T_PRED_SET_INVs
+|                  T_PRED_SET_POPs
+|                  T_PRED_SET_CLRs
+|                  T_PRED_SET_RESTOREs
+|                  T_KILLEs
+|                  T_KILLGTs
+|                  T_KILLGTEs
+|                  T_KILLNEs
+|                  T_KILLONEs
+|                  T_SQRT_IEEE
+|                  T_MUL_CONST_0
+|                  T_MUL_CONST_1
+|                  T_ADD_CONST_0
+|                  T_ADD_CONST_1
+|                  T_SUB_CONST_0
+|                  T_SUB_CONST_1
+|                  T_SIN
+|                  T_COS
+|                  T_RETAIN_PREV
 
 alu_src_reg:       reg_or_const
 |                  '|' reg_or_const      { $2->flags |= IR_REG_ABS; }
