@@ -29,6 +29,7 @@
 #include <assert.h>
 
 #include "util.h"
+#include "instr.h"
 
 #define REG_MASK 0x3f	/* not really sure how many regs yet */
 #define ADDR_MASK 0xfff
@@ -356,36 +357,37 @@ static uint32_t instr_vector_opc(struct ir_instruction *instr)
 	switch (instr->alu.vector_opc) {
 	default:
 		ERROR_MSG("invalid vector opc: %d\n", instr->alu.vector_opc);
-	case T_ADDv:              return  0;
-	case T_MULv:              return  1;
-	case T_MAXv:              return  2;
-	case T_MINv:              return  3;
-	case T_SETEv:             return  4;
-	case T_SETGTv:            return  5;
-	case T_SETGTEv:           return  6;
-	case T_SETNEv:            return  7;
-	case T_FRACv:             return  8;
-	case T_TRUNCv:            return  9;
-	case T_FLOORv:            return  10;
-	case T_MULADDv:           return  11;
-	case T_CNDEv:             return  12;
-	case T_CNDGTEv:           return  13;
-	case T_CNDGTv:            return  14;
-	case T_DOT4v:             return  15;
-	case T_DOT3v:             return  16;
-	case T_DOT2ADDv:          return  17;
-	case T_CUBEv:             return  18;
-	case T_MAX4v:             return  19;
-	case T_PRED_SETE_PUSHv:   return  20;
-	case T_PRED_SETNE_PUSHv:  return  21;
-	case T_PRED_SETGT_PUSHv:  return  22;
-	case T_PRED_SETGTE_PUSHv: return  23;
-	case T_KILLEv:            return  24;
-	case T_KILLGTv:           return  25;
-	case T_KILLGTEv:          return  26;
-	case T_KILLNEv:           return  27;
-	case T_DSTv:              return  28;
-	case T_MOVAv:             return  29;
+#define OPC(x) case T_##x: return x
+	OPC(ADDv);
+	OPC(MULv);
+	OPC(MAXv);
+	OPC(MINv);
+	OPC(SETEv);
+	OPC(SETGTv);
+	OPC(SETGTEv);
+	OPC(SETNEv);
+	OPC(FRACv);
+	OPC(TRUNCv);
+	OPC(FLOORv);
+	OPC(MULADDv);
+	OPC(CNDEv);
+	OPC(CNDGTEv);
+	OPC(CNDGTv);
+	OPC(DOT4v);
+	OPC(DOT3v);
+	OPC(DOT2ADDv);
+	OPC(CUBEv);
+	OPC(MAX4v);
+	OPC(PRED_SETE_PUSHv);
+	OPC(PRED_SETNE_PUSHv);
+	OPC(PRED_SETGT_PUSHv);
+	OPC(PRED_SETGTE_PUSHv);
+	OPC(KILLEv);
+	OPC(KILLGTv);
+	OPC(KILLGTEv);
+	OPC(KILLNEv);
+	OPC(DSTv);
+	OPC(MOVAv);
 	}
 }
 
@@ -394,56 +396,57 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
 	switch (instr->alu.scalar_opc) {
 	default:
 		ERROR_MSG("invalid scalar: %d\n", instr->alu.scalar_opc);
-	case T_ADDs:              return 0;
-	case T_ADD_PREVs:         return 1;
-	case T_MULs:              return 2;
-	case T_MUL_PREVs:         return 3;
-	case T_MUL_PREV2s:        return 4;
-	case T_MAXs:              return 5;
-	case T_MINs:              return 6;
-	case T_SETEs:             return 7;
-	case T_SETGTs:            return 8;
-	case T_SETGTEs:           return 9;
-	case T_SETNEs:            return 10;
-	case T_FRACs:             return 11;
-	case T_TRUNCs:            return 12;
-	case T_FLOORs:            return 13;
-	case T_EXP_IEEE:          return 14;
-	case T_LOG_CLAMP:         return 15;
-	case T_LOG_IEEE:          return 16;
-	case T_RECIP_CLAMP:       return 17;
-	case T_RECIP_FF:          return 18;
-	case T_RECIP_IEEE:        return 19;
-	case T_RECIPSQ_CLAMP:     return 20;
-	case T_RECIPSQ_FF:        return 21;
-	case T_RECIPSQ_IEEE:      return 22;
-	case T_MOVAs:             return 23;
-	case T_MOVA_FLOORs:       return 24;
-	case T_SUBs:              return 25;
-	case T_SUB_PREVs:         return 26;
-	case T_PRED_SETEs:        return 27;
-	case T_PRED_SETNEs:       return 28;
-	case T_PRED_SETGTs:       return 29;
-	case T_PRED_SETGTEs:      return 30;
-	case T_PRED_SET_INVs:     return 31;
-	case T_PRED_SET_POPs:     return 32;
-	case T_PRED_SET_CLRs:     return 33;
-	case T_PRED_SET_RESTOREs: return 34;
-	case T_KILLEs:            return 35;
-	case T_KILLGTs:           return 36;
-	case T_KILLGTEs:          return 37;
-	case T_KILLNEs:           return 38;
-	case T_KILLONEs:          return 39;
-	case T_SQRT_IEEE:         return 40;
-	case T_MUL_CONST_0:       return 42;
-	case T_MUL_CONST_1:       return 43;
-	case T_ADD_CONST_0:       return 44;
-	case T_ADD_CONST_1:       return 45;
-	case T_SUB_CONST_0:       return 46;
-	case T_SUB_CONST_1:       return 47;
-	case T_SIN:               return 48;
-	case T_COS:               return 49;
-	case T_RETAIN_PREV:       return 50;
+	OPC(ADDs);
+	OPC(ADD_PREVs);
+	OPC(MULs);
+	OPC(MUL_PREVs);
+	OPC(MUL_PREV2s);
+	OPC(MAXs);
+	OPC(MINs);
+	OPC(SETEs);
+	OPC(SETGTs);
+	OPC(SETGTEs);
+	OPC(SETNEs);
+	OPC(FRACs);
+	OPC(TRUNCs);
+	OPC(FLOORs);
+	OPC(EXP_IEEE);
+	OPC(LOG_CLAMP);
+	OPC(LOG_IEEE);
+	OPC(RECIP_CLAMP);
+	OPC(RECIP_FF);
+	OPC(RECIP_IEEE);
+	OPC(RECIPSQ_CLAMP);
+	OPC(RECIPSQ_FF);
+	OPC(RECIPSQ_IEEE);
+	OPC(MOVAs);
+	OPC(MOVA_FLOORs);
+	OPC(SUBs);
+	OPC(SUB_PREVs);
+	OPC(PRED_SETEs);
+	OPC(PRED_SETNEs);
+	OPC(PRED_SETGTs);
+	OPC(PRED_SETGTEs);
+	OPC(PRED_SET_INVs);
+	OPC(PRED_SET_POPs);
+	OPC(PRED_SET_CLRs);
+	OPC(PRED_SET_RESTOREs);
+	OPC(KILLEs);
+	OPC(KILLGTs);
+	OPC(KILLGTEs);
+	OPC(KILLNEs);
+	OPC(KILLONEs);
+	OPC(SQRT_IEEE);
+	OPC(MUL_CONST_0);
+	OPC(MUL_CONST_1);
+	OPC(ADD_CONST_0);
+	OPC(ADD_CONST_1);
+	OPC(SUB_CONST_0);
+	OPC(SUB_CONST_1);
+	OPC(SIN);
+	OPC(COS);
+	OPC(RETAIN_PREV);
+#undef OPC
 	}
 }
 
@@ -566,82 +569,20 @@ static int instr_emit_fetch(struct ir_instruction *instr,
 }
 
 /*
- * ALU instruction format:
- * --- ----------- ------
- *
- *     dword0:   0..5?   -  vector dest register
- *              6?..7    -  <UNKNOWN>
- *               8..13?  -  scalar dest register
- *                14     -  <UNKNOWN>
- *                15     -  export flag
- *              16..19   -  vector dest write mask (wxyz)
- *              20..23   -  scalar dest write mask (wxyz)
- *              24..25   -  <UNKNOWN>
- *              26..31   -  scalar operation
- *
- *     dword 1:  0..7    -  src3 swizzle
- *               8..15   -  src2 swizzle
- *              16..23   -  src1 swizzle
- *                24     -  src3 negate
- *                25     -  src2 negate
- *                26     -  src1 negate
- *                27     -  predicate case (1 - execute if true, 0 - execute if false)
- *                28     -  predicate (conditional execution)
- *              29..31   -  <UNKNOWN>
- *
- *
- *     dword 2:  0..5?   -  src3 register
- *                6      -  <UNKNOWN>
- *                7      -  src3 abs (assumed)
- *               8..13?  -  src2 register
- *                14     -  <UNKNOWN>
- *                15     -  src2 abs
- *              16..21?  -  src1 register
- *                22     -  <UNKNOWN>
- *                23     -  src1 abs
- *              24..28   -  vector operation
- *                29     -  src3 type/bank
- *                            0 - Constant bank (C)  -  uniforms and consts
- *                            1 - Register bank (R)  -  varyings and locals
- *                30     -  vector src2 type/bank  (same as above)
- *                31     -  vector src1 type/bank  (same as above)
- *
- * Interpretation of ALU swizzle fields:
- *
- *       bits 7..6 - chan[3] (w) swizzle
- *            5..4 - chan[2] (z) swizzle
- *            3..2 - chan[1] (y) swizzle
- *            1..0 - chan[0] (x) swizzle
- *
- *       chan[0]: 00 - x
- *                01 - y
- *                10 - z
- *                11 - w
- *
- *       chan[1]: 11 - x
- *                00 - y
- *                01 - z
- *                10 - w
- *
- *       chan[2]: 10 - x
- *                11 - y
- *                00 - z
- *                01 - w
- *
- *       chan[3]: 01 - x
- *                10 - y
- *                11 - z
- *                00 - w
+ * ALU instructions:
  */
 
 static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 		struct ir_shader_info *info)
 {
 	int reg = 0;
+	instr_alu_t *alu = (instr_alu_t *)dwords;
 	struct ir_register *dst_reg  = instr->regs[reg++];
 	struct ir_register *src1_reg;
 	struct ir_register *src2_reg;
 	struct ir_register *src3_reg;
+
+	memset(alu, 0, sizeof(*alu));
 
 	/* handle instructions w/ 3 src operands: */
 	if (instr->alu.vector_opc == T_MULADDv) {
@@ -661,8 +602,6 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 	reg_update_stats(src1_reg, info, false);
 	reg_update_stats(src2_reg, info, false);
 
-	dwords[0] = dwords[1] = dwords[2] = 0;
-
 	assert((dst_reg->flags & ~IR_REG_EXPORT) == 0);
 	assert(!dst_reg->swizzle || (strlen(dst_reg->swizzle) == 4));
 	assert((src1_reg->flags & IR_REG_EXPORT) == 0);
@@ -670,24 +609,29 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 	assert((src2_reg->flags & IR_REG_EXPORT) == 0);
 	assert(!src2_reg->swizzle || (strlen(src2_reg->swizzle) == 4));
 
-	dwords[0] |= dst_reg->num                                << 0;
-	dwords[0] |= ((dst_reg->flags & IR_REG_EXPORT) ? 1 : 0)  << 15;
-	dwords[0] |= reg_alu_dst_swiz(dst_reg)                   << 16;
-	dwords[1] |= reg_alu_src_swiz(src2_reg)                  << 8;
-	dwords[1] |= reg_alu_src_swiz(src1_reg)                  << 16;
-	dwords[1] |= ((src2_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 25;
-	dwords[1] |= ((src1_reg->flags & IR_REG_NEGATE) ? 1 : 0) << 26;
+	alu->vector_dest         = dst_reg->num;
+	alu->export_data         = !!(dst_reg->flags & IR_REG_EXPORT);
+	alu->vector_write_mask   = reg_alu_dst_swiz(dst_reg);
+	alu->vector_opc          = instr_vector_opc(instr);
+
 	// TODO predicate case/condition.. need to add to parser
-	dwords[2] |= src2_reg->num                               << 8;
-	dwords[2] |= ((src2_reg->flags & IR_REG_ABS) ? 1 : 0)    << 15;
-	dwords[2] |= src1_reg->num                               << 16;
-	dwords[2] |= ((src1_reg->flags & IR_REG_ABS) ? 1 : 0)    << 23;
-	dwords[2] |= instr_vector_opc(instr)                     << 24;
-	dwords[2] |= ((src2_reg->flags & IR_REG_CONST) ? 0 : 1)  << 30;
-	dwords[2] |= ((src1_reg->flags & IR_REG_CONST) ? 0 : 1)  << 31;
+
+	alu->src2_reg            = src2_reg->num;
+	alu->src2_swiz           = reg_alu_src_swiz(src2_reg);
+	alu->src2_reg_negate     = !!(src2_reg->flags & IR_REG_NEGATE);
+	alu->src2_reg_abs        = !!(src2_reg->flags & IR_REG_ABS);
+	alu->src2_sel            = !(src2_reg->flags & IR_REG_CONST);
+
+	alu->src1_reg            = src1_reg->num;
+	alu->src1_swiz           = reg_alu_src_swiz(src1_reg);
+	alu->src1_reg_negate     = !!(src1_reg->flags & IR_REG_NEGATE);
+	alu->src1_reg_abs        = !!(src1_reg->flags & IR_REG_ABS);
+	alu->src1_sel            = !(src1_reg->flags & IR_REG_CONST);
 
 	if (instr->alu.scalar_opc) {
 		struct ir_register *sdst_reg = instr->regs[reg++];
+
+		reg_update_stats(sdst_reg, info, true);
 
 		assert(sdst_reg->flags == dst_reg->flags);
 
@@ -697,29 +641,29 @@ static int instr_emit_alu(struct ir_instruction *instr, uint32_t *dwords,
 			src3_reg = instr->regs[reg++];
 		}
 
-		dwords[0] |= sdst_reg->num                              << 8;
-		dwords[0] |= reg_alu_dst_swiz(sdst_reg)                 << 20;
-		dwords[0] |= instr_scalar_opc(instr)                    << 26;
+		alu->scalar_dest         = sdst_reg->num;
+		alu->scalar_write_mask   = reg_alu_dst_swiz(sdst_reg);
+		alu->scalar_opc          = instr_scalar_opc(instr);
 	} else {
 		/* not sure if this is required, but adreno compiler seems
 		 * to always set scalar opc to MAXs if it is not used:
 		 */
-		dwords[0] |= 5                                          << 26;
+		alu->scalar_opc = MAXs;
 	}
 
 	if (src3_reg) {
 		reg_update_stats(src3_reg, info, false);
 
-		dwords[1] |= reg_alu_src_swiz(src3_reg)                 << 0;
-		dwords[1] |= ((src3_reg->flags & IR_REG_NEGATE) ? 1 : 0)<< 24;
-		dwords[2] |= src3_reg->num                              << 0;
-		dwords[2] |= ((src3_reg->flags & IR_REG_ABS) ? 1 : 0)   << 7;
-		dwords[2] |= ((src3_reg->flags & IR_REG_CONST) ? 0 : 1) << 29;
+		alu->src3_reg            = src3_reg->num;
+		alu->src3_swiz           = reg_alu_src_swiz(src3_reg);
+		alu->src3_reg_negate     = !!(src3_reg->flags & IR_REG_NEGATE);
+		alu->src3_reg_abs        = !!(src3_reg->flags & IR_REG_ABS);
+		alu->src3_sel            = !(src3_reg->flags & IR_REG_CONST);
 	} else {
 		/* not sure if this is required, but adreno compiler seems
 		 * to always set register bank for 3rd src if unused:
 		 */
-		dwords[2] |= 1                                          << 29;
+		alu->src3_sel = 1;
 	}
 
 	return 0;
