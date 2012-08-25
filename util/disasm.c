@@ -32,6 +32,7 @@
 
 #include "disasm.h"
 #include "a2xx_reg.h"
+#include "fdre/asm/instr.h"
 
 static const char *levels[] = {
 		"\t",
@@ -54,86 +55,7 @@ static const char *levels[] = {
 static enum debug_t debug;
 
 /*
- * ALU instruction format:
- * --- ----------- ------
- *
- *     dword0:   0..5?   -  vector dest register
- *              6?..7    -  <UNKNOWN>
- *               8..13?  -  scalar dest register
- *                14     -  <UNKNOWN>
- *                15     -  export flag
- *              16..19   -  vector dest write mask (wxyz)
- *              20..23   -  scalar dest write mask (wxyz)
- *              24..25   -  <UNKNOWN>
- *              26..31   -  scalar operation
- *
- *     dword 1:  0..7    -  src3 swizzle
- *               8..15   -  src2 swizzle
- *              16..23   -  src1 swizzle
- *                24     -  src3 negate
- *                25     -  src2 negate
- *                26     -  src1 negate
- *                27     -  predicate case (1 - execute if true, 0 - execute if false)
- *                28     -  predicate (conditional execution)
- *              29..31   -  <UNKNOWN>
- *
- *
- *     dword 2:  0..5?   -  src3 register
- *                6      -  <UNKNOWN>
- *                7      -  src3 abs (assumed)
- *               8..13?  -  src2 register
- *                14     -  <UNKNOWN>
- *                15     -  src2 abs
- *              16..21?  -  src1 register
- *                22     -  <UNKNOWN>
- *                23     -  src1 abs
- *              24..28   -  vector operation
- *                29     -  src3 type/bank
- *                            0 - Constant bank (C)  -  uniforms and consts
- *                            1 - Register bank (R)  -  varyings and locals
- *                30     -  vector src2 type/bank  (same as above)
- *                31     -  vector src1 type/bank  (same as above)
- *
- * Interpretation of ALU swizzle fields:
- *
- *       bits 7..6 - chan[3] (w) swizzle
- *            5..4 - chan[2] (z) swizzle
- *            3..2 - chan[1] (y) swizzle
- *            1..0 - chan[0] (x) swizzle
- *
- *       chan[0]: 00 - x
- *                01 - y
- *                10 - z
- *                11 - w
- *
- *       chan[1]: 11 - x
- *                00 - y
- *                01 - z
- *                10 - w
- *
- *       chan[2]: 10 - x
- *                11 - y
- *                00 - z
- *                01 - w
- *
- *       chan[3]: 01 - x
- *                10 - y
- *                11 - z
- *                00 - w
- *
- *  still looking for:
- *    scalar src1 reg?  Is there one?
- *    scalar src1 type/bank
- *    scalar src1/src2 negate?
- *
- * Shader Outputs:
- *     vertex shader:
- *         R30: gl_Position
- *         R31: gl_PointSize
- *     fragment shader:
- *         R0:  gl_FragColor
- *         ??:  gl_FragData   --   TODO
- *
+ * ALU instructions:
  */
 
 #define REG_MASK 0x3f	/* not really sure how many regs yet */
@@ -146,10 +68,12 @@ static const char chan_names[] = {
 };
 
 static void print_srcreg(uint32_t num, uint32_t type,
-		uint32_t swiz, uint32_t negate)
+		uint32_t swiz, uint32_t negate, uint32_t abs)
 {
 	if (negate)
 		printf("-");
+	if (abs)
+		printf("|");
 	printf("%c%u", type ? 'R' : 'C', num);
 	if (swiz) {
 		int i;
@@ -159,6 +83,8 @@ static void print_srcreg(uint32_t num, uint32_t type,
 			swiz >>= 2;
 		}
 	}
+	if (abs)
+		printf("|");
 }
 
 static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
@@ -202,187 +128,153 @@ struct {
 	uint32_t num_srcs;
 	const char *name;
 } vector_instructions[0x20] = {
-#define INSTR(name, val, num_srcs) [val] = { num_srcs, #name }
-		INSTR(ADDv, 0, 2),
-		INSTR(MULv, 1, 2),
-		INSTR(MAXv, 2, 2),
-		INSTR(MINv, 3, 2),
-		INSTR(SETEv, 4, 2),
-		INSTR(SETGTv, 5, 2),
-		INSTR(SETGTEv, 6, 2),
-		INSTR(SETNEv, 7, 2),
-		INSTR(FRACv, 8, 1),
-		INSTR(TRUNCv, 9, 1),
-		INSTR(FLOORv, 10, 1),
-		INSTR(MULADDv, 11, 3),
-		INSTR(CNDEv, 12, 2),
-		INSTR(CNDGTEv, 13, 2),
-		INSTR(CNDGTv, 14, 2),
-		INSTR(DOT4v, 15, 2),
-		INSTR(DOT3v, 16, 2),
-		INSTR(DOT2ADDv, 17, 3),  // ???
-		INSTR(CUBEv, 18, 2),
-		INSTR(MAX4v, 19, 1),
-		INSTR(PRED_SETE_PUSHv, 20, 2),
-		INSTR(PRED_SETNE_PUSHv, 21, 2),
-		INSTR(PRED_SETGT_PUSHv, 22, 2),
-		INSTR(PRED_SETGTE_PUSHv, 23, 2),
-		INSTR(KILLEv, 24, 2),
-		INSTR(KILLGTv, 25, 2),
-		INSTR(KILLGTEv, 26, 2),
-		INSTR(KILLNEv, 27, 2),
-		INSTR(DSTv, 28, 2),
-		INSTR(MOVAv, 29, 1),
+#define INSTR(opc, num_srcs) [opc] = { num_srcs, #opc }
+		INSTR(ADDv, 2),
+		INSTR(MULv, 2),
+		INSTR(MAXv, 2),
+		INSTR(MINv, 2),
+		INSTR(SETEv, 2),
+		INSTR(SETGTv, 2),
+		INSTR(SETGTEv, 2),
+		INSTR(SETNEv, 2),
+		INSTR(FRACv, 1),
+		INSTR(TRUNCv, 1),
+		INSTR(FLOORv, 1),
+		INSTR(MULADDv, 3),
+		INSTR(CNDEv, 2),
+		INSTR(CNDGTEv, 2),
+		INSTR(CNDGTv, 2),
+		INSTR(DOT4v, 2),
+		INSTR(DOT3v, 2),
+		INSTR(DOT2ADDv, 3),  // ???
+		INSTR(CUBEv, 2),
+		INSTR(MAX4v, 1),
+		INSTR(PRED_SETE_PUSHv, 2),
+		INSTR(PRED_SETNE_PUSHv, 2),
+		INSTR(PRED_SETGT_PUSHv, 2),
+		INSTR(PRED_SETGTE_PUSHv, 2),
+		INSTR(KILLEv, 2),
+		INSTR(KILLGTv, 2),
+		INSTR(KILLGTEv, 2),
+		INSTR(KILLNEv, 2),
+		INSTR(DSTv, 2),
+		INSTR(MOVAv, 1),
 }, scalar_instructions[0x40] = {
-		INSTR(ADDs, 0, 1),
-		INSTR(ADD_PREVs, 1, 1),
-		INSTR(MULs, 2, 1),
-		INSTR(MUL_PREVs, 3, 1),
-		INSTR(MUL_PREV2s, 4, 1),
-		INSTR(MAXs, 5, 1),
-		INSTR(MINs, 6, 1),
-		INSTR(SETEs, 7, 1),
-		INSTR(SETGTs, 8, 1),
-		INSTR(SETGTEs, 9, 1),
-		INSTR(SETNEs, 10, 1),
-		INSTR(FRACs, 11, 1),
-		INSTR(TRUNCs, 12, 1),
-		INSTR(FLOORs, 13, 1),
-		INSTR(EXP_IEEE, 14, 1),
-		INSTR(LOG_CLAMP, 15, 1),
-		INSTR(LOG_IEEE, 16, 1),
-		INSTR(RECIP_CLAMP, 17, 1),
-		INSTR(RECIP_FF, 18, 1),
-		INSTR(RECIP_IEEE, 19, 1),
-		INSTR(RECIPSQ_CLAMP, 20, 1),
-		INSTR(RECIPSQ_FF, 21, 1),
-		INSTR(RECIPSQ_IEEE, 22, 1),
-		INSTR(MOVAs, 23, 1),
-		INSTR(MOVA_FLOORs, 24, 1),
-		INSTR(SUBs, 25, 1),
-		INSTR(SUB_PREVs, 26, 1),
-		INSTR(PRED_SETEs, 27, 1),
-		INSTR(PRED_SETNEs, 28, 1),
-		INSTR(PRED_SETGTs, 29, 1),
-		INSTR(PRED_SETGTEs, 30, 1),
-		INSTR(PRED_SET_INVs, 31, 1),
-		INSTR(PRED_SET_POPs, 32, 1),
-		INSTR(PRED_SET_CLRs, 33, 1),
-		INSTR(PRED_SET_RESTOREs, 34, 1),
-		INSTR(KILLEs, 35, 1),
-		INSTR(KILLGTs, 36, 1),
-		INSTR(KILLGTEs, 37, 1),
-		INSTR(KILLNEs, 38, 1),
-		INSTR(KILLONEs, 39, 1),
-		INSTR(SQRT_IEEE, 40, 1),
-		INSTR(MUL_CONST_0, 42, 1),
-		INSTR(MUL_CONST_1, 43, 1),
-		INSTR(ADD_CONST_0, 44, 1),
-		INSTR(ADD_CONST_1, 45, 1),
-		INSTR(SUB_CONST_0, 46, 1),
-		INSTR(SUB_CONST_1, 47, 1),
-		INSTR(SIN, 48, 1),
-		INSTR(COS, 49, 1),
-		INSTR(RETAIN_PREV, 50, 1),
+		INSTR(ADDs, 1),
+		INSTR(ADD_PREVs, 1),
+		INSTR(MULs, 1),
+		INSTR(MUL_PREVs, 1),
+		INSTR(MUL_PREV2s, 1),
+		INSTR(MAXs, 1),
+		INSTR(MINs, 1),
+		INSTR(SETEs, 1),
+		INSTR(SETGTs, 1),
+		INSTR(SETGTEs, 1),
+		INSTR(SETNEs, 1),
+		INSTR(FRACs, 1),
+		INSTR(TRUNCs, 1),
+		INSTR(FLOORs, 1),
+		INSTR(EXP_IEEE, 1),
+		INSTR(LOG_CLAMP, 1),
+		INSTR(LOG_IEEE, 1),
+		INSTR(RECIP_CLAMP, 1),
+		INSTR(RECIP_FF, 1),
+		INSTR(RECIP_IEEE, 1),
+		INSTR(RECIPSQ_CLAMP, 1),
+		INSTR(RECIPSQ_FF, 1),
+		INSTR(RECIPSQ_IEEE, 1),
+		INSTR(MOVAs, 1),
+		INSTR(MOVA_FLOORs, 1),
+		INSTR(SUBs, 1),
+		INSTR(SUB_PREVs, 1),
+		INSTR(PRED_SETEs, 1),
+		INSTR(PRED_SETNEs, 1),
+		INSTR(PRED_SETGTs, 1),
+		INSTR(PRED_SETGTEs, 1),
+		INSTR(PRED_SET_INVs, 1),
+		INSTR(PRED_SET_POPs, 1),
+		INSTR(PRED_SET_CLRs, 1),
+		INSTR(PRED_SET_RESTOREs, 1),
+		INSTR(KILLEs, 1),
+		INSTR(KILLGTs, 1),
+		INSTR(KILLGTEs, 1),
+		INSTR(KILLNEs, 1),
+		INSTR(KILLONEs, 1),
+		INSTR(SQRT_IEEE, 1),
+		INSTR(MUL_CONST_0, 1),
+		INSTR(MUL_CONST_1, 1),
+		INSTR(ADD_CONST_0, 1),
+		INSTR(ADD_CONST_1, 1),
+		INSTR(SUB_CONST_0, 1),
+		INSTR(SUB_CONST_1, 1),
+		INSTR(SIN, 1),
+		INSTR(COS, 1),
+		INSTR(RETAIN_PREV, 1),
 #undef INSTR
 };
 
 static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 {
-	uint32_t dst_reg   =  dwords[0] & REG_MASK;
-	uint32_t dst_mask  = (dwords[0] >> 16) & 0xf;
-	uint32_t dst_exp   = (dwords[0] & 0x00008000);
-	uint32_t sdst_reg  = (dwords[0] >> 8) & REG_MASK; /* scalar dst */
-	uint32_t sdst_mask = (dwords[0] >> 20) & 0xf;
-	uint32_t src1_swiz = (dwords[1] >> 16) & 0xff;
-	uint32_t src2_swiz = (dwords[1] >> 8) & 0xff;
-	uint32_t src3_swiz =  dwords[1] & 0xff;
-	uint32_t src1_neg  = (dwords[1] >> 26) & 0x1;
-	uint32_t src2_neg  = (dwords[1] >> 25) & 0x1;
-	uint32_t src3_neg  = (dwords[1] >> 24) & 0x1;
-	uint32_t src1_reg  = (dwords[2] >> 16) & REG_MASK;
-	uint32_t src2_reg  = (dwords[2] >> 8) & REG_MASK;
-	uint32_t src3_reg  =  dwords[2] & REG_MASK;
-	uint32_t src1_type = (dwords[2] >> 31) & 0x1;
-	uint32_t src2_type = (dwords[2] >> 30) & 0x1;
-	uint32_t src3_type = (dwords[2] >> 29) & 0x1;
-	uint32_t vector_op = (dwords[2] >> 24) & 0x1f;
-	uint32_t vector_pred = (dwords[1] >> 28) & 0x1;
-	uint32_t vector_case = (dwords[1] >> 27) & 0x1;
-	// TODO add abs
+	instr_alu_t *alu = (instr_alu_t *)dwords;
 
 	printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
-	if (debug & PRINT_UNKNOWN) {
-			printf("%08x %08x %08x\t",
-					dwords[0] & ~(REG_MASK | (0xf << 16) | (REG_MASK << 8) |
-							(0xf << 20) | 0x00008000 | (0x3f << 26)),
-					dwords[1] & ~((0xff << 16) | (0xff << 8) | 0xff |
-							(0x1 << 24) | (0x1 << 25) | (0x1 << 26) |
-							(0x1 << 27) | (0x1 << 28)),
-					dwords[2] & ~((REG_MASK << 16) | (REG_MASK << 8) |
-							(0x1 << 31) | (0x1 << 30) | (0x1 << 29) |
-							(0x1f << 24) | REG_MASK));
-	}
 
 	printf("   %sALU:\t", sync ? "(S)" : "   ");
 
-	if (vector_instructions[vector_op].name) {
-		printf(vector_instructions[vector_op].name);
-	} else {
-		printf("OP(%u)", vector_op);
-	}
+	printf(vector_instructions[alu->vector_opc].name);
 
-	if (vector_pred) {
+	if (alu->pred_select & 0x2) {
 		/* seems to work similar to conditional execution in ARM instruction
 		 * set, so let's use a similar syntax for now:
 		 */
-		printf(vector_case ? "EQ" : "NE");
+		printf((alu->pred_select & 0x1) ? "EQ" : "NE");
 	}
 
 	printf("\t");
 
-	print_dstreg(dst_reg, dst_mask, dst_exp);
+	print_dstreg(alu->vector_dest, alu->vector_write_mask, alu->export_data);
 	printf(" = ");
-	if (vector_instructions[vector_op].num_srcs == 3) {
-		print_srcreg(src3_reg, src3_type, src3_swiz, src3_neg);
+	if (vector_instructions[alu->vector_opc].num_srcs == 3) {
+		print_srcreg(alu->src3_reg, alu->src3_sel, alu->src3_swiz,
+				alu->src3_reg_negate, alu->src3_reg_abs);
 		printf(", ");
 	}
-	print_srcreg(src1_reg, src1_type, src1_swiz, src1_neg);
-	if (vector_instructions[vector_op].num_srcs > 1) {
+	print_srcreg(alu->src1_reg, alu->src1_sel, alu->src1_swiz,
+			alu->src1_reg_negate, alu->src1_reg_abs);
+	if (vector_instructions[alu->vector_opc].num_srcs > 1) {
 		printf(", ");
-		print_srcreg(src2_reg, src2_type, src2_swiz, src2_neg);
+		print_srcreg(alu->src2_reg, alu->src2_sel, alu->src2_swiz,
+				alu->src2_reg_negate, alu->src2_reg_abs);
 	}
 
-	if (dst_exp)
-		print_export_comment(dst_reg, type);
+	if (alu->export_data)
+		print_export_comment(alu->vector_dest, type);
 
 	printf("\n");
 
-	if (sdst_mask || !dst_mask) {
+	if (alu->scalar_write_mask || !alu->vector_write_mask) {
 		/* 2nd optional scalar op: */
-		uint32_t scalar_op =  (dwords[0] >> 26) & 0x3f;
 
 		printf("%s", levels[level]);
 		if (debug & PRINT_RAW)
 			printf("                          \t");
-		if (debug & PRINT_UNKNOWN)
-			printf("                          \t");
 
-		if (scalar_instructions[scalar_op].name) {
-			printf("\t    \t%s\t", scalar_instructions[scalar_op].name);
+		if (scalar_instructions[alu->scalar_opc].name) {
+			printf("\t    \t%s\t", scalar_instructions[alu->scalar_opc].name);
 		} else {
-			printf("\t    \tOP(%u)\t", scalar_op);
+			printf("\t    \tOP(%u)\t", alu->scalar_opc);
 		}
 
-		print_dstreg(sdst_reg, sdst_mask, dst_exp);
+		print_dstreg(alu->scalar_dest, alu->scalar_write_mask, alu->export_data);
 		printf(" = ");
-		print_srcreg(src3_reg, src3_type, src3_swiz, src3_neg);
+		print_srcreg(alu->src3_reg, alu->src3_sel, alu->src3_swiz,
+				alu->src3_reg_negate, alu->src3_reg_abs);
 		// TODO ADD/MUL must have another src?!?
-		if (dst_exp)
-			print_export_comment(sdst_reg, type);
+		if (alu->export_data)
+			print_export_comment(alu->scalar_dest, type);
 		printf("\n");
 	}
 
@@ -525,22 +417,6 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 	if (debug & PRINT_RAW) {
 		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
 	}
-	if (debug & PRINT_UNKNOWN) {
-		if (fetch_opc == VERTEX) {
-			printf("%08x %08x %08x\t",
-					dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
-							(0xf << 20) | 0x1f | (0x3 << 25)),
-					dwords[1] & ~(0xfff | (0x1 << 12) | (0x3f << 16)),
-					dwords[2] & ~(0xff));
-
-		} else {
-			printf("%08x %08x %08x\t",
-					dwords[0] & ~((REG_MASK << 5) | (REG_MASK << 12) |
-							(0xf << 20) | 0x1f | (0x3f << 26)),
-					dwords[1] & ~(0xfff),
-					dwords[2] & ~(0));
-		}
-	}
 
 	printf("   %sFETCH:\t", sync ? "(S)" : "   ");
 	if (fetch_instructions[fetch_opc].name) {
@@ -640,17 +516,6 @@ static void print_cf(struct cf *cf, int level)
 		if (cf->dwords) {
 			printf("%08x %08x %08x\t",
 					cf->dwords[0], cf->dwords[1], cf->dwords[2]);
-		} else {
-			printf("                          \t");
-		}
-	}
-	if (debug & PRINT_UNKNOWN) {
-		if (cf->dwords) {
-		printf("%08x %08x %08x\t",
-				cf->dwords[0] & ~(ADDR_MASK | (0xf << 12) | (0xffff << 16)),
-				cf->dwords[1] & ~((ADDR_MASK << 16) |
-						(0xf << 28) | (0xff << 8)),
-				cf->dwords[2] & ~((0xff << 24) | 0xffff));
 		} else {
 			printf("                          \t");
 		}

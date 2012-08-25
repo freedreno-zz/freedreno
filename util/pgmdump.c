@@ -525,7 +525,7 @@ int main(int argc, char **argv)
 
 	/* lame argument parsing: */
 	if ((argc > 1) && !strcmp(argv[1], "--verbose")) {
-		disasm_set_debug(PRINT_RAW | PRINT_UNKNOWN);
+		disasm_set_debug(PRINT_RAW);
 		argv++;
 		argc--;
 	}

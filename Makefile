@@ -87,8 +87,8 @@ redump: redump.c
 	gcc -g $^ -o $@
 
 cffdump: cffdump.c disasm.c
-	gcc -g $(CFLAGS) $^ -o $@
+	gcc -g $(CFLAGS) -I. $^ -o $@
 
 pgmdump: pgmdump.c disasm.c
-	gcc -g $(CFLAGS) $^ -o $@
+	gcc -g $(CFLAGS) -I. $^ -o $@
 

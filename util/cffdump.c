@@ -906,7 +906,7 @@ int main(int argc, char **argv)
 	int fd, sz, i, n = 1;
 
 	if (!strcmp(argv[n], "--verbose")) {
-		disasm_set_debug(PRINT_RAW | PRINT_UNKNOWN);
+		disasm_set_debug(PRINT_RAW);
 		n++;
 	}
 
