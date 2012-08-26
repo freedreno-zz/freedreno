@@ -210,13 +210,15 @@ struct {
 #undef INSTR
 };
 
-static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
+static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
+		int level, int sync, enum shader_t type)
 {
 	instr_alu_t *alu = (instr_alu_t *)dwords;
 
 	printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
-		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
+		printf("%02x: %08x %08x %08x\t", alu_off,
+				dwords[0], dwords[1], dwords[2]);
 	}
 
 	printf("   %sALU:\t", sync ? "(S)" : "   ");
@@ -422,20 +424,21 @@ struct {
 		INSTR(TEX_GET_COMP_TEX_LOD, "?", print_fetch_tex),
 		INSTR(TEX_GET_GRADIENTS, "?", print_fetch_tex),
 		INSTR(TEX_GET_WEIGHTS, "?", print_fetch_tex),
-		INSTR(TEX_SET_TEX_LOD, "?", print_fetch_tex),
+		INSTR(TEX_SET_TEX_LOD, "SET_TEX_LOD", print_fetch_tex),
 		INSTR(TEX_SET_GRADIENTS_H, "?", print_fetch_tex),
 		INSTR(TEX_SET_GRADIENTS_V, "?", print_fetch_tex),
 		INSTR(TEX_RESERVED_4, "?", print_fetch_tex),
 #undef INSTR
 };
 
-static int disasm_fetch(uint32_t *dwords, int level, int sync)
+static int disasm_fetch(uint32_t *dwords, uint32_t alu_off, int level, int sync)
 {
 	instr_fetch_t *fetch = (instr_fetch_t *)dwords;
 
 	printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
-		printf("%08x %08x %08x\t", dwords[0], dwords[1], dwords[2]);
+		printf("%02x: %08x %08x %08x\t", alu_off,
+				dwords[0], dwords[1], dwords[2]);
 	}
 
 	printf("   %sFETCH:\t", sync ? "(S)" : "   ");
@@ -555,7 +558,8 @@ static void print_cf(instr_cf_t *cf, int level)
 	printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
 		uint16_t *words = (uint16_t *)cf;
-		printf("%04x %04x %04x            \t", words[0], words[1], words[2]);
+		printf("    %04x %04x %04x            \t",
+				words[0], words[1], words[2]);
 	}
 	printf(cf_instructions[cf->opc].name);
 	cf_instructions[cf->opc].fxn(cf);
@@ -591,11 +595,11 @@ int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 			uint32_t sequence = cf->exec.serialize;
 			uint32_t i;
 			for (i = 0; i < cf->exec.count; i++) {
-				uint32_t alu_off = (cf->exec.address + i) * 3;
+				uint32_t alu_off = (cf->exec.address + i);
 				if (sequence & 0x1) {
-					disasm_fetch(dwords + alu_off, level, sequence & 0x2);
+					disasm_fetch(dwords + alu_off * 3, alu_off, level, sequence & 0x2);
 				} else {
-					disasm_alu(dwords + alu_off, level, sequence & 0x2, type);
+					disasm_alu(dwords + alu_off * 3, alu_off, level, sequence & 0x2, type);
 				}
 				sequence >>= 2;
 			}

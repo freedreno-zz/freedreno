@@ -4,7 +4,7 @@ uniform sampler2D samp;
 
 void main()
 {
-	vec4 uColor2 = texture2D(samp, uColor1.xy);
+	vec4 uColor2 = texture2DProj(samp, uColor1.xyz, uColor1.w);
 	float f0 = uColor2.x;
 	vec4 v = uColor1;
 	while (f0 > 2.0) {
