@@ -87,8 +87,8 @@ redump: redump.c
 	gcc -g $^ -o $@
 
 cffdump: cffdump.c disasm.c
-	gcc -g $(CFLAGS) -I. $^ -o $@
+	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -o $@
 
 pgmdump: pgmdump.c disasm.c
-	gcc -g $(CFLAGS) -I. $^ -o $@
+	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -o $@
 

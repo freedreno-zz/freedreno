@@ -59,7 +59,6 @@ static enum debug_t debug;
  */
 
 #define REG_MASK 0x3f	/* not really sure how many regs yet */
-#define ADDR_MASK 0xfff
 
 static const char chan_names[] = {
 		'x', 'y', 'z', 'w',
@@ -460,112 +459,119 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 }
 
 /*
- * CF instruction format:
- * -- ----------- ------
- *
- *     dword0:   0..11   -  addr/size 1
- *              12..15   -  count 1
- *              16..31   -  sequence 1.. 2 bits per instruction in the EXEC
- *                          clause, the low bit seems to control FETCH vs
- *                          ALU instruction type, the high bit seems to be
- *                          (S) modifier on instruction (which might make
- *                          the name SERIALIZE() in optimize-for-adreno.pdf
- *                          make sense.. although I don't quite understand
- *                          the meaning yet)
- *
- *     dword1:   0..7    -  <UNKNOWN>
- *               8..15?  -  op 1
- *              16..27   -  addr/size 2
- *              28..31   -  count 2
- *
- *     dword2:   0..15   -  sequence 2
- *              16..23   -  <UNKNOWN>
- *              24..31   -  op 2
+ * CF instructions:
  */
 
+static int cf_exec(instr_cf_t *cf)
+{
+	return (cf->opc == EXEC) ||
+			(cf->opc == EXEC_END) ||
+			(cf->opc == COND_EXEC) ||
+			(cf->opc == COND_EXEC_END) ||
+			(cf->opc == COND_PRED_EXEC) ||
+			(cf->opc == COND_PRED_EXEC_END) ||
+			(cf->opc == COND_EXEC_PRED_CLEAN) ||
+			(cf->opc == COND_EXEC_PRED_CLEAN_END);
+}
+
+static int cf_cond_exec(instr_cf_t *cf)
+{
+	return (cf->opc == COND_EXEC) ||
+			(cf->opc == COND_EXEC_END) ||
+			(cf->opc == COND_PRED_EXEC) ||
+			(cf->opc == COND_PRED_EXEC_END) ||
+			(cf->opc == COND_EXEC_PRED_CLEAN) ||
+			(cf->opc == COND_EXEC_PRED_CLEAN_END);
+}
+
+static void print_cf_nop(instr_cf_t *cf)
+{
+}
+
+static void print_cf_exec(instr_cf_t *cf)
+{
+	printf(" ADDR(0x%x) CNT(0x%x)", cf->exec.address, cf->exec.count);
+	if (cf->exec.yeild)
+		printf(" YIELD");
+	if (cf->exec.vc)
+		printf(" VC(0x%x)", cf->exec.vc);
+	if (cf->exec.bool_addr)
+		printf(" BOOL_ADDR(0x%x)", cf->exec.bool_addr);
+	if (cf->exec.address_mode == ABSOLUTE_ADDR)
+		printf(" ABSOLUTE_ADDR");
+	if (cf_cond_exec(cf))
+		printf(" COND(%d)", cf->exec.condition);
+}
+
+static void print_cf_loop(instr_cf_t *cf)
+{
+	printf(" ADDR(0x%x) LOOP_ID(%d)", cf->loop.address, cf->loop.loop_id);
+	if (cf->loop.address_mode == ABSOLUTE_ADDR)
+		printf(" ABSOLUTE_ADDR");
+}
+
+static void print_cf_jmp_call(instr_cf_t *cf)
+{
+	printf(" ADDR(0x%x) DIR(%d)", cf->jmp_call.address, cf->jmp_call.direction);
+	if (cf->jmp_call.force_call)
+		printf(" FORCE_CALL");
+	if (cf->jmp_call.predicated_jmp)
+		printf(" COND(%d)", cf->jmp_call.condition);
+	if (cf->jmp_call.bool_addr)
+		printf(" BOOL_ADDR(0x%x)", cf->jmp_call.bool_addr);
+	if (cf->jmp_call.address_mode == ABSOLUTE_ADDR)
+		printf(" ABSOLUTE_ADDR");
+}
+
+static void print_cf_alloc(instr_cf_t *cf)
+{
+	static const char *bufname[] = {
+			[SQ_NO_ALLOC] = "NO ALLOC",
+			[SQ_POSITION] = "POSITION",
+			[SQ_PARAMETER_PIXEL] = "PARAM/PIXEL",
+			[SQ_MEMORY] = "MEMORY",
+	};
+	printf(" %s SIZE(0x%x)", bufname[cf->alloc.buffer_select], cf->alloc.size);
+	if (cf->alloc.no_serial)
+		printf(" NO_SERIAL");
+	if (cf->alloc.alloc_mode) // ???
+		printf(" ALLOC_MODE");
+}
+
 struct {
-	uint32_t exec;
-	const char *fmt;
-} cf_instructions[0xff] = {
-#define INSTR(opc, fmt, exec) [opc] = { exec, fmt }
-		INSTR(0x00, "NOP", 0),
-		INSTR(0x10, "EXEC ADDR(0x%x) CNT(0x%x)", 1),
-		INSTR(0x20, "EXEC_END ADDR(0x%x) CNT(0x%x)", 1),
-		INSTR(0xc2, "ALLOC COORD SIZE(0x%x)", 0),
-		INSTR(0xc4, "ALLOC PARAM/PIXEL SIZE(0x%x)", 0),
+	const char *name;
+	void (*fxn)(instr_cf_t *cf);
+} cf_instructions[] = {
+#define INSTR(opc, fxn) [opc] = { #opc, fxn }
+		INSTR(NOP, print_cf_nop),
+		INSTR(EXEC, print_cf_exec),
+		INSTR(EXEC_END, print_cf_exec),
+		INSTR(COND_EXEC, print_cf_exec),
+		INSTR(COND_EXEC_END, print_cf_exec),
+		INSTR(COND_PRED_EXEC, print_cf_exec),
+		INSTR(COND_PRED_EXEC_END, print_cf_exec),
+		INSTR(LOOP_START, print_cf_loop),
+		INSTR(LOOP_END, print_cf_loop),
+		INSTR(COND_CALL, print_cf_jmp_call),
+		INSTR(RETURN, print_cf_jmp_call),
+		INSTR(COND_JMP, print_cf_jmp_call),
+		INSTR(ALLOC, print_cf_alloc),
+		INSTR(COND_EXEC_PRED_CLEAN, print_cf_exec),
+		INSTR(COND_EXEC_PRED_CLEAN_END, print_cf_exec),
+		INSTR(MARK_VS_FETCH_DONE, print_cf_nop),  // ??
 #undef INSTR
 };
 
-struct cf {
-	uint32_t  addr;
-	uint32_t  cnt;
-	uint32_t  op;
-	uint32_t *dwords;
-
-	/* I think the same as SERIALIZE() in optimize-for-adreno.pdf
-	 * screenshot.. but that name doesn't really make sense to me, as
-	 * it appears to differentiate fetch vs alu instructions:
-	 */
-	uint32_t  sequence;
-};
-
-static void print_cf(struct cf *cf, int level)
+static void print_cf(instr_cf_t *cf, int level)
 {
 	printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
-		if (cf->dwords) {
-			printf("%08x %08x %08x\t",
-					cf->dwords[0], cf->dwords[1], cf->dwords[2]);
-		} else {
-			printf("                          \t");
-		}
+		uint16_t *words = (uint16_t *)cf;
+		printf("%04x %04x %04x            \t", words[0], words[1], words[2]);
 	}
-	if (cf_instructions[cf->op].fmt) {
-		printf(cf_instructions[cf->op].fmt, cf->addr, cf->cnt);
-	} else {
-		printf("CF(0x%x) ADDR(0x%x) CNT(0x%x)", cf->op, cf->addr, cf->cnt);
-	}
+	printf(cf_instructions[cf->opc].name);
+	cf_instructions[cf->opc].fxn(cf);
 	printf("\n");
-}
-
-static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
-{
-	int idx = 0;
-	int off = 0;
-
-	do {
-		struct cf *cf;
-		uint32_t addr  =  dwords[0] & ADDR_MASK;
-		uint32_t cnt   = (dwords[0] >> 12) & 0xf;
-		uint32_t seqn1 = (dwords[0] >> 16) & 0xffff;
-		uint32_t op    = (dwords[1] >> 8) & 0xff;
-		uint32_t addr2 = (dwords[1] >> 16) & ADDR_MASK;
-		uint32_t cnt2  = (dwords[1] >> 28) & 0xf;
-		uint32_t op2   = (dwords[2] >> 24) & 0xff;
-		uint32_t seqn2 =  dwords[2] & 0xffff;
-
-		if (!off)
-			off = addr ? addr : addr2;
-
-		cf = &cfs[idx++];
-		cf->dwords = dwords;
-		cf->addr = addr;
-		cf->cnt  = cnt;
-		cf->op   = op;
-		cf->sequence = seqn1;
-
-		cf = &cfs[idx++];
-		cf->dwords = NULL;
-		cf->addr = addr2;
-		cf->cnt  = cnt2;
-		cf->op   = op2;
-		cf->sequence = seqn2;
-
-		dwords += 3;
-
-	} while (--off > 0);
-
-	return idx;
 }
 
 /*
@@ -577,22 +583,27 @@ static int parse_cf(uint32_t *dwords, int sizedwords, struct cf *cfs)
 
 int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 {
-	static struct cf cfs[64];
+	instr_cf_t *cfs = (instr_cf_t *)dwords;
 	int off, idx, max_idx;
 
-	idx = 0;
-	max_idx = parse_cf(dwords, sizedwords, cfs);
+	for (idx = 0; ; idx++) {
+		instr_cf_t *cf = &cfs[idx];
+		if (cf_exec(cf)) {
+			max_idx = 2 * cf->exec.address;
+			break;
+		}
+	}
 
-	while (idx < max_idx) {
-		struct cf *cf = &cfs[idx++];
-		uint32_t sequence = cf->sequence;
-		uint32_t i;
+	for (idx = 0; idx < max_idx; idx++) {
+		instr_cf_t *cf = &cfs[idx];
 
 		print_cf(cf, level);
 
-		if (cf_instructions[cf->op].exec) {
-			for (i = 0; i < cf->cnt; i++) {
-				uint32_t alu_off = (cf->addr + i) * 3;
+		if (cf_exec(cf)) {
+			uint32_t sequence = cf->exec.serialize;
+			uint32_t i;
+			for (i = 0; i < cf->exec.count; i++) {
+				uint32_t alu_off = (cf->exec.address + i) * 3;
 				if (sequence & 0x1) {
 					disasm_fetch(dwords + alu_off, level, sequence & 0x2);
 				} else {
