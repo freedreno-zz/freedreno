@@ -318,15 +318,16 @@ fetch:             fetch_sample
  */
 fetch_sample:      T_SAMPLE reg '=' reg T_CONST '(' number ')' {
                        instr->fetch.opc = $1;
-                       instr->fetch.constant = $7;
+                       instr->fetch.const_idx = $7;
 }
 
-fetch_vertex:      T_VERTEX reg '=' reg format signedness T_STRIDE '(' number ')' T_CONST '(' number ')' {
+fetch_vertex:      T_VERTEX reg '=' reg format signedness T_STRIDE '(' number ')' T_CONST '(' number ',' number ')' {
                        instr->fetch.opc = $1;
                        instr->fetch.fmt = $5;
                        instr->fetch.sign = $6;
                        instr->fetch.stride = $9;
-                       instr->fetch.constant = $13;
+                       instr->fetch.const_idx = $13;
+                       instr->fetch.const_idx_sel = $15;
 }
 
 format:            T_FMT_1_REVERSE

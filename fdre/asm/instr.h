@@ -26,6 +26,10 @@
 
 #define PACKED __attribute__((__packed__))
 
+/*
+ * ALU instructions:
+ */
+
 typedef enum {
 	ADDs = 0,
 	ADD_PREVs = 1,
@@ -153,30 +157,10 @@ typedef struct PACKED {
 } instr_alu_t;
 
 
-/*
- * CF instruction format:
- * -- ----------- ------
- *
- *     dword0:   0..11   -  addr/size 1
- *              12..15   -  count 1
- *              16..31   -  sequence 1.. 2 bits per instruction in the EXEC
- *                          clause, the low bit seems to control FETCH vs
- *                          ALU instruction type, the high bit seems to be
- *                          (S) modifier on instruction (which might make
- *                          the name SERIALIZE() in optimize-for-adreno.pdf
- *                          make sense.. although I don't quite understand
- *                          the meaning yet)
- *
- *     dword1:   0..7    -  <UNKNOWN>
- *               8..15?  -  op 1
- *              16..27   -  addr/size 2
- *              28..31   -  count 2
- *
- *     dword2:   0..15   -  sequence 2
- *              16..23   -  <UNKNOWN>
- *              24..31   -  op 2
- */
 
+/*
+ * CF instructions:
+ */
 
 typedef enum {
 	NOP = 0,
@@ -263,5 +247,137 @@ typedef union PACKED {
 		instr_cf_opc_t  opc                      : 4;
 	};
 } instr_cf_t;
+
+
+
+/*
+ * FETCH instructions:
+ */
+
+typedef enum {
+	VTX_FETCH = 0,
+	TEX_FETCH = 1,
+	TEX_GET_BORDER_COLOR_FRAC = 16,
+	TEX_GET_COMP_TEX_LOD = 17,
+	TEX_GET_GRADIENTS = 18,
+	TEX_GET_WEIGHTS = 19,
+	TEX_SET_TEX_LOD = 24,
+	TEX_SET_GRADIENTS_H = 25,
+	TEX_SET_GRADIENTS_V = 26,
+	TEX_RESERVED_4 = 27,
+} instr_fetch_opc_t;
+
+typedef enum {
+	TEX_FILTER_POINT = 0,
+	TEX_FILTER_LINEAR = 1,
+	TEX_FILTER_BASEMAP = 2,            /* only applicable for mip-filter */
+	TEX_FILTER_USE_FETCH_CONST = 3,
+} instr_tex_filter_t;
+
+typedef enum {
+	ANISO_FILTER_DISABLED = 0,
+	ANISO_FILTER_MAX_1_1 = 1,
+	ANISO_FILTER_MAX_2_1 = 2,
+	ANISO_FILTER_MAX_4_1 = 3,
+	ANISO_FILTER_MAX_8_1 = 4,
+	ANISO_FILTER_MAX_16_1 = 5,
+	ANISO_FILTER_USE_FETCH_CONST = 7,
+} instr_aniso_filter_t;
+
+typedef enum {
+	ARBITRARY_FILTER_2X4_SYM = 0,
+	ARBITRARY_FILTER_2X4_ASYM = 1,
+	ARBITRARY_FILTER_4X2_SYM = 2,
+	ARBITRARY_FILTER_4X2_ASYM = 3,
+	ARBITRARY_FILTER_4X4_SYM = 4,
+	ARBITRARY_FILTER_4X4_ASYM = 5,
+	ARBITRARY_FILTER_USE_FETCH_CONST = 7,
+} instr_arbitrary_filter_t;
+
+typedef enum {
+	SAMPLE_CENTROID = 0,
+	SAMPLE_CENTER = 1,
+} instr_sample_loc_t;
+
+typedef enum SURFACEFORMAT instr_surf_fmt_t;
+
+typedef struct PACKED {
+	/* dword0: */
+	instr_fetch_opc_t   opc                      : 5;
+	uint8_t             src_reg                  : 6;
+	uint8_t             src_reg_am               : 1;
+	uint8_t             dst_reg                  : 6;
+	uint8_t             dst_reg_am               : 1;
+	uint8_t             fetch_valid_only         : 1;
+	uint8_t             const_idx                : 5;
+	uint8_t             tx_coord_denorm          : 1;
+	uint8_t             src_swiz                 : 6;
+	/* dword1: */
+	uint16_t            dst_swiz                 : 12;
+	instr_tex_filter_t  mag_filter               : 2;
+	instr_tex_filter_t  min_filter               : 2;
+	instr_tex_filter_t  mip_filter               : 2;
+	instr_aniso_filter_t aniso_filter            : 3;
+	instr_arbitrary_filter_t arbitrary_filter    : 3;
+	instr_tex_filter_t  vol_mag_filter           : 2;
+	instr_tex_filter_t  vol_min_filter           : 2;
+	uint8_t             use_comp_lod             : 1;
+	uint8_t             use_reg_lod              : 2;
+	uint8_t             pred_select              : 1;
+	/* dword2: */
+	uint8_t             use_reg_gradients        : 1;
+	instr_sample_loc_t  sample_location          : 1;
+	uint8_t             lod_bias                 : 7;
+	uint8_t             unused                   : 7;
+	uint8_t             offset_x                 : 5;
+	uint8_t             offset_y                 : 5;
+	uint8_t             offset_z                 : 5;
+	uint8_t             pred_condition           : 1;
+} instr_fetch_tex_t;
+
+typedef struct PACKED {
+	/* dword0: */
+	instr_fetch_opc_t   opc                      : 5;
+	uint8_t             src_reg                  : 6;
+	uint8_t             src_reg_am               : 1;
+	uint8_t             dst_reg                  : 6;
+	uint8_t             dst_reg_am               : 1;
+	uint8_t             must_be_one              : 1;
+	uint8_t             const_index              : 5;
+	uint8_t             const_index_sel          : 2;
+	uint8_t             reserved0                : 3;
+	uint8_t             src_swiz                 : 2;
+	/* dword1: */
+	uint16_t            dst_swiz                 : 12;
+	uint8_t             format_comp_all          : 1;   /* '1' for signed, '0' for unsigned? */
+	uint8_t             num_format_all           : 1;
+	uint8_t             signed_rf_mode_all       : 1;
+	uint8_t             reserved1                : 1;
+	instr_surf_fmt_t    format                   : 6;
+	uint8_t             reserved2                : 1;
+	uint8_t             exp_adjust_all           : 7;
+	uint8_t             reserved3                : 1;
+	uint8_t             pred_select              : 1;
+	/* dword2: */
+	uint8_t             stride                   : 8;
+	uint8_t             reserved4                : 8;
+	uint8_t             offset                   : 8;
+	uint8_t             reserved5                : 7;
+	uint8_t             pred_condition           : 1;
+} instr_fetch_vtx_t;
+
+typedef union PACKED {
+	instr_fetch_tex_t   tex;
+	instr_fetch_vtx_t   vtx;
+	struct PACKED {
+		/* dword0: */
+		instr_fetch_opc_t opc                    : 5;
+		uint32_t        dummy0                   : 27;
+		/* dword1: */
+		uint32_t        dummy1                   : 32;
+		/* dword2: */
+		uint32_t        dummy2                   : 32;
+	};
+} instr_fetch_t;
 
 #endif /* INSTR_H_ */

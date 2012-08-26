@@ -443,119 +443,75 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
 	}
 }
 
+
 /*
- * VTX FETCH instruction format:
- * --- ----- ----------- ------
- *
- *     dword0:   0..4?   -  fetch operation - 0x00
- *               5..10?  -  src register
- *                11     -  <UNKNOWN>
- *              12..17?  -  dest register
- *             18?..19   -  <UNKNOWN>
- *              20..23?  -  const
- *              24..25   -  <UNKNOWN>  (maybe part of const?)
- *              25..26   -  src swizzle (x)
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *              27..31   -  unknown
- *
- *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
- *                          low two bits of each determine position src channel,
- *                          high bit set 1 to mask
- *                12     -  signedness ('1' signed, '0' unsigned)
- *              13..15   -  <UNKNOWN>
- *              16..21?  -  type - see 'enum SURFACEFORMAT'
- *             22?..31   -  <UNKNOWN>
- *
- *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
- *              16..31   -  <UNKNOWN>
- *
- * note: at least VERTEX fetch instructions get patched up at runtime
- * based on the size of attributes attached.. for example, if vec4, but
- * size given in glVertexAttribPointer() then the write mask and size
- * (stride?) is updated
- *
- * TEX FETCH instruction format:
- * --- ----- ----------- ------
- *
- *     dword0:   0..4?   -  fetch operation - 0x01
- *               5..10?  -  src register
- *                11     -  <UNKNOWN>
- *              12..17?  -  dest register
- *             18?..19   -  <UNKNOWN>
- *              20..23?  -  const
- *              24..25   -  <UNKNOWN>  (maybe part of const?)
- *              26..31   -  src swizzle (z/y/x)
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *
- *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
- *                          low two bits of each determine position src channel,
- *                          high bit set 1 to mask
- *              12..31   -  <UNKNOWN>
- *
- *     dword2:   0..31   -  <UNKNOWN>
+ * FETCH instructions:
  */
 
 static int instr_emit_fetch(struct ir_instruction *instr,
 		uint32_t *dwords, uint32_t idx,
 		struct ir_shader_info *info)
 {
+	instr_fetch_t *fetch = (instr_fetch_t *)dwords;
 	int reg = 0;
 	struct ir_register *dst_reg = instr->regs[reg++];
 	struct ir_register *src_reg = instr->regs[reg++];
 
-	dwords[0] = dwords[1] = dwords[2] = 0;
-
-	assert(instr->fetch.constant <= 0xf);
+	memset(fetch, 0, sizeof(*fetch));
 
 	reg_update_stats(dst_reg, info, true);
 	reg_update_stats(src_reg, info, false);
 
-	dwords[0] |= instr_fetch_opc(instr)      << 0;
-	dwords[0] |= src_reg->num                << 5;
-	dwords[0] |= dst_reg->num                << 12;
-	dwords[0] |= instr->fetch.constant       << 20;
-	dwords[1] |= reg_fetch_dst_swiz(dst_reg) << 0;
+	fetch->opc = instr_fetch_opc(instr);
 
 	if (instr->fetch.opc == T_VERTEX) {
+		instr_fetch_vtx_t *vtx = &fetch->vtx;
+
 		assert(instr->fetch.stride <= 0xff);
 		assert(instr->fetch.fmt <= 0x3f);
+		assert(instr->fetch.const_idx <= 0x1f);
+		assert(instr->fetch.const_idx_sel <= 0x3);
 
-		dwords[0] |= reg_fetch_src_swiz(src_reg, 1) << 25;
-
-		dwords[1] |= ((instr->fetch.sign == T_SIGNED) ? 1 : 0)
-		                                     << 12;
-		dwords[1] |= instr->fetch.fmt        << 16;
-		dwords[2] |= instr->fetch.stride     << 0;
-
-		/* XXX these bits seems to be always set:
-		 */
-		dwords[0] |= 0x1                     << 19;
-		dwords[0] |= 0x1                     << 24;
-		dwords[0] |= 0x1                     << 28;
+		vtx->src_reg = src_reg->num;
+		vtx->src_swiz = reg_fetch_src_swiz(src_reg, 1);
+		vtx->dst_reg = dst_reg->num;
+		vtx->dst_swiz = reg_fetch_dst_swiz(dst_reg);
+		vtx->must_be_one = 1;
+		vtx->num_format_all = 1;
+		vtx->const_index = instr->fetch.const_idx;
+		vtx->const_index_sel = instr->fetch.const_idx_sel;
+		vtx->format_comp_all = instr->fetch.sign == T_SIGNED;
+		vtx->format = instr->fetch.fmt;
+		vtx->stride = instr->fetch.stride;
 
 		/* XXX this seems to always be set, except on the
 		 * internal shaders used for GMEM->MEM blits
 		 */
-		dwords[1] |= 0x1                     << 13;
+		vtx->num_format_all = 1;
 
 		/* XXX seems like every FETCH but the first has
 		 * this bit set:
 		 */
-		dwords[1] |= ((idx > 0) ? 0x1 : 0x0) << 30;
-		dwords[0] |= ((idx > 0) ? 0x0 : 0x1) << 27;
+		vtx->reserved3 = (idx > 0) ? 0x1 : 0x0;
+		vtx->reserved0 = (idx > 0) ? 0x0 : 0x1;
 	} else {
-		dwords[0] |= reg_fetch_src_swiz(src_reg, 3) << 26;
+		instr_fetch_tex_t *tex = &fetch->tex;
 
-		/* XXX not sure about this yet:
-		 */
-		dwords[1] |= 0x1ffff                 << 12;
-		dwords[2] |= 0x1                     << 1;
+		assert(instr->fetch.const_idx <= 0x1f);
+
+		tex->src_reg = src_reg->num;
+		tex->src_swiz = reg_fetch_src_swiz(src_reg, 3);
+		tex->dst_reg = dst_reg->num;
+		tex->dst_swiz = reg_fetch_dst_swiz(dst_reg);
+
+		tex->mag_filter = TEX_FILTER_USE_FETCH_CONST;
+		tex->min_filter = TEX_FILTER_USE_FETCH_CONST;
+		tex->mip_filter = TEX_FILTER_USE_FETCH_CONST;
+		tex->aniso_filter = ANISO_FILTER_USE_FETCH_CONST;
+		tex->arbitrary_filter = ARBITRARY_FILTER_USE_FETCH_CONST;
+		tex->vol_mag_filter = TEX_FILTER_USE_FETCH_CONST;
+		tex->vol_min_filter = TEX_FILTER_USE_FETCH_CONST;
+		tex->use_comp_lod = 1;
 	}
 
 	return 0;

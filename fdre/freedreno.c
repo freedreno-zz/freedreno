@@ -309,8 +309,8 @@ static void emit_shader_const(struct kgsl_ringbuffer *ring, uint32_t val,
 
 const char *solid_vertex_shader_asm =
 		"EXEC ADDR(0x3) CNT(0x1)                                 \n"
-		"   (S)FETCH:	VERTEX	R1.xyz1 = R0.x                   \n"
-		"        FMT_32_32_32_FLOAT UNSIGNED STRIDE(12) CONST(10)\n"
+		"   (S)FETCH:	VERTEX	R1.xyz1 = R0.x FMT_32_32_32_FLOAT\n"
+		"                       UNSIGNED STRIDE(12) CONST(26, 0) \n"
 		"ALLOC POSITION SIZE(0x0)                                \n"
 		"EXEC ADDR(0x4) CNT(0x1)                                 \n"
 		"      ALU:	MAXv	export62 = R1, R1	; gl_Position    \n"

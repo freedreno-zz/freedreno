@@ -62,8 +62,9 @@ struct ir_instruction {
 		/* FETCH specific: */
 		struct {
 			int opc;
-			int constant;
+			unsigned const_idx;
 			/* maybe vertex fetch specific: */
+			unsigned const_idx_sel;
 			enum SURFACEFORMAT fmt;
 			int sign;   /* T_SIGNED or T_UNSIGNED */
 			uint32_t stride;
