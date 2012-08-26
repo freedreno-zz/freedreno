@@ -58,8 +58,6 @@ static enum debug_t debug;
  * ALU instructions:
  */
 
-#define REG_MASK 0x3f	/* not really sure how many regs yet */
-
 static const char chan_names[] = {
 		'x', 'y', 'z', 'w',
 		/* these only apply to FETCH dst's: */
@@ -280,107 +278,10 @@ static int disasm_alu(uint32_t *dwords, int level, int sync, enum shader_t type)
 	return 0;
 }
 
+
 /*
- * VTX FETCH instruction format:
- * --- ----- ----------- ------
- *
- * Note: w/ sequence of VERTEX fetches, re-ordered into order of attributes
- * in memory, I get:
- *
- *    +------ bits 25..26
- *   /     +- dword[0]
- *  /     /
- * / /----+---\
- * 0 11 4 82000 40393a88 0000000c    FETCH:	VERTEX	R2.xyz1 = R0.xyx FMT_32_32_32_FLOAT SIGNED STRIDE(12) CONST(4)
- * 1 1b 4 81000 00263688 00000010    FETCH:	VERTEX	R1.xyzw = R0.zyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(4)
- * 2 15 4 83000 40263688 00000010    FETCH:	VERTEX	R3.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(4)
- * 0 11 5 84000 40263688 00000010    FETCH:	VERTEX	R4.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(5)
- * 1 13 5 86000 40263688 00000010    FETCH:	VERTEX	R6.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(5)
- * 2 15 5 85000 40263688 00000010    FETCH:	VERTEX	R5.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(5)
- * 0 11 6 88000 40263688 00000010    FETCH:	VERTEX	R8.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(6)
- * 1 13 6 87000 40263688 00000010    FETCH:	VERTEX	R7.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(6)
- * 2 15 6 8b000 40263688 00000010    FETCH:	VERTEX	R11.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(6)
- * 0 11 7 89000 40263688 00000010    FETCH:	VERTEX	R9.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(7)
- * 1 13 7 8c000 40263688 00000010    FETCH:	VERTEX	R12.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(7)
- * 2 15 7 8a000 40263688 00000010    FETCH:	VERTEX	R10.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(7)
- * 0 11 8 8e000 40263688 00000010    FETCH:	VERTEX	R14.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(8)
- * 1 13 8 8d000 40263688 00000010    FETCH:	VERTEX	R13.xyzw = R0.xyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(8)
- * 2 15 8 8f000 40263688 00000010    FETCH:	VERTEX	R15.xyzw = R0.yyx FMT_32_32_32_32_FLOAT SIGNED STRIDE(16) CONST(8)
- *
- * So maybe 25..26 is src reg swizzle, and somewhere in 20..23 is some sort of
- * offset?
- *
- * Note that GL_MAX_VERTEX_ATTRIBS is 16 (although possibly should be 15,
- * as I get an error binding attribute >14!)
- *
- *     dword0:   0..4?   -  fetch operation - 0x00
- *               5..10?  -  src register
- *                11     -  <UNKNOWN>
- *              12..17?  -  dest register
- *             18?..19   -  <UNKNOWN>
- *              20..23?  -  const
- *              24..25   -  <UNKNOWN>  (maybe part of const?)
- *              25..26   -  src swizzle (x)
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *              27..31   -  unknown
- *
- *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
- *                          low two bits of each determine position src channel,
- *                          high bit set 1 to mask
- *                12     -  signedness ('1' signed, '0' unsigned)
- *              13..15   -  <UNKNOWN>
- *              16..21?  -  type - see 'enum SURFACEFORMAT'
- *             22?..31   -  <UNKNOWN>
- *
- *     dword2:   0..15   -  stride (more than 0xff and data is copied/packed)
- *              16..31   -  <UNKNOWN>
- *
- * note: at least VERTEX fetch instructions get patched up at runtime
- * based on the size of attributes attached.. for example, if vec4, but
- * size given in glVertexAttribPointer() then the write mask and size
- * (stride?) is updated
- *
- * TEX FETCH instruction format:
- * --- ----- ----------- ------
- *
- *     dword0:   0..4?   -  fetch operation - 0x01
- *               5..10?  -  src register
- *                11     -  <UNKNOWN>
- *              12..17?  -  dest register
- *             18?..19   -  <UNKNOWN>
- *              20..23?  -  const
- *              24..25   -  <UNKNOWN>  (maybe part of const?)
- *              26..31   -  src swizzle (z/y/x)
- *                            00 - x
- *                            01 - y
- *                            10 - z
- *                            11 - w
- *
- *     dword1:   0..11   -  dest swizzle/mask, 3 bits per channel (w/z/y/x),
- *                          low two bits of each determine position src channel,
- *                          high bit set 1 to mask
- *                12     -  signedness ('1' signed, '0' unsigned)
- *              13..31   -  <UNKNOWN>
- *
- *     dword2:   0..31   -  <UNKNOWN>
+ * FETCH instructions:
  */
-
-enum fetch_opc {
-	VERTEX = 0x00,
-	SAMPLE = 0x01,
-};
-
-struct {
-	const char *name;
-} fetch_instructions[0x1f] = {
-#define INSTR(opc) [opc] = { #opc }
-		INSTR(VERTEX),
-		INSTR(SAMPLE),
-#undef INSTR
-};
 
 struct {
 	const char *name;
@@ -403,14 +304,134 @@ struct {
 #undef TYPE
 };
 
+static void print_fetch_dst(uint32_t dst_reg, uint32_t dst_swiz)
+{
+	int i;
+	printf("\tR%u.", dst_reg);
+	for (i = 0; i < 4; i++) {
+		printf("%c", chan_names[dst_swiz & 0x7]);
+		dst_swiz >>= 3;
+	}
+}
+
+static void print_fetch_vtx(instr_fetch_t *fetch)
+{
+	instr_fetch_vtx_t *vtx = &fetch->vtx;
+	print_fetch_dst(vtx->dst_reg, vtx->dst_swiz);
+	printf(" = R%u.", vtx->src_reg);
+	printf("%c", chan_names[vtx->src_swiz & 0x3]);
+	if (fetch_types[vtx->format].name) {
+		printf(" %s", fetch_types[vtx->format].name);
+	} else  {
+		printf(" TYPE(0x%x)", vtx->format);
+	}
+	printf(" %s", vtx->format_comp_all ? "SIGNED" : "UNSIGNED");
+	printf(" STRIDE(%u)", vtx->stride);
+	if (vtx->offset)
+		printf(" OFFSET(%u)", vtx->offset);
+	printf(" CONST(%u, %u)", vtx->const_index, vtx->const_index_sel);
+	if (vtx->pred_select)
+		printf(" COND(%u)", vtx->pred_condition);
+	if (0) {
+		// XXX
+		printf(" src_reg_am=%u", vtx->src_reg_am);
+		printf(" dst_reg_am=%u", vtx->dst_reg_am);
+		printf(" num_format_all=%u", vtx->num_format_all);
+		printf(" signed_rf_mode_all=%u", vtx->signed_rf_mode_all);
+		printf(" exp_adjust_all=%u", vtx->exp_adjust_all);
+	}
+}
+
+static void print_fetch_tex(instr_fetch_t *fetch)
+{
+	static const char *filter[] = {
+			[TEX_FILTER_POINT] = "POINT",
+			[TEX_FILTER_LINEAR] = "LINEAR",
+			[TEX_FILTER_BASEMAP] = "BASEMAP",
+	};
+	static const char *aniso_filter[] = {
+			[ANISO_FILTER_DISABLED] = "DISABLED",
+			[ANISO_FILTER_MAX_1_1] = "MAX_1_1",
+			[ANISO_FILTER_MAX_2_1] = "MAX_2_1",
+			[ANISO_FILTER_MAX_4_1] = "MAX_4_1",
+			[ANISO_FILTER_MAX_8_1] = "MAX_8_1",
+			[ANISO_FILTER_MAX_16_1] = "MAX_16_1",
+	};
+	static const char *arbitrary_filter[] = {
+			[ARBITRARY_FILTER_2X4_SYM] = "2x4_SYM",
+			[ARBITRARY_FILTER_2X4_ASYM] = "2x4_ASYM",
+			[ARBITRARY_FILTER_4X2_SYM] = "4x2_SYM",
+			[ARBITRARY_FILTER_4X2_ASYM] = "4x2_ASYM",
+			[ARBITRARY_FILTER_4X4_SYM] = "4x4_SYM",
+			[ARBITRARY_FILTER_4X4_ASYM] = "4x4_ASYM",
+	};
+	static const char *sample_loc[] = {
+			[SAMPLE_CENTROID] = "CENTROID",
+			[SAMPLE_CENTER] = "CENTER",
+	};
+	instr_fetch_tex_t *tex = &fetch->tex;
+	uint32_t src_swiz = tex->src_swiz;
+	int i;
+
+	print_fetch_dst(tex->dst_reg, tex->dst_swiz);
+	printf(" = R%u.", tex->src_reg);
+	for (i = 0; i < 3; i++) {
+		printf("%c", chan_names[src_swiz & 0x3]);
+		src_swiz >>= 2;
+	}
+	printf(" CONST(%u)", tex->const_idx);
+	if (tex->fetch_valid_only)
+		printf(" VALID_ONLY");
+	if (tex->tx_coord_denorm)
+		printf(" DENORM");
+	if (tex->mag_filter != TEX_FILTER_USE_FETCH_CONST)
+		printf(" MAG(%s)", filter[tex->mag_filter]);
+	if (tex->min_filter != TEX_FILTER_USE_FETCH_CONST)
+		printf(" MIN(%s)", filter[tex->min_filter]);
+	if (tex->mip_filter != TEX_FILTER_USE_FETCH_CONST)
+		printf(" MIP(%s)", filter[tex->mip_filter]);
+	if (tex->aniso_filter != ANISO_FILTER_USE_FETCH_CONST)
+		printf(" ANISO(%s)", aniso_filter[tex->aniso_filter]);
+	if (tex->arbitrary_filter != ARBITRARY_FILTER_USE_FETCH_CONST)
+		printf(" ARBITRARY(%s)", arbitrary_filter[tex->arbitrary_filter]);
+	if (tex->vol_mag_filter != TEX_FILTER_USE_FETCH_CONST)
+		printf(" VOL_MAG(%s)", filter[tex->vol_mag_filter]);
+	if (tex->vol_min_filter != TEX_FILTER_USE_FETCH_CONST)
+		printf(" VOL_MIN(%s)", filter[tex->vol_min_filter]);
+	if (!tex->use_comp_lod) {
+		printf(" LOD(%u)", tex->use_comp_lod);
+		printf(" LOD_BIAS(%u)", tex->lod_bias);
+	}
+	if (tex->pred_select)
+		printf(" COND(%u)", tex->pred_condition);
+	if (tex->use_reg_gradients)
+		printf(" USE_REG_GRADIENTS");
+	printf(" LOCATION(%s)", sample_loc[tex->sample_location]);
+	if (tex->offset_x || tex->offset_y || tex->offset_z)
+		printf(" OFFSET(%u,%u,%u)", tex->offset_x, tex->offset_y, tex->offset_z);
+}
+
+struct {
+	const char *name;
+	void (*fxn)(instr_fetch_t *cf);
+} fetch_instructions[] = {
+#define INSTR(opc, name, fxn) [opc] = { name, fxn }
+		INSTR(VTX_FETCH, "VERTEX", print_fetch_vtx),
+		INSTR(TEX_FETCH, "SAMPLE", print_fetch_tex),
+		INSTR(TEX_GET_BORDER_COLOR_FRAC, "?", print_fetch_tex),
+		INSTR(TEX_GET_COMP_TEX_LOD, "?", print_fetch_tex),
+		INSTR(TEX_GET_GRADIENTS, "?", print_fetch_tex),
+		INSTR(TEX_GET_WEIGHTS, "?", print_fetch_tex),
+		INSTR(TEX_SET_TEX_LOD, "?", print_fetch_tex),
+		INSTR(TEX_SET_GRADIENTS_H, "?", print_fetch_tex),
+		INSTR(TEX_SET_GRADIENTS_V, "?", print_fetch_tex),
+		INSTR(TEX_RESERVED_4, "?", print_fetch_tex),
+#undef INSTR
+};
+
 static int disasm_fetch(uint32_t *dwords, int level, int sync)
 {
-	uint32_t src_const = (dwords[0] >> 20) & 0xf;
-	uint32_t src_reg   = (dwords[0] >> 5) & REG_MASK;
-	uint32_t dst_reg   = (dwords[0] >> 12) & REG_MASK;
-	uint32_t fetch_opc =  dwords[0] & 0x1f;
-	uint32_t dst_swiz  =  dwords[1] & 0xfff;
-	int i;
+	instr_fetch_t *fetch = (instr_fetch_t *)dwords;
 
 	printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
@@ -418,42 +439,9 @@ static int disasm_fetch(uint32_t *dwords, int level, int sync)
 	}
 
 	printf("   %sFETCH:\t", sync ? "(S)" : "   ");
-	if (fetch_instructions[fetch_opc].name) {
-		printf(fetch_instructions[fetch_opc].name);
-	} else {
-		printf("OP(%u)", fetch_opc);
-	}
-
-	printf("\tR%u.", dst_reg);
-	for (i = 0; i < 4; i++) {
-		printf("%c", chan_names[dst_swiz & 0x7]);
-		dst_swiz >>= 3;
-	}
-
-	if (fetch_opc == VERTEX) {
-		uint32_t src_swiz  = (dwords[0] >> 25) & 0x3;
-		uint32_t sign      = (dwords[1] >> 12) & 0x1;
-		uint32_t type      = (dwords[1] >> 16) & 0x3f;
-		uint32_t stride    =  dwords[2] & 0xff;
-		printf(" = R%u.", src_reg);
-		printf("%c", chan_names[src_swiz & 0x3]);
-		if (fetch_types[type].name) {
-			printf(" %s", fetch_types[type].name);
-		} else  {
-			printf(" TYPE(0x%x)", type);
-		}
-		printf(" %s", sign ? "SIGNED" : "UNSIGNED");
-		printf(" STRIDE(%d)", stride);
-	} else {
-		uint32_t src_swiz  = (dwords[0] >> 26) & 0x3f;
-		printf(" = R%u.", src_reg);
-		for (i = 0; i < 3; i++) {
-			printf("%c", chan_names[src_swiz & 0x3]);
-			src_swiz >>= 2;
-		}
-	}
-
-	printf(" CONST(%u)\n", src_const);
+	printf(fetch_instructions[fetch->opc].name);
+	fetch_instructions[fetch->opc].fxn(fetch);
+	printf("\n");
 
 	return 0;
 }
