@@ -65,7 +65,7 @@ AC_DEFUN([LIBDRM_CC_TRY_FLAG], [
 	AC_MSG_RESULT([$libdrm_cc_flag])
 ])
 
-MAYBE_WARN="-Wall -Wextra \
+MAYBE_WARN="-Wall -Wextra -Wno-packed-bitfield-compat \
 -Wsign-compare -Werror-implicit-function-declaration \
 -Wpointer-arith -Wwrite-strings -Wstrict-prototypes \
 -Wnested-externs \

@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 		"                                      STRIDE(12) CONST(4)        \n"
 		"   (S)FETCH:   VERTEX   R3.xyzw = R0.z FMT_32_32_32_FLOAT SIGNED \n"
 		"                                      STRIDE(12) CONST(4)        \n"
-		"ALLOC COORD SIZE(0x0)                                            \n"
+		"ALLOC POSITION SIZE(0x0)                                         \n"
 		"EXEC                                                             \n"
 		"      ALU:   MAXv   export62 = R1, R1   ; gl_Position            \n"
 		"ALLOC PARAM/PIXEL SIZE(0x1)                                      \n"

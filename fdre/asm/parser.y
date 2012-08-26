@@ -94,7 +94,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_EXEC
 %token <tok> T_EXEC_END
 %token <tok> T_ALLOC
-%token <tok> T_COORD
+%token <tok> T_POSITION
 %token <tok> T_PARAM_PIXEL
 %token <tok> T_ADDR
 %token <tok> T_CNT
@@ -284,7 +284,7 @@ cf_alloc:          T_ALLOC cf_alloc_type T_SIZE '(' number ')' {
                        cf->alloc.size = $5;
 }
 
-cf_alloc_type:     T_COORD
+cf_alloc_type:     T_POSITION
 |                  T_PARAM_PIXEL
 
 cf_exec:           T_EXEC cf_exec_addr_cnt instrs

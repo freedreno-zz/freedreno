@@ -32,9 +32,8 @@
 #include "instr.h"
 
 #define REG_MASK 0x3f	/* not really sure how many regs yet */
-#define ADDR_MASK 0xfff
 
-static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords);
+static int cf_emit(struct ir_cf *cf, instr_cf_t *instr);
 
 static int instr_emit(struct ir_instruction *instr, uint32_t *dwords,
 		uint32_t idx, struct ir_shader_info *info);
@@ -144,7 +143,13 @@ int ir_shader_assemble(struct ir_shader *shader,
 
 	/* second pass, emit CF program in pairs: */
 	for (i = 0; i < shader->cfs_count; i += 2) {
-		ret = cf_emit(shader->cfs[i], shader->cfs[i+1], ptr);
+		instr_cf_t *cfs = (instr_cf_t *)ptr;
+		ret = cf_emit(shader->cfs[i], &cfs[0]);
+		if (ret) {
+			ERROR_MSG("CF emit failed: %d\n", ret);
+			return ret;
+		}
+		ret = cf_emit(shader->cfs[i+1], &cfs[1]);
 		if (ret) {
 			ERROR_MSG("CF emit failed: %d\n", ret);
 			return ret;
@@ -254,75 +259,61 @@ static uint32_t cf_op(struct ir_cf *cf)
 	switch (cf->cf_type) {
 	default:
 		ERROR_MSG("invalid CF: %d\n", cf->cf_type);
-	case T_NOP:         return 0x0;
-	case T_EXEC:        return 0x1;
-	case T_EXEC_END:    return 0x2;
-	case T_ALLOC:       return 0xc;
+#define OPC(x) case T_##x: return x
+		OPC(NOP);
+		OPC(EXEC);
+		OPC(EXEC_END);
+//		OPC(COND_EXEC);
+//		OPC(COND_EXEC_END);
+//		OPC(COND_PRED_EXEC);
+//		OPC(COND_PRED_EXEC_END);
+//		OPC(LOOP_START);
+//		OPC(LOOP_END);
+//		OPC(COND_CALL);
+//		OPC(RETURN);
+//		OPC(COND_JMP);
+		OPC(ALLOC);
+//		OPC(COND_EXEC_PRED_CLEAN);
+//		OPC(COND_EXEC_PRED_CLEAN_END);
+//		OPC(MARK_VS_FETCH_DONE);
+#undef OPC
 	}
 }
 
 /*
- * CF instruction format:
- * -- ----------- ------
- *
- *     dword0:   0..11   -  addr/size 1
- *              12..15   -  count 1
- *              16..31   -  sequence 1.. 2 bits per instruction in the EXEC
- *                          clause, the low bit seems to control FETCH vs
- *                          ALU instruction type, the high bit seems to be
- *                          (S) modifier on instruction (which might make
- *                          the name SERIALIZE() in optimize-for-adreno.pdf
- *                          make sense.. although I don't quite understand
- *                          the meaning yet)
- *
- *     dword1:   0..7    -  <UNKNOWN>
- *               8..15?  -  op 1
- *              16..27   -  addr/size 2
- *              28..31   -  count 2
- *
- *     dword2:   0..15   -  sequence 2
- *              16..23   -  <UNKNOWN>
- *              24..31   -  op 2
+ * CF instructions:
  */
 
-static int cf_emit(struct ir_cf *cf1, struct ir_cf *cf2, uint32_t *dwords)
+static int cf_emit(struct ir_cf *cf, instr_cf_t *instr)
 {
-	dwords[0] = dwords[1] = dwords[2] = 0;
+	memset(instr, 0, sizeof(*instr));
 
-	dwords[1] |= cf_op(cf1) << 12;
-	dwords[2] |= cf_op(cf2) << 28;
+	instr->opc = cf_op(cf);
 
-	switch (cf1->cf_type) {
+	switch (cf->cf_type) {
 	case T_EXEC:
 	case T_EXEC_END:
-		assert(cf1->exec.addr <= ADDR_MASK);
-		assert(cf1->exec.cnt <= 0xf);
-		assert(cf1->exec.sequence <= 0xffff);
-		dwords[0] |= cf1->exec.addr;
-		dwords[0] |= cf1->exec.cnt << 12;
-		dwords[0] |= cf1->exec.sequence << 16;
+		assert(cf->exec.addr <= 0x1f);
+		assert(cf->exec.cnt <= 0x7);
+		assert(cf->exec.sequence <= 0xfff);
+		instr->exec.address = cf->exec.addr;
+		instr->exec.count = cf->exec.cnt;
+		instr->exec.serialize = cf->exec.sequence;
 		break;
 	case T_ALLOC:
-		assert(cf1->alloc.size <= ADDR_MASK);
-		dwords[0] |= cf1->alloc.size;
-		dwords[1] |= ((cf1->alloc.type == T_COORD) ? 0x2 : 0x4) << 8;
-		break;
-	}
-
-	switch (cf2->cf_type) {
-	case T_EXEC:
-	case T_EXEC_END:
-		assert(cf2->exec.addr <= ADDR_MASK);
-		assert(cf2->exec.cnt <= 0xf);
-		assert(cf2->exec.sequence <= 0xffff);
-		dwords[1] |= cf2->exec.addr << 16;
-		dwords[1] |= cf2->exec.cnt << 28;
-		dwords[2] |= cf2->exec.sequence << 0;
-		break;
-	case T_ALLOC:
-		assert(cf2->alloc.size <= ADDR_MASK);
-		dwords[1] |= cf2->alloc.size << 16;
-		dwords[2] |= ((cf2->alloc.type == T_COORD) ? 0x2 : 0x4) << 24;
+		assert(cf->alloc.size <= 0xf);
+		instr->alloc.size = cf->alloc.size;
+		switch (cf->alloc.type) {
+		case T_POSITION:
+			instr->alloc.buffer_select = SQ_POSITION;
+			break;
+		case T_PARAM_PIXEL:
+			instr->alloc.buffer_select = SQ_PARAMETER_PIXEL;
+			break;
+		default:
+			ERROR_MSG("invalid alloc type: %d", cf->alloc.type);
+			return -1;
+		}
 		break;
 	}
 
@@ -388,6 +379,7 @@ static uint32_t instr_vector_opc(struct ir_instruction *instr)
 	OPC(KILLNEv);
 	OPC(DSTv);
 	OPC(MOVAv);
+#undef OPC
 	}
 }
 
@@ -396,6 +388,7 @@ static uint32_t instr_scalar_opc(struct ir_instruction *instr)
 	switch (instr->alu.scalar_opc) {
 	default:
 		ERROR_MSG("invalid scalar: %d\n", instr->alu.scalar_opc);
+#define OPC(x) case T_##x: return x
 	OPC(ADDs);
 	OPC(ADD_PREVs);
 	OPC(MULs);

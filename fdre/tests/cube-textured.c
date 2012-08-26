@@ -191,7 +191,7 @@ int main(int argc, char **argv)
 		"   (S)ALU:    MULv    R0 = R2.wwww, C7                                            \n"
 		"      ALU:    MULADDv R0 = R0, R2.zzzz, C6                                        \n"
 		"      ALU:    MULADDv R0 = R0, R2.yyyy, C5                                        \n"
-		"ALLOC COORD SIZE(0x0)                                                             \n"
+		"ALLOC POSITION SIZE(0x0)                                                          \n"
 		"EXEC                                                                              \n"
 		"      ALU:    MULADDv export62 = R0, R2.xxxx, C4    ; gl_Position                 \n"
 		"      ALU:    MULv    R0 = R2.wwww, C3                                            \n"

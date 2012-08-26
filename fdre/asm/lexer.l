@@ -50,7 +50,7 @@ extern YYSTYPE asm_yylval;
 "EXEC"                            return TOKEN(T_EXEC);
 "EXEC_END"                        return TOKEN(T_EXEC_END);
 "ALLOC"                           return TOKEN(T_ALLOC);
-"COORD"                           return TOKEN(T_COORD);
+"POSITION"                        return TOKEN(T_POSITION);
 "PARAM/PIXEL"                     return TOKEN(T_PARAM_PIXEL);
 "ADDR"                            return TOKEN(T_ADDR);
 "CNT"                             return TOKEN(T_CNT);

@@ -183,7 +183,7 @@ int main(int argc, char **argv)
 		"   (S)ALU:    MULv    R0 = R2.wwww, C7           ; -> modelviewprojectionMatrix * in_position                  \n"
 		"      ALU:    MULADDv R0 = R0, R2.zzzz, C6       ; -> modelviewprojectionMatrix * in_position                  \n"
 		"      ALU:    MULADDv R0 = R0, R2.yyyy, C5       ; -> modelviewprojectionMatrix * in_position                  \n"
-		"ALLOC COORD SIZE(0x0)                                                                                          \n"
+		"ALLOC POSITION SIZE(0x0)                                                                                       \n"
 		"EXEC                                                                                                           \n"
 		"      ALU:    MULADDv export62 = R0, R2.xxxx, C4 ; gl_Position = modelviewprojectionMatrix * in_position       \n"
 		"      ALU:    MULv    R0 = R2.wwww, C3           ; -> modelviewMatrix * in_position                            \n"

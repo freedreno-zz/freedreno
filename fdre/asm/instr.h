@@ -153,4 +153,115 @@ typedef struct PACKED {
 } instr_alu_t;
 
 
+/*
+ * CF instruction format:
+ * -- ----------- ------
+ *
+ *     dword0:   0..11   -  addr/size 1
+ *              12..15   -  count 1
+ *              16..31   -  sequence 1.. 2 bits per instruction in the EXEC
+ *                          clause, the low bit seems to control FETCH vs
+ *                          ALU instruction type, the high bit seems to be
+ *                          (S) modifier on instruction (which might make
+ *                          the name SERIALIZE() in optimize-for-adreno.pdf
+ *                          make sense.. although I don't quite understand
+ *                          the meaning yet)
+ *
+ *     dword1:   0..7    -  <UNKNOWN>
+ *               8..15?  -  op 1
+ *              16..27   -  addr/size 2
+ *              28..31   -  count 2
+ *
+ *     dword2:   0..15   -  sequence 2
+ *              16..23   -  <UNKNOWN>
+ *              24..31   -  op 2
+ */
+
+
+typedef enum {
+	NOP = 0,
+	EXEC = 1,
+	EXEC_END = 2,
+	COND_EXEC = 3,
+	COND_EXEC_END = 4,
+	COND_PRED_EXEC = 5,
+	COND_PRED_EXEC_END = 6,
+	LOOP_START = 7,
+	LOOP_END = 8,
+	COND_CALL = 9,
+	RETURN = 10,
+	COND_JMP = 11,
+	ALLOC = 12,
+	COND_EXEC_PRED_CLEAN = 13,
+	COND_EXEC_PRED_CLEAN_END = 14,
+	MARK_VS_FETCH_DONE = 15,
+} instr_cf_opc_t;
+
+typedef enum {
+	RELATIVE_ADDR = 0,
+	ABSOLUTE_ADDR = 1,
+} instr_addr_mode_t;
+
+typedef enum {
+	SQ_NO_ALLOC = 0,
+	SQ_POSITION = 1,
+	SQ_PARAMETER_PIXEL = 2,
+	SQ_MEMORY = 3,
+} instr_alloc_type_t;
+
+typedef struct PACKED {
+	uint16_t            address                  : 9;
+	uint8_t             reserved0                : 3;
+	uint8_t             count                    : 3;
+	uint8_t             yeild                    : 1;
+	uint16_t            serialize                : 12;
+	uint8_t             vc                       : 6;   /* vertex cache? */
+	uint8_t             bool_addr                : 8;
+	uint8_t             condition                : 1;
+	instr_addr_mode_t   address_mode             : 1;
+	instr_cf_opc_t      opc                      : 4;
+} instr_cf_exec_t;
+
+typedef struct PACKED {
+	uint16_t            address                  : 10;
+	uint8_t             reserved0                : 6;
+	uint8_t             loop_id                  : 5;
+	uint32_t            reserved1                : 22;
+	instr_addr_mode_t   address_mode             : 1;
+	instr_cf_opc_t      opc                      : 4;
+} instr_cf_loop_t;
+
+typedef struct PACKED {
+	uint16_t            address                  : 10;
+	uint8_t             reserved0                : 3;
+	uint8_t             force_call               : 1;
+	uint8_t             predicated_jmp           : 1;
+	uint32_t            reserved1                : 18;
+	uint8_t             direction                : 1;
+	uint8_t             bool_addr                : 8;
+	uint8_t             condition                : 1;
+	instr_addr_mode_t   address_mode             : 1;
+	instr_cf_opc_t      opc                      : 4;
+} instr_cf_jmp_call_t;
+
+typedef struct PACKED {
+	uint8_t             size                     : 4;
+	uint64_t            reserved0                : 36;
+	uint8_t             no_serial                : 1;
+	instr_alloc_type_t  buffer_select            : 2;
+	uint8_t             alloc_mode               : 1;
+	instr_cf_opc_t      opc                      : 4;
+} instr_cf_alloc_t;
+
+typedef union PACKED {
+	instr_cf_exec_t     exec;
+	instr_cf_loop_t     loop;
+	instr_cf_jmp_call_t jmp_call;
+	instr_cf_alloc_t    alloc;
+	struct PACKED {
+		uint64_t        dummy                    : 44;
+		instr_cf_opc_t  opc                      : 4;
+	};
+} instr_cf_t;
+
 #endif /* INSTR_H_ */
