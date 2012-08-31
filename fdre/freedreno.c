@@ -1662,7 +1662,7 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x00007fff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2307));
+	OUT_RING(ring, CP_REG(REG_SQ_VS_CONST));
 	OUT_RING(ring, 0x00100020);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -1722,7 +1722,7 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x00000000);	/* SQ_WRAPPING_1 */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2281));
+	OUT_RING(ring, CP_REG(REG_PA_SU_POINT_MINMAX));
 	OUT_RING(ring, 0x04000008);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -1818,18 +1818,18 @@ void fd_make_current(struct fd_state *state,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_RB_STENCILREFMASK_BF));
 	OUT_RING(ring, 0x00000000);		/* RB_STENCILREFMASK_BF */
-	OUT_RING(ring, 0x00000000);		/* REG_210d */
+	OUT_RING(ring, 0x00000000);		/* REG_RB_STENCILREFMASK */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_RB_BLEND_COLOR));
-	OUT_RING(ring, 0x00000000);		/* RB_BLEND_COLOR */
-	OUT_RING(ring, 0x00000000);		/* REG_2106 */
-	OUT_RING(ring, 0x00000000);		/* REG_2107 */
-	OUT_RING(ring, 0x000000ff);		/* REG_2108 */
+	OUT_RING(ring, CP_REG(REG_RB_BLEND_RED));
+	OUT_RING(ring, 0x00000000);		/* REG_RB_BLEND_RED */
+	OUT_RING(ring, 0x00000000);		/* REG_RB_BLEND_GREEN */
+	OUT_RING(ring, 0x00000000);		/* REG_RB_BLEND_BLUE */
+	OUT_RING(ring, 0x000000ff);		/* REG_RB_BLEND_ALPHA */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));

@@ -44,19 +44,22 @@
 #define REG_PA_CL_GB_HORZ_CLIP_ADJ	0x2305
 #define REG_PA_CL_GB_HORZ_DISC_ADJ	0x2306
 
-#define REG_RB_BLEND_COLOR			0x2105
+#define REG_RB_BLEND_RED			0x2105
+#define REG_RB_BLEND_GREEN			0x2106
+#define REG_RB_BLEND_BLUE			0x2107
+#define REG_RB_BLEND_ALPHA			0x2108
 #define REG_RB_ALPHA_REF			0x210e
 #define REG_RB_BLEND_CONTROL		0x2201
 
 #define REG_SQ_CONTEXT_MISC		0x2181
+#define REG_SQ_VS_CONST			0x2307
+#define REG_PA_SU_POINT_MINMAX		0x2281
+#define REG_RB_STENCILREFMASK		0x210d
 
 /* unnamed registers: */
-#define REG_2307		0x2307
-#define REG_2281		0x2281
 #define REG_0c02		0x0c02
 #define REG_0c04		0x0c04
 #define REG_0c06		0x0c06
-#define REG_210d		0x210d
 #define REG_2010		0x2010
 
 /*
