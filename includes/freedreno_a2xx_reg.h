@@ -34,7 +34,7 @@
 #define REG_PA_CL_VPORT_YOFFSET	0x2112
 #define REG_RB_COPY_DEST_BASE		0x2319
 #define REG_RB_COPY_DEST_PITCH		0x231a
-#define REG_RB_COPY_DEST_FORMAT	0x231b
+#define REG_RB_COPY_DEST_INFO		0x231b
 #define REG_RB_COPY_DEST_OFFSET	0x231c  /* ?? */
 #define REG_RB_COLOR_INFO			0x2001
 
@@ -226,6 +226,49 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 #define RB_DEPTH_CONTROL_FUNC(depth_func) \
 	((((depth_func) - GL_NEVER) << 4) & RB_DEPTHCONTROL_FUNC_MASK)
 
+/*
+ * Bits for RB_COPY_DEST_INFO:
+ */
+
+enum rb_surface_endian {
+	ENDIAN_NONE = 0,
+	ENDIAN_8IN16 = 1,
+	ENDIAN_8IN32 = 2,
+	ENDIAN_16IN32 = 3,
+	ENDIAN_8IN64 = 4,
+	ENDIAN_8IN128 = 5,
+};
+static inline uint32_t RB_COPY_DEST_INFO_DEST_ENDIAN(enum rb_surface_endian val)
+{
+	return (val & 0x7) << 0;
+}
+#define RB_COPY_DEST_INFO_LINEAR       0x00000008
+static inline uint32_t RB_COPY_DEST_INFO_FORMAT(enum COLORFORMATX val)
+{
+	return val << 4;
+}
+#define RB_COPY_DEST_INFO_SWAP(val)    (((val) & 0x3) << 8) /* maybe VGT_DMA_SWAP_MODE? */
+enum rb_dither_mode {
+	DITHER_DISABLE = 0,
+	DITHER_ALWAYS = 1,
+	DITHER_IF_ALPHA_OFF = 2,
+};
+static inline uint32_t RB_COPY_DEST_INFO_DITHER_MODE(enum rb_dither_mode val)
+{
+	return val << 10;
+}
+enum rb_dither_type {
+	DITHER_PIXEL = 0,
+	DITHER_SUBPIXEL = 1,
+};
+static inline uint32_t RB_COPY_DEST_INFO_DITHER_TYPE(enum rb_dither_type val)
+{
+	return val << 12;
+}
+#define RB_COPY_DEST_INFO_WRITE_RED    0x00004000
+#define RB_COPY_DEST_INFO_WRITE_GREEN  0x00008000
+#define RB_COPY_DEST_INFO_WRITE_BLUE   0x00010000
+#define RB_COPY_DEST_INFO_WRITE_ALPHA  0x00020000
 
 /*
  * Bits for RB_COPY_DEST_OFFSET:

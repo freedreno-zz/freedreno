@@ -685,7 +685,12 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
 	OUT_RING(ring, surface->bo->gpuaddr);   /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);    /* RB_COPY_DEST_PITCH */
-	OUT_RING(ring, 0x0003c108 | (surface->color << 4)); /* RB_COPY_DEST_FORMAT */ // XXX
+	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(surface->color) |
+			RB_COPY_DEST_INFO_LINEAR |      /* RB_COPY_DEST_INFO */
+			RB_COPY_DEST_INFO_WRITE_RED |
+			RB_COPY_DEST_INFO_WRITE_GREEN |
+			RB_COPY_DEST_INFO_WRITE_BLUE |
+			RB_COPY_DEST_INFO_WRITE_ALPHA);
 	OUT_RING(ring, RB_COPY_DEST_OFFSET_X(xoff) | /* RB_COPY_DEST_OFFSET */
 			RB_COPY_DEST_OFFSET_Y(yoff));
 
@@ -1713,8 +1718,12 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0xffffffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COPY_DEST_FORMAT));
-	OUT_RING(ring, 0x0003c000 | (COLORX_8_8_8_8 << 4));
+	OUT_RING(ring, CP_REG(REG_RB_COPY_DEST_INFO));
+	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(COLORX_8_8_8_8) |
+			RB_COPY_DEST_INFO_WRITE_RED |
+			RB_COPY_DEST_INFO_WRITE_GREEN |
+			RB_COPY_DEST_INFO_WRITE_BLUE |
+			RB_COPY_DEST_INFO_WRITE_ALPHA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
 	OUT_RING(ring, CP_REG(REG_SQ_WRAPPING_0));
