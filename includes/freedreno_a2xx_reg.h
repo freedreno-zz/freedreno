@@ -67,32 +67,44 @@
  */
 
 /* see VGT_PRIMITIVE_TYPE.PRIM_TYPE? */
-#define PC_DI_PT_POINTLIST 1
-#define PC_DI_PT_LINELIST  2
-#define PC_DI_PT_LINESTRIP 3
-#define PC_DI_PT_TRILIST   4
-#define PC_DI_PT_TRIFAN    5
-#define PC_DI_PT_TRISTRIP  6
-#define PC_DI_PT_RECTLIST  8
+enum pc_di_primtype {
+	POINTLIST = 1,
+	LINELIST  = 2,
+	LINESTRIP = 3,
+	TRILIST   = 4,
+	TRIFAN    = 5,
+	TRISTRIP  = 6,
+	RECTLIST  = 8,
+};
 
 /* see VGT:VGT_DRAW_INITIATOR.SOURCE_SELECT? */
-#define PC_DI_SRC_SEL_IMMEDIATE 1
-#define PC_DI_SRC_SEL_AUTO_INDEX 2
+enum pc_di_src_sel {
+	IMMEDIATE  = 1,
+	AUTO_INDEX = 2,
+};
 
 /* see VGT_DMA_INDEX_TYPE.INDEX_TYPE? */
-#define PC_DI_INDEX_SIZE_IGN    0
-#define PC_DI_INDEX_SIZE_16_BIT 0
-#define PC_DI_INDEX_SIZE_32_BIT 1
+enum pc_di_index_size {
+	INDEX_SIZE_IGN    = 0,
+	INDEX_SIZE_16_BIT = 0,
+	INDEX_SIZE_32_BIT = 1,
+};
 
-#define PC_DI_IGNORE_VISIBILITY 0
+enum pc_di_vis_cull_mode {
+	IGNORE_VISIBILITY = 0,
+};
 
-#define DRAW(prim_type, source_select, index_size, vis_cull_mode) \
-	(((PC_DI_PT_         ## prim_type)       <<  0) | \
-	 ((PC_DI_SRC_SEL_    ## source_select)   <<  6) | \
-	 ((PC_DI_INDEX_SIZE_ ## index_size & 1)  << 11) | \
-	 ((PC_DI_INDEX_SIZE_ ## index_size >> 1) << 13) | \
-	 ((PC_DI_            ## vis_cull_mode)   <<  9) | \
-	 (1                                      << 14))
+static inline uint32_t DRAW(enum pc_di_primtype prim_type,
+		enum pc_di_src_sel source_select, enum pc_di_index_size index_size,
+		enum pc_di_vis_cull_mode vis_cull_mode)
+{
+	return (prim_type         << 0) |
+			(source_select     << 6) |
+			((index_size & 1)  << 11) |
+			((index_size >> 1) << 13) |
+			(vis_cull_mode     << 9) |
+			(1                 << 14);
+}
 
 /*
  * Bits for PA_SU_SC_MODE_CNTL:
@@ -105,14 +117,19 @@
 #define PA_SU_SC_POLY_OFFSET_BACK      0x00001000
 #define PA_SU_SC_PROVOKING_VTX_LAST    0x00080000
 #define PA_SU_SC_VTX_WINDOW_OFF_ENABLE 0x00010000
-
-#define PA_SU_SC_DRAW_POINTS       0
-#define PA_SU_SC_DRAW_LINES        1
-#define PA_SU_SC_DRAW_TRIANGLES    2
-#define PA_SU_SC_POLYMODE_FRONT_PTYPE(x) \
-	((PA_SU_SC_DRAW_##x << 5))
-#define PA_SU_SC_POLYMODE_BACK_PTYPE(x) \
-	((PA_SU_SC_DRAW_##x << 8))
+enum pa_su_sc_draw {
+	POINTS       = 0,
+	LINES        = 1,
+	TRIANGLES    = 2,
+};
+static inline uint32_t PA_SU_SC_POLYMODE_FRONT_PTYPE(enum pa_su_sc_draw val)
+{
+	return val << 5;
+}
+static inline uint32_t PA_SU_SC_POLYMODE_BACK_PTYPE(enum pa_su_sc_draw val)
+{
+	return val << 8;
+}
 
 /*
  * Bits for PA_SC_WINDOW_OFFSET:

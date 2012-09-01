@@ -694,7 +694,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -805,7 +805,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -1366,13 +1366,13 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, 0x00000000);		/* viz query info. */
 	switch (mode) {
 	case GL_TRIANGLE_STRIP:
-		OUT_RING(ring, DRAW(TRISTRIP, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(TRISTRIP, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 		break;
 	case GL_TRIANGLE_FAN:
-		OUT_RING(ring, DRAW(TRIFAN, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(TRIFAN, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 		break;
 	case GL_TRIANGLES:
-		OUT_RING(ring, DRAW(TRILIST, AUTO_INDEX, IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(TRILIST, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 		break;
 	default:
 		ERROR_MSG("unsupported mode: %d", mode);
