@@ -135,8 +135,35 @@ static inline uint32_t PA_SU_SC_POLYMODE_BACK_PTYPE(enum pa_su_sc_draw val)
  * Bits for PA_SC_WINDOW_OFFSET:
  * (seems to be same as r600)
  */
-#define PA_SC_WINDOW_OFFSET_X(val)    ((val) & 0x7fff)
-#define PA_SC_WINDOW_OFFSET_Y(val)    (((val) & 0x7fff) << 16)
+#define PA_SC_WINDOW_OFFSET_X(val)     ((val) & 0x7fff)
+#define PA_SC_WINDOW_OFFSET_Y(val)     (((val) & 0x7fff) << 16)
+
+/*
+ * Bits for SQ_PROGRAM_CNTL
+ */
+#define SQ_PROGRAM_CNTL_VS_REGS(val)   ((val) & 0xff)
+#define SQ_PROGRAM_CNTL_PS_REGS(val)   (((val) & 0xff) << 8)
+#define SQ_PROGRAM_CNTL_VS_RESOURCE    0x00010000
+#define SQ_PROGRAM_CNTL_PS_RESOURCE    0x00020000
+#define SQ_PROGRAM_CNTL_PARAM_GEN      0x00040000
+#define SQ_PROGRAM_CNTL_GEN_INDEX_PIX  0x00080000
+#define SQ_PROGRAM_CNTL_VS_EXPORT_COUNT(val) (((val) & 0xf) << 20)
+#define SQ_PROGRAM_CNTL_VS_EXPORT_MODE(val)  (((val) & 0x7) << 24)
+enum sq_ps_vtx_mode {
+	POSITION_1_VECTOR              = 0,
+	POSITION_2_VECTORS_UNUSED      = 1,
+	POSITION_2_VECTORS_SPRITE      = 2,
+	POSITION_2_VECTORS_EDGE        = 3,
+	POSITION_2_VECTORS_KILL        = 4,
+	POSITION_2_VECTORS_SPRITE_KILL = 5,
+	POSITION_2_VECTORS_EDGE_KILL   = 6,
+	MULTIPASS                      = 7,
+};
+static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
+{
+	return val << 27;
+}
+#define SQ_PROGRAM_CNTL_GEN_INDEX_VTX  0x80000000
 
 /*
  * Bits for tex sampler:
