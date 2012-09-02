@@ -108,18 +108,18 @@ static const char *format_name[] = {
 };
 
 static const char *vgt_prim_types[32] = {
-		NAME(PC_DI_PT_POINTLIST),
-		NAME(PC_DI_PT_LINELIST),
-		NAME(PC_DI_PT_LINESTRIP),
-		NAME(PC_DI_PT_TRILIST),
-		NAME(PC_DI_PT_TRIFAN),
-		NAME(PC_DI_PT_TRISTRIP),
-		NAME(PC_DI_PT_RECTLIST),
+		NAME(POINTLIST),
+		NAME(LINELIST),
+		NAME(LINESTRIP),
+		NAME(TRILIST),
+		NAME(TRIFAN),
+		NAME(TRISTRIP),
+		NAME(RECTLIST),
 };
 
 static const char *vgt_source_select[4] = {
-		NAME(PC_DI_SRC_SEL_IMMEDIATE),
-		NAME(PC_DI_SRC_SEL_AUTO_INDEX),
+		NAME(IMMEDIATE),
+		NAME(AUTO_INDEX),
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
@@ -230,14 +230,31 @@ static void reg_gpuaddr(const char *name, uint32_t dword, int level)
 	printf("%s%s: %08x (%x)\n", levels[level], name, gpuaddr, flags);
 }
 
-static void reg_rb_copy_dest_format(const char *name, uint32_t dword, int level)
+static void reg_rb_copy_dest_info(const char *name, uint32_t dword, int level)
 {
 	/* Endian=none, Linear, Format=RGBA8888,Swap=0,!Dither,
 	 *  MaskWrite:R=G=B=A=1
 	 *   0x0003c008 | (format << 4)
 	 */
+	static const char *endian_name[8] = {
+			"none", "8in16", "8in32", "16in32", "8in64", "8in128",
+	};
+	static const char *dither_mode_name[4] = {
+			"disable", "always", "if-alpha-off",
+	};
+	static const char *dither_type_name[4] = {
+			"pixel", "subpixel",
+	};
+	uint32_t endian = dword & 0x7;
 	uint32_t format = (dword >> 4) & 0xf;
-	printf("%s%s: %s (%08x)\n", levels[level], name, format_name[format], dword);
+	uint32_t swap   = (dword >> 8) & 0x3;
+	uint32_t dither_mode = (dword >> 10) & 0x3;
+	uint32_t dither_type = (dword >> 12) & 0x3;
+	uint32_t write_mask  = (dword >> 14) & 0xf;
+	printf("%s%s: endian=%s, format=%s, swap=%x, dither-mode=%s, dither-type=%s, write-mask=%x (%08x)\n",
+			levels[level], name, endian_name[endian], format_name[format], swap,
+			dither_mode_name[dither_mode], dither_type_name[dither_type],
+			write_mask, dword);
 }
 
 static void reg_rb_copy_dest_pitch(const char *name, uint32_t dword, int level)
@@ -261,6 +278,29 @@ static void reg_pa_su_sc_mode_cntl(const char *name, uint32_t dword, int level)
 			(dword & PA_SU_SC_CULL_BACK) ? ", cull-back" : "",
 			(dword & PA_SU_SC_POLY_OFFSET_FRONT) ? ", poly-offset-front" : "",
 			(dword & PA_SU_SC_POLY_OFFSET_BACK) ? ", poly-offset-back" : "");
+}
+
+static void reg_sq_program_cntl(const char *name, uint32_t dword, int level)
+{
+	static const char *vtx_mode[] = {
+			"position-1-vector", "position-2-vectors-unused", "position-2-vectors-sprite",
+			"position-2-vectors-edge", "position-2-vectors-kill", "position-2-vectors-sprite-kill",
+			"position-2-vectors-edge-kill", "multipass",
+	};
+	uint32_t vs_regs = (dword & 0xff) + 1;
+	uint32_t ps_regs = ((dword >> 8) & 0xff) + 1;
+	uint32_t vs_export = ((dword >> 20) & 0xf) + 1;
+	uint32_t vtx = (dword >> 24) & 0x7;
+	if (vs_regs == 0x81)
+		vs_regs = 0;
+	if (ps_regs == 0x81)
+		ps_regs = 0;
+	printf("%s%s: %08x (vs-regs=%u, ps-regs=%u, vs-export=%u %s%s%s%s)\n",
+			levels[level], name, dword, vs_regs, ps_regs, vs_export, vtx_mode[vtx],
+			(dword & SQ_PROGRAM_CNTL_VS_RESOURCE) ? ", vs" : "",
+			(dword & SQ_PROGRAM_CNTL_PS_RESOURCE) ? ", ps" : "",
+			(dword & SQ_PROGRAM_CNTL_PARAM_GEN) ? ", param-gen" : "",
+			(dword & SQ_PROGRAM_CNTL_GEN_INDEX_PIX) ? ", gen-index-pix" : "");
 }
 
 static void reg_rb_colorcontrol(const char *name, uint32_t dword, int level)
@@ -449,7 +489,7 @@ static const const struct {
 		REG(RB_COPY_CONTROL, reg_hex),
 		REG(RB_COPY_DEST_BASE, reg_gpuaddr),
 		REG(RB_COPY_DEST_PITCH, reg_rb_copy_dest_pitch),
-		REG(RB_COPY_DEST_FORMAT, reg_rb_copy_dest_format),
+		REG(RB_COPY_DEST_INFO, reg_rb_copy_dest_info),
 		REG(RB_COPY_DEST_OFFSET, reg_rb_copy_dest_offset),
 		REG(RB_DEPTHCONTROL, reg_rb_depthcontrol),
 		REG(RB_EDRAM_INFO, reg_hex),
@@ -457,7 +497,10 @@ static const const struct {
 		REG(RB_SURFACE_INFO, reg_hex),	/* surface pitch */
 		REG(RB_COLOR_INFO, reg_rb_color_info),
 		REG(RB_SAMPLE_POS, reg_hex),
-		REG(RB_BLEND_COLOR, reg_hex),
+		REG(RB_BLEND_RED, reg_hex),
+		REG(RB_BLEND_BLUE, reg_hex),
+		REG(RB_BLEND_GREEN, reg_hex),
+		REG(RB_BLEND_ALPHA, reg_hex),
 		REG(RB_ALPHA_REF, reg_hex),
 		REG(RB_BLEND_CONTROL, reg_hex),
 		REG(CLEAR_COLOR, reg_clear_color),
@@ -475,7 +518,7 @@ static const const struct {
 		REG(SQ_INT_ACK, reg_hex),
 		REG(SQ_INT_CNTL, reg_hex),
 		REG(SQ_INT_STATUS, reg_hex),
-		REG(SQ_PROGRAM_CNTL, reg_hex),
+		REG(SQ_PROGRAM_CNTL, reg_sq_program_cntl),
 		REG(SQ_CONTEXT_MISC, reg_hex),
 		REG(SQ_PS_PROGRAM, reg_hex),
 		REG(SQ_VS_PROGRAM, reg_hex),
