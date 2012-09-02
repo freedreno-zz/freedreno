@@ -157,7 +157,7 @@ struct fd_state {
 	GLenum cull_mode;
 
 	uint32_t pa_su_sc_mode_cntl;
-	uint32_t rb_blend_control;
+	uint32_t rb_blendcontrol;
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
 
@@ -445,21 +445,29 @@ struct fd_state * fd_init(void)
 	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST |
 			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
 			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES);
-	state->rb_colorcontrol = 0x00000c07 |
+	state->rb_colorcontrol =
+			RB_COLORCONTROL_ROP_CODE(12) |
+			RB_COLORCONTROL_ALPHA_FUNC(GL_ALWAYS) |
 			RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS) |
 			RB_COLORCONTROL_BLEND_DISABLE;
-	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
+	state->rb_depthcontrol = 0x0070078c |
+			RB_DEPTHCONTROL_Z_WRITE_ENABLE |
+			RB_DEPTHCONTROL_EARLY_Z_ENABLE |
+			RB_DEPTHCONTROL_ZFUNC(GL_LESS) |
+			RB_DEPTHCONTROL_STENCILFUNC(GL_ALWAYS) |
+			RB_DEPTHCONTROL_BACKFACE_ENABLE |
+			RB_DEPTHCONTROL_STENCILFUNC_BF(GL_ALWAYS);
 
 	state->textures.clamp_x = SQ_TEX0_WRAP;
 	state->textures.clamp_y = SQ_TEX0_WRAP;
 	state->textures.min_filter = SQ_TEX3_XY_FILTER_POINT;
 	state->textures.mag_filter = SQ_TEX3_XY_FILTER_POINT;
 
-	state->rb_blend_control =
-			RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE) |
-			RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE) |
-			RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ZERO) |
-			RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ZERO);
+	state->rb_blendcontrol =
+			RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE) |
+			RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE) |
+			RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ZERO) |
+			RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ZERO);
 
 	/* open framebuffer for displaying results: */
 	fd = open("/dev/fb0", O_RDWR);
@@ -715,7 +723,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
-	bool clear_depth = !!(state->rb_depthcontrol & RB_DEPTHCONTROL_ENABLE);
+	bool clear_depth = !!(state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE);
 
 	state->dirty = true;
 
@@ -741,7 +749,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
-	OUT_RING(ring, 0x00000001);
+	OUT_RING(ring, TC_CNTL_STATUS_L2_INVALIDATE);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_CLEAR_COLOR));
@@ -762,10 +770,10 @@ int fd_clear(struct fd_state *state, uint32_t color)
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
 	if (clear_depth) {
-		OUT_RING(ring, RB_DEPTH_CONTROL_FUNC(GL_ALWAYS) |
-				RB_DEPTHCONTROL_ENABLE);
+		OUT_RING(ring, RB_DEPTHCONTROL_ZFUNC(GL_ALWAYS) |
+				RB_DEPTHCONTROL_Z_ENABLE);
 	} else {
-		OUT_RING(ring, RB_DEPTH_CONTROL_FUNC(GL_NEVER));
+		OUT_RING(ring, RB_DEPTHCONTROL_ZFUNC(GL_NEVER));
 	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -874,8 +882,8 @@ int fd_cull(struct fd_state *state, GLenum mode)
 
 int fd_depth_func(struct fd_state *state, GLenum depth_func)
 {
-	state->rb_depthcontrol &= ~RB_DEPTHCONTROL_FUNC_MASK;
-	state->rb_depthcontrol |= RB_DEPTH_CONTROL_FUNC(depth_func);
+	state->rb_depthcontrol &= ~RB_DEPTHCONTROL_ZFUNC_MASK;
+	state->rb_depthcontrol |= RB_DEPTHCONTROL_ZFUNC(depth_func);
 	return 0;
 }
 
@@ -906,7 +914,7 @@ int fd_enable(struct fd_state *state, GLenum cap)
 		state->rb_colorcontrol &= ~RB_COLORCONTROL_BLEND_DISABLE;
 		return 0;
 	case GL_DEPTH_TEST:
-		state->rb_depthcontrol |= RB_DEPTHCONTROL_ENABLE;
+		state->rb_depthcontrol |= RB_DEPTHCONTROL_Z_ENABLE;
 		return 0;
 	case GL_DITHER:
 		state->rb_colorcontrol |= RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
@@ -932,7 +940,7 @@ int fd_disable(struct fd_state *state, GLenum cap)
 		state->rb_colorcontrol |= RB_COLORCONTROL_BLEND_DISABLE;
 		return 0;
 	case GL_DEPTH_TEST:
-		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_ENABLE;
+		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_Z_ENABLE;
 		return 0;
 	case GL_DITHER:
 		state->rb_colorcontrol &= ~RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
@@ -963,44 +971,44 @@ int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor)
 
 	switch (sfactor) {
 	case GL_ZERO:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ZERO);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ZERO);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ZERO);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ZERO);
 		break;
 	case GL_ONE:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE);
 		break;
 	case GL_SRC_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_SRC_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_SRC_COLOR);
 		break;
 	case GL_ONE_MINUS_SRC_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_SRC_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
 		break;
 	case GL_SRC_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_SRC_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_SRC_ALPHA);
 		break;
 	case GL_ONE_MINUS_SRC_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_SRC_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
 		break;
 	case GL_DST_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_DST_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_DST_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_DST_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_DST_COLOR);
 		break;
 	case GL_ONE_MINUS_DST_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_DST_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
 		break;
 	case GL_DST_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_DST_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_DST_ALPHA);
 		break;
 	case GL_ONE_MINUS_DST_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_SRC(RB_BLEND_ONE_MINUS_DST_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_SRC(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
 		break;
 	default:
 		ERROR_MSG("invalid sfactor: 0x%04x", sfactor);
@@ -1009,51 +1017,51 @@ int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor)
 
 	switch (dfactor) {
 	case GL_ZERO:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ZERO);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ZERO);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ZERO);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ZERO);
 		break;
 	case GL_ONE:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE);
 		break;
 	case GL_SRC_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_SRC_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_SRC_COLOR);
 		break;
 	case GL_ONE_MINUS_SRC_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_SRC_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
 		break;
 	case GL_SRC_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_SRC_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_SRC_ALPHA);
 		break;
 	case GL_ONE_MINUS_SRC_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_SRC_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
 		break;
 	case GL_DST_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_DST_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_DST_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_DST_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_DST_COLOR);
 		break;
 	case GL_ONE_MINUS_DST_COLOR:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_DST_COLOR);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
 		break;
 	case GL_DST_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_DST_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_DST_ALPHA);
 		break;
 	case GL_ONE_MINUS_DST_ALPHA:
-		bc |= RB_BLEND_CONTROL_COLOR_DST(RB_BLEND_ONE_MINUS_DST_ALPHA);
-		bc |= RB_BLEND_CONTROL_ALPHA_DST(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
 		break;
 	default:
 		ERROR_MSG("invalid dfactor: 0x%04x", sfactor);
 		return -1;
 	}
 
-	state->rb_blend_control = bc;
+	state->rb_blendcontrol = bc;
 
 	return 0;
 }
@@ -1355,7 +1363,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
-	OUT_RING(ring, state->rb_blend_control);
+	OUT_RING(ring, state->rb_blendcontrol);
 
 	emit_uniforms(state, FD_SHADER_VERTEX);
 	emit_uniforms(state, FD_SHADER_FRAGMENT);
@@ -1363,7 +1371,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	emit_textures(state);
 
 	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
-	OUT_RING(ring, 0x00000001);
+	OUT_RING(ring, TC_CNTL_STATUS_L2_INVALIDATE);
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -1591,7 +1599,7 @@ static void attach_render_target(struct fd_state *state,
 	uint32_t gmem_size = state->devinfo.gmem_sizebytes;
 	uint32_t max_width = 992;
 
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_ENABLE) {
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
 		gmem_size /= 2;
 		max_width = 256;
 	}
@@ -1704,7 +1712,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
-	OUT_RING(ring, state->rb_blend_control);
+	OUT_RING(ring, state->rb_blendcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -1845,7 +1853,7 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));
 	OUT_RING(ring, state->render_target.bin_w);  /* RB_SURFACE_INFO */
 	OUT_RING(ring, 0x200 | surface->color);      /* RB_COLOR_INFO */
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_ENABLE) {
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
 		/* leave an extra 50% for depth buffer */
 		OUT_RING(ring, ((state->render_target.bin_w*3)/2) << 10);/* RB_DEPTH_INFO */
 	} else {

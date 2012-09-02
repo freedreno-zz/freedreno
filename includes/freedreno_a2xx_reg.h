@@ -24,6 +24,9 @@
 #ifndef FREEDRENO_A2XX_REG_H_
 #define FREEDRENO_A2XX_REG_H_
 
+#include <GLES2/gl2.h>
+
+
 /*
  * Registers that we have figured out but are not in kernel:
  */
@@ -220,24 +223,66 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 /*
  * Bits for RB_BLEND_CONTROL:
  */
-#define RB_BLEND_ZERO                  0x0
-#define RB_BLEND_ONE                   0x1
-#define RB_BLEND_SRC_COLOR             0x4
-#define RB_BLEND_ONE_MINUS_SRC_COLOR   0x5
-#define RB_BLEND_SRC_ALPHA             0x6
-#define RB_BLEND_ONE_MINUS_SRC_ALPHA   0x7
-#define RB_BLEND_DST_COLOR             0x8
-#define RB_BLEND_ONE_MINUS_DST_COLOR   0x9
-#define RB_BLEND_DST_ALPHA             0xa
-#define RB_BLEND_ONE_MINUS_DST_ALPHA   0xb
-#define RB_BLEND_CONST_COLOR           0xc
-#define RB_BLEND_CONST_ALPHA           0xe
-#define RB_BLEND_ONE_MINUS_CONST_ALPHA 0xf
 
-#define RB_BLEND_CONTROL_COLOR_SRC(val)  ((val) << 0)
-#define RB_BLEND_CONTROL_COLOR_DST(val)  ((val) << 8)
-#define RB_BLEND_CONTROL_ALPHA_SRC(val)  ((val) << 16)
-#define RB_BLEND_CONTROL_ALPHA_DST(val)  ((val) << 24)
+enum rb_blend_op {
+	RB_BLEND_ZERO = 0,
+	RB_BLEND_ONE = 1,
+	RB_BLEND_SRC_COLOR = 4,
+	RB_BLEND_ONE_MINUS_SRC_COLOR = 5,
+	RB_BLEND_SRC_ALPHA = 6,
+	RB_BLEND_ONE_MINUS_SRC_ALPHA = 7,
+	RB_BLEND_DST_COLOR = 8,
+	RB_BLEND_ONE_MINUS_DST_COLOR = 9,
+	RB_BLEND_DST_ALPHA = 10,
+	RB_BLEND_ONE_MINUS_DST_ALPHA = 11,
+	RB_BLEND_CONSTANT_COLOR = 12,
+	RB_BLEND_ONE_MINUS_CONSTANT_COLOR = 13,
+	RB_BLEND_CONSTANT_ALPHA = 14,
+	RB_BLEND_ONE_MINUS_CONSTANT_ALPHA = 15,
+	RB_BLEND_SRC_ALPHA_SATURATE = 16,
+};
+
+enum rb_comb_func {
+	COMB_DST_PLUS_SRC = 0,
+	COMB_SRC_MINUS_DST = 1,
+	COMB_MIN_DST_SRC = 2,
+	COMB_MAX_DST_SRC = 3,
+	COMB_DST_MINUS_SRC = 4,
+	COMB_DST_PLUS_SRC_BIAS = 5,
+};
+
+#define RB_BLENDCONTROL_COLOR_SRCBLEND_MASK      0x0000001f
+static inline uint32_t RB_BLENDCONTROL_COLOR_SRCBLEND(enum rb_blend_op val)
+{
+	return val & RB_BLENDCONTROL_COLOR_SRCBLEND_MASK;
+}
+#define RB_BLENDCONTROL_COLOR_COMB_FCN_MASK      0x000000e0
+static inline uint32_t RB_BLENDCONTROL_COLOR_COMB_FCN(enum rb_comb_func val)
+{
+	return (val << 5) & RB_BLENDCONTROL_COLOR_COMB_FCN_MASK;
+}
+#define RB_BLENDCONTROL_COLOR_DESTBLEND_MASK     0x00001f00
+static inline uint32_t RB_BLENDCONTROL_COLOR_DESTBLEND(enum rb_blend_op val)
+{
+	return (val << 8) & RB_BLENDCONTROL_COLOR_DESTBLEND_MASK;
+}
+#define RB_BLENDCONTROL_ALPHA_SRCBLEND_MASK      0x001f0000
+static inline uint32_t RB_BLENDCONTROL_ALPHA_SRCBLEND(enum rb_blend_op val)
+{
+	return (val << 16) & RB_BLENDCONTROL_ALPHA_SRCBLEND_MASK;
+}
+#define RB_BLENDCONTROL_ALPHA_COMB_FCN_MASK      0x00e00000
+static inline uint32_t RB_BLENDCONTROL_ALPHA_COMB_FCN(enum rb_comb_func val)
+{
+	return (val << 21) & RB_BLENDCONTROL_ALPHA_COMB_FCN_MASK;
+}
+#define RB_BLENDCONTROL_ALPHA_DESTBLEND_MASK     0x1f000000
+static inline uint32_t RB_BLENDCONTROL_ALPHA_DESTBLEND(enum rb_blend_op val)
+{
+	return (val << 24) & RB_BLENDCONTROL_ALPHA_DESTBLEND_MASK;
+}
+#define RB_BLENDCONTROL_BLEND_FORCE_ENABLE       0x20000000
+#define RB_BLENDCONTROL_BLEND_FORCE              0x40000000
 
 
 /*
@@ -260,10 +305,61 @@ static inline uint32_t RB_MODECONTROL_EDRAM_MODE(enum rb_edram_mode val)
  * Bits for RB_DEPTHCONTROL:
  */
 
-#define RB_DEPTHCONTROL_ENABLE         0x00000002
-#define RB_DEPTHCONTROL_FUNC_MASK      0x00000070
-#define RB_DEPTH_CONTROL_FUNC(depth_func) \
-	((((depth_func) - GL_NEVER) << 4) & RB_DEPTHCONTROL_FUNC_MASK)
+#define RB_DEPTHCONTROL_STENCIL_ENABLE      0x00000001
+#define RB_DEPTHCONTROL_Z_ENABLE            0x00000002
+#define RB_DEPTHCONTROL_Z_WRITE_ENABLE      0x00000004
+#define RB_DEPTHCONTROL_EARLY_Z_ENABLE      0x00000008
+#define RB_DEPTHCONTROL_ZFUNC_MASK          0x00000070
+#define RB_DEPTHCONTROL_ZFUNC(depth_func) \
+	((((depth_func) - GL_NEVER) << 4) & RB_DEPTHCONTROL_ZFUNC_MASK)
+#define RB_DEPTHCONTROL_BACKFACE_ENABLE     0x00000080
+#define RB_DEPTHCONTROL_STENCILFUNC_MASK    0x00000700
+#define RB_DEPTHCONTROL_STENCILFUNC(depth_func) \
+	((((depth_func) - GL_NEVER) << 8) & RB_DEPTHCONTROL_STENCILFUNC_MASK)
+enum rb_stencil_op {
+	STENCIL_KEEP = 0,
+	STENCIL_ZERO = 1,
+	STENCIL_REPLACE = 2,
+	STENCIL_INCR_CLAMP = 3,
+	STENCIL_DECR_CLAMP = 4,
+	STENCIL_INVERT = 5,
+	STENCIL_INCR_WRAP = 6,
+	STENCIL_DECR_WRAP = 7
+};
+#define RB_DEPTHCONTROL_STENCILFAIL_MASK         0x00003800
+static inline uint32_t RB_DEPTHCONTROL_STENCILFAIL(enum rb_stencil_op val)
+{
+	return (val << 11) & RB_DEPTHCONTROL_STENCILFAIL_MASK;
+}
+#define RB_DEPTHCONTROL_STENCILZPASS_MASK        0x0001c000
+static inline uint32_t RB_DEPTHCONTROL_STENCILZPASS(enum rb_stencil_op val)
+{
+	return (val << 14) & RB_DEPTHCONTROL_STENCILZPASS_MASK;
+}
+#define RB_DEPTHCONTROL_STENCILZFAIL_MASK        0x000e0000
+static inline uint32_t RB_DEPTHCONTROL_STENCILZFAIL(enum rb_stencil_op val)
+{
+	return (val << 17) & RB_DEPTHCONTROL_STENCILZFAIL_MASK;
+}
+#define RB_DEPTHCONTROL_STENCILFUNC_BF_MASK      0x00700000
+#define RB_DEPTHCONTROL_STENCILFUNC_BF(depth_func) \
+	((((depth_func) - GL_NEVER) << 20) & RB_DEPTHCONTROL_STENCILFUNC_BF_MASK)
+#define RB_DEPTHCONTROL_STENCILFAIL_BF_MASK      0x03800000
+static inline uint32_t RB_DEPTHCONTROL_STENCILFAIL_BF(enum rb_stencil_op val)
+{
+	return (val << 23) & RB_DEPTHCONTROL_STENCILFAIL_BF_MASK;
+}
+#define RB_DEPTHCONTROL_STENCILZPASS_BF_MASK     0x1c000000
+static inline uint32_t RB_DEPTHCONTROL_STENCILZPASS_BF(enum rb_stencil_op val)
+{
+	return (val << 26) & RB_DEPTHCONTROL_STENCILZPASS_BF_MASK;
+}
+#define RB_DEPTHCONTROL_STENCILZFAIL_BF_MASK     0xe0000000
+static inline uint32_t RB_DEPTHCONTROL_STENCILZFAIL_BF(enum rb_stencil_op val)
+{
+	return (val << 29) & RB_DEPTHCONTROL_STENCILZFAIL_BF_MASK;
+}
+
 
 /*
  * Bits for RB_COPY_DEST_INFO:
@@ -322,20 +418,7 @@ static inline uint32_t RB_COPY_DEST_INFO_DITHER_TYPE(enum rb_dither_type val)
  * Bits for RB_COLORCONTROL:
  */
 
-enum rb_compare_ref {
-	REF_NEVER = 0,
-	REF_LESS = 1,
-	REF_EQUAL = 2,
-	REF_LEQUAL = 3,
-	REF_GREATER = 4,
-	REF_NOTEQUAL = 5,
-	REF_GEQUAL = 6,
-	REF_ALWAYS = 7
-};
-static inline uint32_t RB_COLORCONTROL_ALPHA_FUNC(enum rb_compare_ref val)
-{
-	return val & 0x7;
-}
+#define RB_COLORCONTROL_ALPHA_FUNC(val)          (((val) - GL_NEVER) & 0x7)
 #define RB_COLORCONTROL_ALPHA_TEST_ENABLE        0x00000008
 #define RB_COLORCONTROL_ALPHA_TO_MASK_ENABLE     0x00000010
 #define RB_COLORCONTROL_BLEND_DISABLE            0x00000020
@@ -355,5 +438,13 @@ static inline uint32_t RB_COLORCONTROL_DITHER_TYPE(enum rb_dither_type val)
 #define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET1(val) (((val) & 0x3) << 26)
 #define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET2(val) (((val) & 0x3) << 28)
 #define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET3(val) (((val) & 0x3) << 30)
+
+
+/*
+ * Bits for TC_CNTL_STATUS
+ */
+
+#define TC_CNTL_STATUS_L2_INVALIDATE             0x00000001
+
 
 #endif /* FREEDRENO_A2XX_REG_H_ */
