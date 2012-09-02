@@ -62,6 +62,7 @@
 #define REG_0c06		0x0c06
 #define REG_2010		0x2010
 
+
 /*
  * Format for 2nd dword in CP_DRAW_INDX and friends:
  */
@@ -106,6 +107,7 @@ static inline uint32_t DRAW(enum pc_di_primtype prim_type,
 			(1                 << 14);
 }
 
+
 /*
  * Bits for PA_SU_SC_MODE_CNTL:
  * (seems to be same as r600)
@@ -131,12 +133,37 @@ static inline uint32_t PA_SU_SC_POLYMODE_BACK_PTYPE(enum pa_su_sc_draw val)
 	return val << 8;
 }
 
+
 /*
  * Bits for PA_SC_WINDOW_OFFSET:
  * (seems to be same as r600)
  */
 #define PA_SC_WINDOW_OFFSET_X(val)     ((val) & 0x7fff)
 #define PA_SC_WINDOW_OFFSET_Y(val)     (((val) & 0x7fff) << 16)
+
+#define PA_SC_WINDOW_OFFSET_DISABLE    0x80000000
+
+
+/*
+ * Bits for SQ_CONTEXT_MISC:
+ */
+
+#define SQ_CONTEXT_MISC_INST_PRED_OPTIMIZE  0x00000001
+#define SQ_CONTEXT_MISC_SC_OUTPUT_SCREEN_XY 0x00000002
+enum sq_sample_cntl {
+	CENTROIDS_ONLY = 0,
+	CENTERS_ONLY = 1,
+	CENTROIDS_AND_CENTERS = 2,
+};
+static inline uint32_t SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(enum sq_sample_cntl val)
+{
+	return (val & 0x3) << 2;
+}
+#define SQ_CONTEXT_MISC_PARAM_GEN_POS(val)  (((val) & 0xff) << 8)
+#define SQ_CONTEXT_MISC_PERFCOUNTER_REF     0x00010000
+#define SQ_CONTEXT_MISC_YEILD_OPTIMIZE      0x00020000
+#define SQ_CONTEXT_MISC_TX_CACHE_SEL        0x00040000
+
 
 /*
  * Bits for SQ_PROGRAM_CNTL
@@ -165,6 +192,7 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 }
 #define SQ_PROGRAM_CNTL_GEN_INDEX_VTX  0x80000000
 
+
 /*
  * Bits for tex sampler:
  */
@@ -188,6 +216,7 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 #define SQ_TEX3_XY_MAG_FILTER(val)     ((val) << 19)
 #define SQ_TEX3_XY_MIN_FILTER(val)     ((val) << 21)
 
+
 /*
  * Bits for RB_BLEND_CONTROL:
  */
@@ -210,12 +239,22 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 #define RB_BLEND_CONTROL_ALPHA_SRC(val)  ((val) << 16)
 #define RB_BLEND_CONTROL_ALPHA_DST(val)  ((val) << 24)
 
+
 /*
- * Bits for RB_COLORCONTROL:
+ * Bits for RB_MODECONTROL
  */
 
-#define RB_COLORCONTROL_BLEND_DISABLE  0x00000020
-#define RB_COLORCONTROL_DITHER_ENABLE  0x00001000
+enum rb_edram_mode {
+	EDRAM_NOP = 0,
+	COLOR_DEPTH = 4,
+	DEPTH_ONLY = 5,
+	EDRAM_COPY = 6,
+};
+static inline uint32_t RB_MODECONTROL_EDRAM_MODE(enum rb_edram_mode val)
+{
+	return val & 0x7;
+}
+
 
 /*
  * Bits for RB_DEPTHCONTROL:
@@ -270,11 +309,51 @@ static inline uint32_t RB_COPY_DEST_INFO_DITHER_TYPE(enum rb_dither_type val)
 #define RB_COPY_DEST_INFO_WRITE_BLUE   0x00010000
 #define RB_COPY_DEST_INFO_WRITE_ALPHA  0x00020000
 
+
 /*
  * Bits for RB_COPY_DEST_OFFSET:
  */
 
 #define RB_COPY_DEST_OFFSET_X(val)    ((val) & 0x3fff)
 #define RB_COPY_DEST_OFFSET_Y(val)    (((val) & 0x3fff) << 13)
+
+
+/*
+ * Bits for RB_COLORCONTROL:
+ */
+
+enum rb_compare_ref {
+	REF_NEVER = 0,
+	REF_LESS = 1,
+	REF_EQUAL = 2,
+	REF_LEQUAL = 3,
+	REF_GREATER = 4,
+	REF_NOTEQUAL = 5,
+	REF_GEQUAL = 6,
+	REF_ALWAYS = 7
+};
+static inline uint32_t RB_COLORCONTROL_ALPHA_FUNC(enum rb_compare_ref val)
+{
+	return val & 0x7;
+}
+#define RB_COLORCONTROL_ALPHA_TEST_ENABLE        0x00000008
+#define RB_COLORCONTROL_ALPHA_TO_MASK_ENABLE     0x00000010
+#define RB_COLORCONTROL_BLEND_DISABLE            0x00000020
+#define RB_COLORCONTROL_FOG_ENABLE               0x00000040
+#define RB_COLORCONTROL_VS_EXPORTS_FOG           0x00000080
+#define RB_COLORCONTROL_ROP_CODE(val)            (((val) & 0xf) << 8)
+static inline uint32_t RB_COLORCONTROL_DITHER_MODE(enum rb_dither_mode val)
+{
+	return (val & 0x3) << 12;
+}
+static inline uint32_t RB_COLORCONTROL_DITHER_TYPE(enum rb_dither_type val)
+{
+	return (val & 0x3) << 14;
+}
+#define RB_COLORCONTROL_PIXEL_FOG                0x00010000
+#define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET0(val) (((val) & 0x3) << 24)
+#define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET1(val) (((val) & 0x3) << 26)
+#define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET2(val) (((val) & 0x3) << 28)
+#define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET3(val) (((val) & 0x3) << 30)
 
 #endif /* FREEDRENO_A2XX_REG_H_ */

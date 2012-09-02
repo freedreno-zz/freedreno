@@ -446,7 +446,8 @@ struct fd_state * fd_init(void)
 			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
 			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES);
 	state->rb_colorcontrol = 0x00000c07 |
-			RB_COLORCONTROL_DITHER_ENABLE | RB_COLORCONTROL_BLEND_DISABLE;
+			RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS) |
+			RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol = 0x0070078c | RB_DEPTH_CONTROL_FUNC(GL_LESS);
 
 	state->textures.clamp_x = SQ_TEX0_WRAP;
@@ -634,7 +635,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, 0x00000004);
+	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -657,7 +658,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
 	OUT_RING(ring, 0x00000000);             /* PA_SC_WINDOW_OFFSET */
-	OUT_RING(ring, xy2d(0,0) | 0x80000000); /* PA_SC_WINDOW_SCISSOR_TL | WINDOW_OFFSET_DISABLE */
+	OUT_RING(ring, xy2d(0,0) | PA_SC_WINDOW_OFFSET_DISABLE); /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width,     /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
@@ -678,7 +679,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
-	OUT_RING(ring, 0x0000006);
+	OUT_RING(ring, RB_MODECONTROL_EDRAM_MODE(EDRAM_COPY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 6);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
@@ -704,7 +705,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
-	OUT_RING(ring, 0x0000004);
+	OUT_RING(ring, RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -733,7 +734,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, 0x00000004);
+	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -908,7 +909,7 @@ int fd_enable(struct fd_state *state, GLenum cap)
 		state->rb_depthcontrol |= RB_DEPTHCONTROL_ENABLE;
 		return 0;
 	case GL_DITHER:
-		state->rb_colorcontrol |= RB_COLORCONTROL_DITHER_ENABLE;
+		state->rb_colorcontrol |= RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
 		return 0;
 	default:
 		ERROR_MSG("unsupported cap: 0x%04x", cap);
@@ -934,7 +935,7 @@ int fd_disable(struct fd_state *state, GLenum cap)
 		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_ENABLE;
 		return 0;
 	case GL_DITHER:
-		state->rb_colorcontrol &= ~RB_COLORCONTROL_DITHER_ENABLE;
+		state->rb_colorcontrol &= ~RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
 		return 0;
 	default:
 		ERROR_MSG("unsupported cap: 0x%04x", cap);
@@ -1346,7 +1347,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, 0x00000004);
+	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -1689,7 +1690,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, 0x00000004);
+	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_SQ_INTERPOLATOR_CNTL));
@@ -1699,7 +1700,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
-	OUT_RING(ring, 0x00000004);
+	OUT_RING(ring, RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
