@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2012 Arvin Schnell <arvin.schnell@gmail.com>
  * Copyright (c) 2011-2012 Luc Verhaegen <libv@codethink.co.uk>
  * Copyright (c) 2012 Rob Clark <robdclark@gmail.com>
  *
