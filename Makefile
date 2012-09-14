@@ -14,6 +14,7 @@ TESTS_2D = \
 	test-multi
 
 TESTS_3D = \
+	test-stencil \
 	test-compiler \
 	test-enable-disable \
 	test-quad-flat \

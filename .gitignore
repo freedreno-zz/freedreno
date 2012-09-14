@@ -19,6 +19,7 @@ test-cube-textured
 test-vertex
 test-enable-disable
 test-compiler
+test-stencil
 
 # misc:
 redump
