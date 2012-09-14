@@ -122,6 +122,16 @@ static const char *vgt_source_select[4] = {
 		NAME(AUTO_INDEX),
 };
 
+static const char *dither_mode_name[4] = {
+		NAME(DITHER_DISABLE),
+		NAME(DITHER_ALWAYS),
+		NAME(DITHER_IF_ALPHA_OFF),
+};
+static const char *dither_type_name[4] = {
+		NAME(DITHER_PIXEL),
+		NAME(DITHER_SUBPIXEL),
+};
+
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
 
 struct buffer {
@@ -239,12 +249,6 @@ static void reg_rb_copy_dest_info(const char *name, uint32_t dword, int level)
 	static const char *endian_name[8] = {
 			"none", "8in16", "8in32", "16in32", "8in64", "8in128",
 	};
-	static const char *dither_mode_name[4] = {
-			"disable", "always", "if-alpha-off",
-	};
-	static const char *dither_type_name[4] = {
-			"pixel", "subpixel",
-	};
 	uint32_t endian = dword & 0x7;
 	uint32_t format = (dword >> 4) & 0xf;
 	uint32_t swap   = (dword >> 8) & 0x3;
@@ -303,22 +307,32 @@ static void reg_sq_program_cntl(const char *name, uint32_t dword, int level)
 			(dword & SQ_PROGRAM_CNTL_GEN_INDEX_PIX) ? ", gen-index-pix" : "");
 }
 
+static const char *gl_func[] = {
+		"GL_NEVER", "GL_LESS", "GL_EQUAL", "GL_LEQUAL",
+		"GL_GREATER", "GL_NOTEQUAL", "GL_GEQUAL", "GL_ALWAYS",
+};
+
 static void reg_rb_colorcontrol(const char *name, uint32_t dword, int level)
 {
-	printf("%s%s: %08x (blend=%s, dither=%s)\n", levels[level], name, dword,
-			(dword & RB_COLORCONTROL_BLEND_DISABLE) ? "disabled" : "enabled",
-			(dword & RB_COLORCONTROL_DITHER_ENABLE) ? "enabled" : "disabled");
+	printf("%s%s: %08x (func=%s%s%s%s%s%s, rop=%d, dither-mode=%s, "
+			"dither-type=%s%s)\n", levels[level], name, dword,
+			gl_func[dword & 0x7],
+			(dword & RB_COLORCONTROL_ALPHA_TEST_ENABLE) ? ", alpha-test" : "",
+			(dword & RB_COLORCONTROL_ALPHA_TO_MASK_ENABLE) ? ", alpha-to-mask" : "",
+			(dword & RB_COLORCONTROL_BLEND_DISABLE) ? "" : ", blend",
+			(dword & RB_COLORCONTROL_FOG_ENABLE) ? ", fog" : "",
+			(dword & RB_COLORCONTROL_VS_EXPORTS_FOG) ? ", vs-exports-fog" : "",
+			(dword >> 8) & 0xf,
+			dither_mode_name[(dword >> 12) & 0x3],
+			dither_type_name[(dword >> 14) & 0x3],
+			(dword & RB_COLORCONTROL_PIXEL_FOG) ? ", pixel-fog" : "");
 }
 
 static void reg_rb_depthcontrol(const char *name, uint32_t dword, int level)
 {
-	static const char *func[] = {
-			"GL_NEVER", "GL_LESS", "GL_EQUAL", "GL_LEQUAL",
-			"GL_GREATER", "GL_NOTEQUAL", "GL_GEQUAL", "GL_ALWAYS",
-	};
 	printf("%s%s: %08x (%s, func=%s)\n", levels[level], name, dword,
-			(dword & RB_DEPTHCONTROL_ENABLE) ? "enabled" : "disabled",
-			func[(dword >> 4) & 0x7]);
+			(dword & RB_DEPTHCONTROL_Z_ENABLE) ? "enabled" : "disabled",
+			gl_func[(dword >> 4) & 0x7]);
 }
 
 static void reg_clear_color(const char *name, uint32_t dword, int level)
