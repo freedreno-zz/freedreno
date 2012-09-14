@@ -789,12 +789,35 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 			vgt_source_select[source_select], source_select);
 	printf("%snum_indices:   %d\n", levels[level], num_indices);
 
-	if (!(prim_type || source_select || num_indices)) {
+/*
+00004804 - GL_UNSIGNED_INT
+00004004 - GL_UNSIGNED_SHORT
+00006004 - GL_UNSIGNED_BYTE
+ */
+	if (sizedwords == 5) {
 		void *ptr = hostptr(dwords[3]);
 		printf("%sgpuaddr:       %08x\n", levels[level], dwords[3]);
+		printf("%sidx_size:      %d\n", levels[level], dwords[4]);
+		printf("%sidxs:         ", levels[level]);
 		if (ptr) {
-			dump_hex(ptr, 8, level+1);
-			dump_float(ptr, 8, level+1);
+			enum pc_di_index_size size =
+					((dwords[1] >> 11) & 1) | ((dwords[1] >> 12) & 2);
+			int i;
+			if (size == INDEX_SIZE_8_BIT) {
+				uint8_t *idx = ptr;
+				for (i = 0; i < dwords[4]; i++)
+					printf(" %u", idx[i]);
+			} else if (size == INDEX_SIZE_16_BIT) {
+				uint16_t *idx = ptr;
+				for (i = 0; i < dwords[4]/2; i++)
+					printf(" %u", idx[i]);
+			} else if (size == INDEX_SIZE_32_BIT) {
+				uint32_t *idx = ptr;
+				for (i = 0; i < dwords[4]/4; i++)
+					printf(" %u", idx[i]);
+			}
+			printf("\n");
+			dump_hex(ptr, dwords[4], level+1);
 		}
 	}
 

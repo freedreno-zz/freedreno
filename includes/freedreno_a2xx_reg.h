@@ -92,6 +92,7 @@ enum pc_di_index_size {
 	INDEX_SIZE_IGN    = 0,
 	INDEX_SIZE_16_BIT = 0,
 	INDEX_SIZE_32_BIT = 1,
+	INDEX_SIZE_8_BIT  = 2,
 };
 
 enum pc_di_vis_cull_mode {
