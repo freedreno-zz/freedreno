@@ -134,6 +134,17 @@ static const char *dither_type_name[4] = {
 		NAME(DITHER_SUBPIXEL),
 };
 
+static const char *stencil_op[8] = {
+	NAME(STENCIL_KEEP),
+	NAME(STENCIL_ZERO),
+	NAME(STENCIL_REPLACE),
+	NAME(STENCIL_INCR_CLAMP),
+	NAME(STENCIL_DECR_CLAMP),
+	NAME(STENCIL_INVERT),
+	NAME(STENCIL_INCR_WRAP),
+	NAME(STENCIL_DECR_WRAP),
+};
+
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
 
 struct buffer {
@@ -332,9 +343,23 @@ static void reg_rb_colorcontrol(const char *name, uint32_t dword, int level)
 
 static void reg_rb_depthcontrol(const char *name, uint32_t dword, int level)
 {
-	printf("%s%s: %08x (%s, func=%s)\n", levels[level], name, dword,
-			(dword & RB_DEPTHCONTROL_Z_ENABLE) ? "enabled" : "disabled",
-			gl_func[(dword >> 4) & 0x7]);
+	printf("%s%s: %08x (%s%s%s%szfunc=%s, %ssfunc=%s, sfail=%s, szpass=%s, "
+			"szfail=%s, sfunc-bf=%s, sfail-bf=%s, szpass-bf=%s, szfail-bf=%s)\n",
+			levels[level], name, dword,
+			(dword & RB_DEPTHCONTROL_STENCIL_ENABLE) ? "stencil, " : "",
+			(dword & RB_DEPTHCONTROL_Z_ENABLE) ? "z, " : "",
+			(dword & RB_DEPTHCONTROL_Z_WRITE_ENABLE) ? "z-write, " : "",
+			(dword & RB_DEPTHCONTROL_EARLY_Z_ENABLE) ? "early-z, " : "",
+			gl_func[(dword >> 4) & 0x7],
+			(dword & RB_DEPTHCONTROL_BACKFACE_ENABLE) ? "depth-write, " : "",
+			gl_func[(dword >> 8) & 0x7],
+			stencil_op[(dword >> 11) & 0x7],
+			stencil_op[(dword >> 14) & 0x7],
+			stencil_op[(dword >> 17) & 0x7],
+			gl_func[(dword >> 20) & 0x7],
+			stencil_op[(dword >> 23) & 0x7],
+			stencil_op[(dword >> 26) & 0x7],
+			stencil_op[(dword >> 29) & 0x7]);
 }
 
 static void reg_clear_color(const char *name, uint32_t dword, int level)
@@ -555,12 +580,16 @@ static const const struct {
 		REG(COHER_DEST_BASE_0, reg_hex),
 		REG(RB_FOG_COLOR, reg_hex),
 		REG(RB_STENCILREFMASK_BF, reg_hex),
+		REG(RB_STENCILREFMASK, reg_hex),
 		REG(PA_SC_LINE_STIPPLE, reg_hex),
 		REG(SQ_PS_CONST, reg_hex),
 		REG(RB_DEPTH_CLEAR, reg_hex),
 		REG(RB_SAMPLE_COUNT_CTL, reg_hex),
 		REG(SQ_CONSTANT_0, reg_hex),
 		REG(SQ_FETCH_0, reg_hex),
+
+		REG(PA_SU_POINT_MINMAX, reg_hex),
+		REG(SQ_VS_CONST, reg_hex),
 
 		REG(COHER_BASE_PM4, reg_hex),
 		REG(COHER_STATUS_PM4, reg_hex),
