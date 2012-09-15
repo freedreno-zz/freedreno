@@ -147,7 +147,7 @@ struct fd_state {
 
 	struct {
 		uint32_t color;
-		uint32_t s;
+		uint32_t stencil;
 		float depth;
 	} clear;
 
@@ -166,6 +166,7 @@ struct fd_state {
 	uint32_t rb_blendcontrol;
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
+	uint32_t rb_stencilrefmask;
 
 	/* framebuffer info, for presentation blit: */
 	struct {
@@ -449,25 +450,30 @@ struct fd_state * fd_init(void)
 	state->cull_mode = GL_BACK;
 
 	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST |
-			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
-			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES);
+			PA_SU_SC_POLYMODE_FRONT_PTYPE(POINTS) |
+			PA_SU_SC_POLYMODE_BACK_PTYPE(POINTS);
 	state->rb_colorcontrol =
 			RB_COLORCONTROL_ROP_CODE(12) |
 			RB_COLORCONTROL_ALPHA_FUNC(GL_ALWAYS) |
 			RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS) |
 			RB_COLORCONTROL_BLEND_DISABLE;
-	state->rb_depthcontrol = 0x0070078c |
+	state->rb_depthcontrol =
 			RB_DEPTHCONTROL_Z_WRITE_ENABLE |
 			RB_DEPTHCONTROL_EARLY_Z_ENABLE |
 			RB_DEPTHCONTROL_ZFUNC(GL_LESS) |
 			RB_DEPTHCONTROL_STENCILFUNC(GL_ALWAYS) |
 			RB_DEPTHCONTROL_BACKFACE_ENABLE |
 			RB_DEPTHCONTROL_STENCILFUNC_BF(GL_ALWAYS);
+	state->rb_stencilrefmask = 0xffff0000;
 
 	state->textures.clamp_x = SQ_TEX0_WRAP;
 	state->textures.clamp_y = SQ_TEX0_WRAP;
 	state->textures.min_filter = SQ_TEX3_XY_FILTER_POINT;
 	state->textures.mag_filter = SQ_TEX3_XY_FILTER_POINT;
+
+	state->clear.depth = 1;
+	state->clear.stencil = 0;
+	state->clear.color = 0x00000000;
 
 	state->rb_blendcontrol =
 			RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE) |
@@ -661,7 +667,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	OUT_RING(ring, 0x00000008);
+	OUT_RING(ring, RB_DEPTHCONTROL_EARLY_Z_ENABLE);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
@@ -732,7 +738,7 @@ void fd_clear_color(struct fd_state *state, uint32_t color)
 
 void fd_clear_stencil(struct fd_state *state, uint32_t s)
 {
-	state->clear.s = s;
+	state->clear.stencil = s;
 }
 
 void fd_clear_depth(struct fd_state *state, float depth)
@@ -744,7 +750,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
-	bool clear_depth = (mask & GL_DEPTH_BUFFER_BIT);
+	uint32_t reg;
 
 	state->dirty = true;
 
@@ -782,20 +788,42 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
-	OUT_RING(ring, clear_depth ? 0x000000f8 : 0x00000000);
+	reg = 0;
+	if (mask & GL_DEPTH_BUFFER_BIT) {
+		reg |= RB_COPY_CONTROL_CLEAR_MASK(0xf) |
+				RB_COPY_CONTROL_DEPTH_CLEAR_ENABLE;
+	}
+	OUT_RING(ring, reg);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTH_CLEAR));
-	OUT_RING(ring, clear_depth ? 0xffffffff : 0x00000000);
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_STENCIL_ENABLE) {
+		/* DEPTHX_24_8 */
+		reg = (((uint32_t)(0xffffff * state->clear.depth)) << 8) |
+				(state->clear.stencil & 0xff);
+	} else if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
+		/* DEPTHX_16 */
+		reg = (uint32_t)(0xffffffff * state->clear.depth);
+	} else {
+		reg = 0;
+	}
+	OUT_RING(ring, reg);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	if (clear_depth) {
-		OUT_RING(ring, RB_DEPTHCONTROL_ZFUNC(GL_ALWAYS) |
-				RB_DEPTHCONTROL_Z_ENABLE);
-	} else {
-		OUT_RING(ring, RB_DEPTHCONTROL_ZFUNC(GL_NEVER));
+	reg = 0;
+	if (mask & GL_DEPTH_BUFFER_BIT) {
+		reg |= RB_DEPTHCONTROL_ZFUNC(GL_ALWAYS) |
+				RB_DEPTHCONTROL_Z_ENABLE |
+				RB_DEPTHCONTROL_Z_WRITE_ENABLE |
+				RB_DEPTHCONTROL_EARLY_Z_ENABLE;
 	}
+	if (mask & GL_STENCIL_BUFFER_BIT) {
+		reg |= RB_DEPTHCONTROL_STENCILFUNC(GL_ALWAYS) |
+				RB_DEPTHCONTROL_STENCIL_ENABLE |
+				RB_DEPTHCONTROL_STENCILZPASS(STENCIL_REPLACE);
+	}
+	OUT_RING(ring, reg);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
@@ -803,7 +831,9 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, state->pa_su_sc_mode_cntl);
+	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
+			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
+			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -937,6 +967,9 @@ int fd_enable(struct fd_state *state, GLenum cap)
 	case GL_DEPTH_TEST:
 		state->rb_depthcontrol |= RB_DEPTHCONTROL_Z_ENABLE;
 		return 0;
+	case GL_STENCIL_TEST:
+		state->rb_depthcontrol |= RB_DEPTHCONTROL_STENCIL_ENABLE;
+		return 0;
 	case GL_DITHER:
 		state->rb_colorcontrol |= RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
 		return 0;
@@ -962,6 +995,9 @@ int fd_disable(struct fd_state *state, GLenum cap)
 		return 0;
 	case GL_DEPTH_TEST:
 		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_Z_ENABLE;
+		return 0;
+	case GL_STENCIL_TEST:
+		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_STENCIL_ENABLE;
 		return 0;
 	case GL_DITHER:
 		state->rb_colorcontrol &= ~RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
@@ -1087,6 +1123,90 @@ int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor)
 	return 0;
 }
 
+int fd_stencil_func(struct fd_state *state, GLenum func,
+		GLint ref, GLuint mask)
+{
+	state->rb_stencilrefmask &= ~(
+			RB_STENCILREFMASK_STENCILREF_MASK |
+			RB_STENCILREFMASK_STENCILMASK_MASK);
+	state->rb_stencilrefmask |=
+			RB_STENCILREFMASK_STENCILREF(ref) |
+			RB_STENCILREFMASK_STENCILMASK(mask);
+	state->rb_depthcontrol &= ~(
+			RB_DEPTHCONTROL_STENCILFUNC_MASK |
+			RB_DEPTHCONTROL_STENCILFUNC_BF_MASK);
+	state->rb_depthcontrol |=
+			RB_DEPTHCONTROL_STENCILFUNC(func) |
+			RB_DEPTHCONTROL_STENCILFUNC_BF(func);
+	return 0;
+}
+
+static int set_stencil_op(enum rb_stencil_op *rbop, GLenum glop)
+{
+	switch (glop) {
+	case GL_KEEP:
+		*rbop = STENCIL_KEEP;
+		return 0;
+	case GL_REPLACE:
+		*rbop = STENCIL_REPLACE;
+		return 0;
+	case GL_INCR:
+		*rbop = STENCIL_INCR_CLAMP;
+		return 0;
+	case GL_DECR:
+		*rbop = STENCIL_DECR_CLAMP;
+		return 0;
+	case GL_INVERT:
+		*rbop = STENCIL_INVERT;
+		return 0;
+	case GL_INCR_WRAP:
+		*rbop = STENCIL_INCR_WRAP;
+		return 0;
+	case GL_DECR_WRAP:
+		*rbop = STENCIL_DECR_WRAP;
+		return 0;
+	default:
+		ERROR_MSG("unsupported stencil op: %04x", glop);
+		return -1;
+	}
+}
+
+int fd_stencil_op(struct fd_state *state, GLenum sfail,
+		GLenum zfail, GLenum zpass)
+{
+	enum rb_stencil_op rbsfail, rbzfail, rbzpass;
+
+	if (set_stencil_op(&rbsfail, sfail) ||
+			set_stencil_op(&rbzfail, zfail) ||
+			set_stencil_op(&rbzpass, zpass))
+		return -1;
+
+	state->rb_depthcontrol &= ~(
+			RB_DEPTHCONTROL_STENCILFAIL_MASK |
+			RB_DEPTHCONTROL_STENCILZPASS_MASK |
+			RB_DEPTHCONTROL_STENCILZFAIL_MASK |
+			RB_DEPTHCONTROL_STENCILFAIL_BF_MASK |
+			RB_DEPTHCONTROL_STENCILZPASS_BF_MASK |
+			RB_DEPTHCONTROL_STENCILZFAIL_BF_MASK);
+
+	state->rb_depthcontrol |=
+			RB_DEPTHCONTROL_STENCILFAIL(rbsfail) |
+			RB_DEPTHCONTROL_STENCILZPASS(rbzpass) |
+			RB_DEPTHCONTROL_STENCILZFAIL(rbzfail) |
+			RB_DEPTHCONTROL_STENCILFAIL_BF(rbsfail) |
+			RB_DEPTHCONTROL_STENCILZPASS_BF(rbzpass) |
+			RB_DEPTHCONTROL_STENCILZFAIL_BF(rbzfail);
+
+	return 0;
+}
+
+int fd_stencil_mask(struct fd_state *state, GLuint mask)
+{
+	state->rb_stencilrefmask &= ~RB_STENCILREFMASK_STENCILWRITEMASK_MASK;
+	state->rb_stencilrefmask |= RB_STENCILREFMASK_STENCILWRITEMASK(mask);
+	return 0;
+}
+
 static int set_filter(uint8_t *filter, GLint param)
 {
 	switch (param) {
@@ -1158,7 +1278,7 @@ static int upload_attributes(struct kgsl_bo *bo, uint32_t off,
 
 static uint32_t emit_attributes(struct fd_state *state,
 		uint32_t start, uint32_t count,
-		uint32_t idx_size, void *indices)
+		uint32_t idx_size, const void *indices)
 {
 	struct kgsl_bo *bo = state->attributes.bo;
 	struct fd_shader_const shader_const[MAX_PARAMS];
@@ -1403,6 +1523,13 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
+
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_STENCIL_ENABLE) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 3);
+		OUT_RING(ring, CP_REG(REG_RB_STENCILREFMASK_BF));
+		OUT_RING(ring, state->rb_stencilrefmask);     /* RB_STENCILREFMASK_BF */
+		OUT_RING(ring, state->rb_stencilrefmask);     /* RB_STENCILREFMASK */
+	}
 
 	emit_constants(state, FD_SHADER_VERTEX);
 	emit_constants(state, FD_SHADER_FRAGMENT);
@@ -1681,7 +1808,8 @@ static void attach_render_target(struct fd_state *state,
 	uint32_t gmem_size = state->devinfo.gmem_sizebytes;
 	uint32_t max_width = 992;
 
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
+	if (state->rb_depthcontrol & (RB_DEPTHCONTROL_Z_ENABLE |
+			RB_DEPTHCONTROL_STENCIL_ENABLE)) {
 		gmem_size /= 2;
 		max_width = 256;
 	}
@@ -1744,6 +1872,7 @@ void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
+	uint32_t bin_w;
 
 	attach_render_target(state, surface);
 	set_viewport(state, 0, 0, surface->width, surface->height);
@@ -1810,7 +1939,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_DEST_INFO));
-	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(COLORX_8_8_8_8) |
+	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(COLORX_4_4_4_4) |
 			RB_COPY_DEST_INFO_WRITE_RED |
 			RB_COPY_DEST_INFO_WRITE_GREEN |
 			RB_COPY_DEST_INFO_WRITE_BLUE |
@@ -1935,11 +2064,18 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));
 	OUT_RING(ring, state->render_target.bin_w);  /* RB_SURFACE_INFO */
 	OUT_RING(ring, 0x200 | surface->color);      /* RB_COLOR_INFO */
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
-		/* leave an extra 50% for depth buffer */
-		OUT_RING(ring, ((state->render_target.bin_w*3)/2) << 10);/* RB_DEPTH_INFO */
+	bin_w = state->render_target.bin_w;
+	if (state->rb_depthcontrol & RB_DEPTHCONTROL_STENCIL_ENABLE) {
+		OUT_RING(ring,                           /* RB_DEPTH_INFO */
+				RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_24_8) |
+				RB_DEPTH_INFO_DEPTH_BASE(bin_w >> 2));
+	} else if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
+		OUT_RING(ring,                           /* RB_DEPTH_INFO */
+				RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_16) |
+				RB_DEPTH_INFO_DEPTH_BASE(bin_w >> 2));
 	} else {
-		OUT_RING(ring, state->render_target.bin_w << 10);        /* RB_DEPTH_INFO */
+		OUT_RING(ring,                           /* RB_DEPTH_INFO */
+				RB_DEPTH_INFO_DEPTH_BASE(bin_w >> 2));
 	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);

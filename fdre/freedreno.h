@@ -61,6 +61,11 @@ int fd_depth_func(struct fd_state *state, GLenum depth_func);
 int fd_enable(struct fd_state *state, GLenum cap);
 int fd_disable(struct fd_state *state, GLenum cap);
 int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor);
+int fd_stencil_func(struct fd_state *state, GLenum func,
+		GLint ref, GLuint mask);
+int fd_stencil_op(struct fd_state *state, GLenum sfail,
+		GLenum zfail, GLenum zpass);
+int fd_stencil_mask(struct fd_state *state, GLuint mask);
 int fd_tex_param(struct fd_state *state, GLenum name, GLint param);
 
 int fd_draw_elements(struct fd_state *state, GLenum mode, GLsizei count,
