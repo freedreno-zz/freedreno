@@ -86,7 +86,8 @@ int main(int argc, char **argv)
 
 	fd_link(state);
 
-	fd_clear(state, 0xff000000);
+	fd_clear_color(state, 0xff000000);
+	fd_clear(state, GL_COLOR_BUFFER_BIT);
 
 	fd_attribute_pointer(state, "aPosition0", 3, 4, vertices);
 	fd_attribute_pointer(state, "aPosition1", 3, 4, vertices);

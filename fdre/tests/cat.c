@@ -276,7 +276,8 @@ void main(void)
 		normal[7] = modelview.m[2][1];
 		normal[8] = modelview.m[2][2];
 
-		fd_clear(state, 0xff000000);
+		fd_clear_color(state, 0xff000000);
+		fd_clear(state, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		fd_attribute_bo(state, "normal", normal_vbo);
 		fd_attribute_bo(state, "position", position_vbo);

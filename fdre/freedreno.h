@@ -52,7 +52,10 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 int fd_set_texture(struct fd_state *state, const char *name,
 		struct fd_surface *tex);
 
-int fd_clear(struct fd_state *state, uint32_t color);
+void fd_clear_color(struct fd_state *state, uint32_t color);
+void fd_clear_stencil(struct fd_state *state, uint32_t s);
+void fd_clear_depth(struct fd_state *state, float depth);
+int fd_clear(struct fd_state *state, GLbitfield mask);
 int fd_cull(struct fd_state *state, GLenum mode);
 int fd_depth_func(struct fd_state *state, GLenum depth_func);
 int fd_enable(struct fd_state *state, GLenum cap);

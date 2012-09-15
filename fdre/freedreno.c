@@ -145,6 +145,12 @@ struct fd_state {
 		uint16_t bin_w, nbins_x;
 	} render_target;
 
+	struct {
+		uint32_t color;
+		uint32_t s;
+		float depth;
+	} clear;
+
 	/* have there been any render cmds since last flush? */
 	bool dirty;
 
@@ -719,11 +725,26 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, 0x0000000);
 }
 
-int fd_clear(struct fd_state *state, uint32_t color)
+void fd_clear_color(struct fd_state *state, uint32_t color)
+{
+	state->clear.color = color;
+}
+
+void fd_clear_stencil(struct fd_state *state, uint32_t s)
+{
+	state->clear.s = s;
+}
+
+void fd_clear_depth(struct fd_state *state, float depth)
+{
+	state->clear.depth = depth;
+}
+
+int fd_clear(struct fd_state *state, GLbitfield mask)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
-	bool clear_depth = !!(state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE);
+	bool clear_depth = (mask & GL_DEPTH_BUFFER_BIT);
 
 	state->dirty = true;
 
@@ -753,7 +774,7 @@ int fd_clear(struct fd_state *state, uint32_t color)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_CLEAR_COLOR));
-	OUT_RING(ring, color);
+	OUT_RING(ring, state->clear.color);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A220_RB_LRZ_VSC_CONTROL));
@@ -1716,7 +1737,7 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, 0x00000020);
+	OUT_RING(ring, RB_COLORCONTROL_BLEND_DISABLE);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_SAMPLE_POS));

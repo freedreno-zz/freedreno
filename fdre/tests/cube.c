@@ -272,7 +272,8 @@ int main(int argc, char **argv)
 		normal[7] = modelview.m[2][1];
 		normal[8] = modelview.m[2][2];
 
-		fd_clear(state, 0xff404040);
+		fd_clear_color(state, 0xff404040);
+		fd_clear(state, GL_COLOR_BUFFER_BIT);
 
 		fd_attribute_pointer(state, "in_position", 3, 24, vVertices);
 		fd_attribute_pointer(state, "in_normal", 3, 24, vNormals);
