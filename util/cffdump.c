@@ -118,8 +118,10 @@ static const char *vgt_prim_types[32] = {
 };
 
 static const char *vgt_source_select[4] = {
-		NAME(IMMEDIATE),
-		NAME(AUTO_INDEX),
+		NAME(DI_SRC_SEL_DMA),
+		NAME(DI_SRC_SEL_IMMEDIATE),
+		NAME(DI_SRC_SEL_AUTO_INDEX),
+		NAME(DI_SRC_SEL_RESERVED),
 };
 
 static const char *dither_mode_name[4] = {

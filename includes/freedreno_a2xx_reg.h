@@ -83,8 +83,10 @@ enum pc_di_primtype {
 
 /* see VGT:VGT_DRAW_INITIATOR.SOURCE_SELECT? */
 enum pc_di_src_sel {
-	IMMEDIATE  = 1,
-	AUTO_INDEX = 2,
+	DI_SRC_SEL_DMA = 0,
+	DI_SRC_SEL_IMMEDIATE = 1,
+	DI_SRC_SEL_AUTO_INDEX = 2,
+	DI_SRC_SEL_RESERVED = 3,
 };
 
 /* see VGT_DMA_INDEX_TYPE.INDEX_TYPE? */

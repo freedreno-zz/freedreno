@@ -714,7 +714,7 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, DRAW(RECTLIST, DI_SRC_SEL_AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -840,7 +840,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(RECTLIST, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, DRAW(RECTLIST, DI_SRC_SEL_AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -1156,13 +1156,15 @@ static int upload_attributes(struct kgsl_bo *bo, uint32_t off,
 	return align_size;
 }
 
-static void emit_attributes(struct fd_state *state,
-		uint32_t start, uint32_t count)
+static uint32_t emit_attributes(struct fd_state *state,
+		uint32_t start, uint32_t count,
+		uint32_t idx_size, void *indices)
 {
 	struct kgsl_bo *bo = state->attributes.bo;
 	struct fd_shader_const shader_const[MAX_PARAMS];
 	struct ir_attribute **attributes;
 	int n, attributes_count;
+	uint32_t idx_addr = 0;
 
 	attributes = fd_program_attributes(state->program,
 			FD_SHADER_VERTEX, &attributes_count);
@@ -1176,7 +1178,7 @@ retry:
 			shader_const[n].sz      = p->bo->size;
 		} else {
 			int align_size = upload_attributes(bo, state->attributes.off,
-					p, start, count);
+					p, start, indices ? p->count : count);
 
 			/* if we reach end of bo, then wrap-around: */
 			if (align_size < 0) {
@@ -1196,7 +1198,22 @@ retry:
 
 	if (n > 0) {
 		emit_shader_const(state->ring, 0x78, shader_const, n);
+		if (indices) {
+			uint32_t align_size = ALIGN(idx_size, 32);
+
+			if ((state->attributes.off + align_size) > bo->size) {
+				state->attributes.off = 0;
+				n = 0;
+				goto retry;
+			}
+
+			memcpy(bo->hostptr + state->attributes.off, indices, idx_size);
+			idx_addr = bo->gpuaddr + state->attributes.off;
+			state->attributes.off += align_size;
+		}
 	}
+
+	return idx_addr;
 }
 
 /* in the cmdstream, uniforms and conts are the same */
@@ -1312,11 +1329,39 @@ static void emit_cacheflush(struct fd_state *state)
 	}
 }
 
-int fd_draw_arrays(struct fd_state *state, GLenum mode,
-		uint32_t start, uint32_t count)
+static int draw_impl(struct fd_state *state, GLenum mode,
+		GLint first, GLsizei count, GLenum type, const GLvoid *indices)
 {
 	struct kgsl_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
+	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
+	enum pc_di_src_sel src_sel;
+	uint32_t idx_addr, idx_size;
+
+	if (indices) {
+		switch (type) {
+		case GL_UNSIGNED_BYTE:
+			idx_type = INDEX_SIZE_8_BIT;
+			idx_size = count;
+			break;
+		case GL_UNSIGNED_SHORT:
+			idx_type = INDEX_SIZE_16_BIT;
+			idx_size = 2 * count;
+			break;
+		case GL_UNSIGNED_INT:
+			idx_type = INDEX_SIZE_32_BIT;
+			idx_size = 4 * count;
+			break;
+		default:
+			ERROR_MSG("invalid type");
+			return -1;
+		}
+		src_sel = DI_SRC_SEL_DMA;
+	} else {
+		idx_type = INDEX_SIZE_IGN;
+		idx_size = 0;
+		src_sel = DI_SRC_SEL_AUTO_INDEX;
+	}
 
 	/*
 	 * vertex shader consts start at 0x80 <-> C0
@@ -1362,7 +1407,7 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	emit_constants(state, FD_SHADER_VERTEX);
 	emit_constants(state, FD_SHADER_FRAGMENT);
 
-	emit_attributes(state, start, count);
+	idx_addr = emit_attributes(state, first, count, idx_size, indices);
 
 	fd_program_emit_shader(state->program, FD_SHADER_VERTEX, ring);
 
@@ -1397,23 +1442,27 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
 
-	OUT_PKT3(ring, CP_DRAW_INDX, 3);
+	OUT_PKT3(ring, CP_DRAW_INDX, indices ? 5 : 3);
 	OUT_RING(ring, 0x00000000);		/* viz query info. */
 	switch (mode) {
 	case GL_TRIANGLE_STRIP:
-		OUT_RING(ring, DRAW(TRISTRIP, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(TRISTRIP, src_sel, idx_type, IGNORE_VISIBILITY));
 		break;
 	case GL_TRIANGLE_FAN:
-		OUT_RING(ring, DRAW(TRIFAN, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(TRIFAN, src_sel, idx_type, IGNORE_VISIBILITY));
 		break;
 	case GL_TRIANGLES:
-		OUT_RING(ring, DRAW(TRILIST, AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(TRILIST, src_sel, idx_type, IGNORE_VISIBILITY));
 		break;
 	default:
 		ERROR_MSG("unsupported mode: %d", mode);
-		break;
+		return -1;
 	}
 	OUT_RING(ring, count);				/* NumIndices */
+	if (indices) {
+		OUT_RING(ring, idx_addr);
+		OUT_RING(ring, idx_size);
+	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_2010));
@@ -1422,6 +1471,18 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 	emit_cacheflush(state);
 
 	return 0;
+}
+
+int fd_draw_elements(struct fd_state *state, GLenum mode, GLsizei count,
+		GLenum type, const GLvoid* indices)
+{
+	return draw_impl(state, mode, 0, count, type, indices);
+}
+
+int fd_draw_arrays(struct fd_state *state, GLenum mode,
+		GLint first, GLsizei count)
+{
+	return draw_impl(state, mode, first, count, 0, NULL);
 }
 
 int fd_swap_buffers(struct fd_state *state)

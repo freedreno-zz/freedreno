@@ -62,8 +62,12 @@ int fd_enable(struct fd_state *state, GLenum cap);
 int fd_disable(struct fd_state *state, GLenum cap);
 int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor);
 int fd_tex_param(struct fd_state *state, GLenum name, GLint param);
+
+int fd_draw_elements(struct fd_state *state, GLenum mode, GLsizei count,
+		GLenum type, const GLvoid* indices);
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
-		uint32_t start, uint32_t count);
+		GLint first, GLsizei count);
+
 int fd_swap_buffers(struct fd_state *state);
 int fd_flush(struct fd_state *state);
 
