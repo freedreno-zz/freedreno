@@ -118,6 +118,21 @@ get_display(void)
 	return display;
 }
 
+static void dump_bmp(EGLDisplay display, EGLSurface surface, const char *filename)
+{
+	GLint width, height;
+	void *buf;
+
+	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
+	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
+
+	buf = malloc(width * height * 4);
+
+	GCHK(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buf));
+
+	wrap_bmp_dump(buf, width, height, width*4, filename);
+}
+
 static GLuint
 get_program(const char *vertex_shader_source, const char *fragment_shader_source)
 {

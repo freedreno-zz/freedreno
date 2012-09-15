@@ -267,6 +267,8 @@ void test_stencil(void)
 
 	usleep(1000000);
 
+	dump_bmp(display, surface, "stencil.bmp");
+
 	RD_END();
 }
 
