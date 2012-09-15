@@ -418,6 +418,14 @@ static inline uint32_t RB_COPY_DEST_INFO_DITHER_TYPE(enum rb_dither_type val)
 
 
 /*
+ * Bits for RB_COPY_CONTROL:
+ */
+
+#define RB_COPY_CONTROL_DEPTH_CLEAR_ENABLE  0x00000008L
+#define RB_COPY_CONTROL_CLEAR_MASK(val)     ((val & 0xf) << 4)
+
+
+/*
  * Bits for RB_COLORCONTROL:
  */
 
@@ -441,6 +449,34 @@ static inline uint32_t RB_COLORCONTROL_DITHER_TYPE(enum rb_dither_type val)
 #define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET1(val) (((val) & 0x3) << 26)
 #define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET2(val) (((val) & 0x3) << 28)
 #define RB_COLORCONTROL_ALPHA_TO_MASK_OFFSET3(val) (((val) & 0x3) << 30)
+
+
+/*
+ * Bits for RB_DEPTH_INFO:
+ */
+
+enum rb_depth_format {
+	DEPTHX_16 = 0,
+	DEPTHX_24_8 = 1,
+};
+
+static inline uint32_t RB_DEPTH_INFO_DEPTH_FORMAT(enum rb_depth_format val)
+{
+	return val & 0x1;
+}
+#define RB_DEPTH_INFO_DEPTH_BASE(val)            ((val) << 12)
+
+
+/*
+ * Bits for RB_STENCILREFMASK (RB_STENCILREFMASK_BF is same)
+ */
+
+#define RB_STENCILREFMASK_STENCILREF_MASK        0x000000ff
+#define RB_STENCILREFMASK_STENCILREF(val)        ((val) & RB_STENCILREFMASK_STENCILREF_MASK)
+#define RB_STENCILREFMASK_STENCILMASK_MASK       0x0000ff00
+#define RB_STENCILREFMASK_STENCILMASK(val)       (((val) << 8) & RB_STENCILREFMASK_STENCILMASK_MASK)
+#define RB_STENCILREFMASK_STENCILWRITEMASK_MASK  0x00ff0000
+#define RB_STENCILREFMASK_STENCILWRITEMASK(val)  (((val) << 16) & RB_STENCILREFMASK_STENCILWRITEMASK_MASK)
 
 
 /*
