@@ -85,9 +85,9 @@ bmp_header_write(int fd, int width, int height)
 		.v_res = 0xB13,
 		.colours = 0,
 		.important_colours = 0,
-		.red_mask = 0x00FF0000,
+		.red_mask = 0x000000FF,
 		.green_mask = 0x0000FF00,
-		.blue_mask = 0x000000FF,
+		.blue_mask = 0x00FF0000,
 		.alpha_mask = 0xFF000000,
 		.colour_space = 0x57696E20,
 	};
