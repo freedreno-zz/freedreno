@@ -111,6 +111,12 @@ static inline uint32_t f2d(float f)
 	return u.d;
 }
 
+/* convert float to 12.4 fixed point */
+static inline uint32_t f2d12_4(float f)
+{
+	return (uint32_t)(f * 8.0);
+}
+
 /* convert x,y to dword */
 static inline uint32_t xy2d(uint16_t x, uint16_t y)
 {

@@ -245,11 +245,12 @@ static void emit_pa_state(struct fd_state *state)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_LINE_CNTL));
-	OUT_RING(ring, 0x00000008);
+	OUT_RING(ring, PA_SU_LINE_CNTL_WIDTH(1));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_POINT_SIZE));
-	OUT_RING(ring, 0x00080008);
+	OUT_RING(ring, PA_SU_POINT_SIZE_HEIGHT(1) |
+			PA_SU_POINT_SIZE_WIDTH(1));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
@@ -270,7 +271,13 @@ static void emit_pa_state(struct fd_state *state)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, 0x0000043f);
+	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
+			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_PA_CL_GB_VERT_CLIP_ADJ));
@@ -281,7 +288,7 @@ static void emit_pa_state(struct fd_state *state)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_VTX_CNTL));
-	OUT_RING(ring, 0x00000001);
+	OUT_RING(ring, PA_SU_VTX_CNTL_PIX_CENTER(PIXCENTER_OGL));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
@@ -464,7 +471,8 @@ struct fd_state * fd_init(void)
 			RB_DEPTHCONTROL_STENCILFUNC(GL_ALWAYS) |
 			RB_DEPTHCONTROL_BACKFACE_ENABLE |
 			RB_DEPTHCONTROL_STENCILFUNC_BF(GL_ALWAYS);
-	state->rb_stencilrefmask = 0xffff0000;
+	state->rb_stencilrefmask = 0xff000000 |
+			RB_STENCILREFMASK_STENCILWRITEMASK(0xff);
 
 	state->textures.clamp_x = SQ_TEX0_WRAP;
 	state->textures.clamp_y = SQ_TEX0_WRAP;
@@ -691,7 +699,11 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, 0x0000040f);
+	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
+			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
@@ -827,7 +839,10 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
-	OUT_RING(ring, 0x0000000f);
+	OUT_RING(ring, RB_COLOR_MASK_WRITE_RED |
+			RB_COLOR_MASK_WRITE_GREEN |
+			RB_COLOR_MASK_WRITE_BLUE |
+			RB_COLOR_MASK_WRITE_ALPHA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
@@ -858,7 +873,13 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, 0x0000043f);
+	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
+			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
@@ -886,10 +907,6 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
-	OUT_RING(ring, 0x0000000f);
-
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
 	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST);
 
@@ -913,14 +930,6 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	OUT_RING(ring, f2d(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
 	OUT_RING(ring, f2d(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
 	OUT_RING(ring, f2d(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
-
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, 0x0000043f);
-
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
-	OUT_RING(ring, 0x00000000);
 
 	return 0;
 }
@@ -1518,7 +1527,13 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, 0x0000043f);
+	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
+			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
@@ -2038,7 +2053,10 @@ void fd_make_current(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
-	OUT_RING(ring, 0x0000000f);
+	OUT_RING(ring, RB_COLOR_MASK_WRITE_RED |
+			RB_COLOR_MASK_WRITE_GREEN |
+			RB_COLOR_MASK_WRITE_BLUE |
+			RB_COLOR_MASK_WRITE_ALPHA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));

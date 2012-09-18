@@ -115,6 +115,43 @@ static inline uint32_t DRAW(enum pc_di_primtype prim_type,
 
 
 /*
+ * Bits for PA_CL_VTE_CNTL:
+ */
+
+#define PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA         0x00000001
+#define PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA        0x00000002
+#define PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA         0x00000004
+#define PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA        0x00000008
+#define PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA         0x00000010
+#define PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA        0x00000020
+#define PA_CL_VTE_CNTL_VTX_XY_FMT                0x00000100
+#define PA_CL_VTE_CNTL_VTX_Z_FMT                 0x00000200
+#define PA_CL_VTE_CNTL_VTX_W0_FMT                0x00000400
+#define PA_CL_VTE_CNTL_PERFCOUNTER_REF           0x00000800
+
+
+/*
+ * Bits for PA_CL_CLIP_CNTL:
+ */
+
+#define PA_CL_CLIP_CNTL_CLIP_DISABLE             0x00010000
+#define PA_CL_CLIP_CNTL_BOUNDARY_EDGE_FLAG_ENA   0x00040000
+enum dx_clip_space {
+	DXCLIP_OPENGL = 0,
+	DXCLIP_DIRECTX = 1,
+};
+static inline uint32_t PA_CL_CLIP_CNTL_DX_CLIP_SPACE_DEF(enum dx_clip_space val)
+{
+	return val << 19;
+}
+#define PA_CL_CLIP_CNTL_DIS_CLIP_ERR_DETECT      0x00100000
+#define PA_CL_CLIP_CNTL_VTX_KILL_OR              0x00200000
+#define PA_CL_CLIP_CNTL_XY_NAN_RETAIN            0x00400000
+#define PA_CL_CLIP_CNTL_Z_NAN_RETAIN             0x00800000
+#define PA_CL_CLIP_CNTL_W_NAN_RETAIN             0x01000000
+
+
+/*
  * Bits for PA_SU_SC_MODE_CNTL:
  * (seems to be same as r600)
  */
@@ -138,6 +175,66 @@ static inline uint32_t PA_SU_SC_POLYMODE_BACK_PTYPE(enum pa_su_sc_draw val)
 {
 	return val << 8;
 }
+
+
+/*
+ * PA_SU_VTX_CNTL
+ */
+
+enum pa_pixcenter {
+    PIXCENTER_D3D = 0,
+    PIXCENTER_OGL = 1,
+};
+static inline uint32_t PA_SU_VTX_CNTL_PIX_CENTER(enum pa_pixcenter val)
+{
+	return val;
+}
+
+enum pa_roundmode {
+    TRUNCATE = 0,
+    ROUND = 1,
+    ROUNDTOEVEN = 2,
+    ROUNDTOODD = 3,
+};
+static inline uint32_t PA_SU_VTX_CNTL_ROUND_MODE_MASK(enum pa_roundmode val)
+{
+	return val << 1;
+}
+
+enum pa_quantmode {
+    ONE_SIXTEENTH = 0,
+    ONE_EIGHTH = 1,
+    ONE_QUARTER = 2,
+    ONE_HALF = 3,
+    ONE = 4,
+};
+static inline uint32_t PA_SU_VTX_CNTL_QUANT_MODE(enum pa_quantmode val)
+{
+	return val << 3;
+}
+
+
+/*
+ * Bits for PA_SU_POINT_SIZE:
+ */
+
+#define PA_SU_POINT_SIZE_HEIGHT(val)   (f2d12_4(val) & 0xffff)
+#define PA_SU_POINT_SIZE_WIDTH(val)    ((f2d12_4(val) << 16) & 0xffff)
+
+
+/*
+ * Bits for PA_SU_POINT_MINMAX:
+ */
+
+#define PA_SU_POINT_MINMAX_MIN_SIZE(val)    (f2d12_4(val) & 0xffff)
+#define PA_SU_POINT_MINMAX_MAX_SIZE(val)    ((f2d12_4(val) << 16) & 0xffff)
+
+
+/*
+ * Bits for PA_SU_LINE_CNTL:
+ */
+
+#define PA_SU_LINE_CNTL_WIDTH(val)     (f2d12_4(val) & 0xffff)
 
 
 /*
@@ -172,7 +269,7 @@ static inline uint32_t SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(enum sq_sample_cntl val)
 
 
 /*
- * Bits for SQ_PROGRAM_CNTL
+ * Bits for SQ_PROGRAM_CNTL:
  */
 #define SQ_PROGRAM_CNTL_VS_REGS(val)   ((val) & 0xff)
 #define SQ_PROGRAM_CNTL_PS_REGS(val)   (((val) & 0xff) << 8)
@@ -289,7 +386,16 @@ static inline uint32_t RB_BLENDCONTROL_ALPHA_DESTBLEND(enum rb_blend_op val)
 
 
 /*
- * Bits for RB_MODECONTROL
+ * Bits for RB_COLOR_MASK:
+ */
+#define RB_COLOR_MASK_WRITE_RED                  0x00000001
+#define RB_COLOR_MASK_WRITE_GREEN                0x00000002
+#define RB_COLOR_MASK_WRITE_BLUE                 0x00000004
+#define RB_COLOR_MASK_WRITE_ALPHA                0x00000008
+
+
+/*
+ * Bits for RB_MODECONTROL:
  */
 
 enum rb_edram_mode {
@@ -468,7 +574,7 @@ static inline uint32_t RB_DEPTH_INFO_DEPTH_FORMAT(enum rb_depth_format val)
 
 
 /*
- * Bits for RB_STENCILREFMASK (RB_STENCILREFMASK_BF is same)
+ * Bits for RB_STENCILREFMASK (RB_STENCILREFMASK_BF is same):
  */
 
 #define RB_STENCILREFMASK_STENCILREF_MASK        0x000000ff
@@ -480,7 +586,7 @@ static inline uint32_t RB_DEPTH_INFO_DEPTH_FORMAT(enum rb_depth_format val)
 
 
 /*
- * Bits for TC_CNTL_STATUS
+ * Bits for TC_CNTL_STATUS:
  */
 
 #define TC_CNTL_STATUS_L2_INVALIDATE             0x00000001
