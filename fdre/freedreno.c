@@ -87,9 +87,6 @@ struct fd_state {
 	struct kgsl_devinfo devinfo;
 	struct kgsl_shadowprop shadowprop;
 
-	/* shadow buffer.. not sure if we need this, but blob drivers mmap it.. */
-	struct kgsl_bo *shadow;
-
 	/* primary cmdstream buffer with render commands: */
 	struct kgsl_ringbuffer *ring;
 
@@ -411,10 +408,6 @@ struct fd_state * fd_init(void)
 	INFO_MSG(" Device version:  %d.%d",
 			state->version.dev_major, state->version.dev_minor);
 
-	state->shadow = kgsl_bo_new_from_gpuaddr(state->fd,
-			state->shadowprop.gpuaddr, NULL,
-			state->shadowprop.size);
-
 	ret = ioctl(state->fd, IOCTL_KGSL_DRAWCTXT_CREATE, &req);
 	if (ret) {
 		ERROR_MSG("failed to allocate context: %d (%s)",
@@ -528,7 +521,6 @@ fail:
 void fd_fini(struct fd_state *state)
 {
 	fd_surface_del(state, state->render_target.surface);
-	kgsl_bo_del(state->shadow);
 	kgsl_ringbuffer_del(state->ring);
 	close(state->fd);
 	free(state);

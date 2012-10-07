@@ -40,7 +40,7 @@
 
 /* ************************************************************************* */
 
-struct kgsl_bo * kgsl_bo_new_from_gpuaddr(int fd,
+static struct kgsl_bo * kgsl_bo_new_from_gpuaddr(int fd,
 		uint32_t gpuaddr, void *hostptr, uint32_t size)
 {
 	struct kgsl_bo *bo = calloc(1, sizeof(*bo));
