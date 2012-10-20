@@ -1,6 +1,7 @@
 # 2d tests:
 test-fill
 test-fill2
+test-replay
 test-copy
 test-composite
 test-composite2

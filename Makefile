@@ -7,6 +7,7 @@ VPATH = tests-2d:tests-3d:util:wrap
 TESTS_2D = \
 	test-fill \
 	test-fill2 \
+	test-replay \
 	test-copy \
 	test-fb \
 	test-composite \

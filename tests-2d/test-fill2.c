@@ -69,6 +69,8 @@ int main(int argc, char **argv)
 	test_fill(1920, 1080, xRGB, 0, 0, 0x100, 0);
 	test_fill(1920, 1080, xRGB, 0, 0, 0, 0x100);
 
+	test_fill(1, 1, xRGB, 0, 0, 1, 1);
+
 	return 0;
 }
 
