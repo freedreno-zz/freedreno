@@ -42,7 +42,7 @@ AC_PROG_YACC
 AC_PROG_LIBTOOL
 
 # Obtain compiler/linker options for depedencies
-PKG_CHECK_MODULES(DRM, libdrm)
+PKG_CHECK_MODULES(DRM, libdrm libdrm_freedreno)
 
 dnl ===========================================================================
 dnl check compiler flags

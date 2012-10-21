@@ -32,7 +32,7 @@
 
 #include "program.h"
 #include "ir.h"
-#include "kgsl.h"
+#include "ring.h"
 
 
 struct fd_shader {
@@ -121,7 +121,7 @@ struct ir_uniform ** fd_program_uniforms(struct fd_program *program,
 }
 
 int fd_program_emit_shader(struct fd_program *program,
-		enum fd_shader_type type, struct kgsl_ringbuffer *ring)
+		enum fd_shader_type type, struct fd_ringbuffer *ring)
 {
 	struct fd_shader *shader = get_shader(program, type);
 	uint32_t i;
@@ -136,7 +136,7 @@ int fd_program_emit_shader(struct fd_program *program,
 }
 
 int fd_program_emit_sq_program_cntl(struct fd_program *program,
-		struct kgsl_ringbuffer *ring)
+		struct fd_ringbuffer *ring)
 {
 	struct ir_shader_info *vsi = &get_shader(program, FD_SHADER_VERTEX)->info;
 	struct ir_shader_info *fsi = &get_shader(program, FD_SHADER_FRAGMENT)->info;

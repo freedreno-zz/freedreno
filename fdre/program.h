@@ -24,7 +24,7 @@
 #ifndef PROGRAM_H_
 #define PROGRAM_H_
 
-#include "kgsl.h"
+#include "ring.h"
 
 struct fd_program;
 
@@ -53,9 +53,9 @@ struct ir_uniform ** fd_program_uniforms(struct fd_program *program,
 		enum fd_shader_type type, int *cnt);
 
 int fd_program_emit_shader(struct fd_program *program,
-		enum fd_shader_type type, struct kgsl_ringbuffer *ring);
+		enum fd_shader_type type, struct fd_ringbuffer *ring);
 
 int fd_program_emit_sq_program_cntl(struct fd_program *program,
-		struct kgsl_ringbuffer *ring);
+		struct fd_ringbuffer *ring);
 
 #endif /* PROGRAM_H_ */

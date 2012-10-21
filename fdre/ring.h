@@ -26,6 +26,9 @@
 
 #include <stdint.h>
 
+#include <freedreno_drmif.h>
+#include <freedreno_ringbuffer.h>
+
 #include "a2xx_reg.h"
 #include "freedreno_a2xx_reg.h"
 #include "adreno_pm4types.h"
@@ -35,66 +38,60 @@
 #define LOG_DWORDS 0
 
 
-/* ************************************************************************* */
-
-struct kgsl_bo {
-	int fd;
-	uint32_t size;
-	uint32_t gpuaddr;
-	void *hostptr;
-	bool free_gpuaddr;
-};
-
-struct kgsl_bo * kgsl_bo_new(int fd, uint32_t size, uint32_t flags);
-struct kgsl_bo * kgsl_bo_new_hostptr(int fd, void *hostptr, uint32_t size);
-void kgsl_bo_del(struct kgsl_bo *bo);
-
-/* ************************************************************************* */
-
-struct kgsl_ringbuffer {
-	uint32_t drawctxt_id;
-	int fd;
-	int size;
-	struct kgsl_bo *bo;
-	uint32_t *cur, *end, *start, *last_start;
-	unsigned int timestamp;
-};
-
-struct kgsl_ringbuffer * kgsl_ringbuffer_new(int fd, uint32_t size,
-		uint32_t drawctxt_id);
-void kgsl_ringbuffer_del(struct kgsl_ringbuffer *ring);
-
-void kgsl_ringbuffer_reset(struct kgsl_ringbuffer *ring);
-int kgsl_ringbuffer_wait(struct kgsl_ringbuffer *ring);
-
-int kgsl_ringbuffer_flush(struct kgsl_ringbuffer *ring);
-int kgsl_ringbuffer_begin(struct kgsl_ringbuffer *ring, int dwords);
-
-int kgsl_ringbuffer_emit_ib(struct kgsl_ringbuffer *ring,
-		struct kgsl_ringbuffer *dst_ring);
-
 static inline void
-OUT_RING(struct kgsl_ringbuffer *ring, uint32_t data)
+OUT_RING(struct fd_ringbuffer *ring, uint32_t data)
 {
 	if (LOG_DWORDS) {
-		DEBUG_MSG("ring[%d]: OUT_RING   %04x:  %08x\n", ring->fd,
+		DEBUG_MSG("ring[%p]: OUT_RING   %04x:  %08x\n", ring,
 				(uint32_t)(ring->cur - ring->last_start), data);
 	}
 	*(ring->cur++) = data;
 }
 
 static inline void
-OUT_PKT0(struct kgsl_ringbuffer *ring, uint16_t regindx, uint16_t cnt)
+OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
+		uint32_t offset, uint32_t or)
 {
-	kgsl_ringbuffer_begin(ring, cnt+1);
+	if (LOG_DWORDS) {
+		DEBUG_MSG("ring[%p]: OUT_RELOC  %04x:  %p+%u", ring,
+				(uint32_t)(ring->cur - ring->last_start), bo, offset);
+	}
+	fd_ringbuffer_emit_reloc(ring, bo, offset, or);
+}
+
+static inline void BEGIN_RING(struct fd_ringbuffer *ring, uint32_t ndwords)
+{
+	if ((ring->cur + ndwords) >= ring->end) {
+		/* this probably won't really work if we have multiple tiles..
+		 * but it is ok for 2d..  we might need different behavior
+		 * depending on 2d or 3d pipe.
+		 */
+		WARN_MSG("uh oh..");
+	}
+}
+
+static inline void
+OUT_PKT0(struct fd_ringbuffer *ring, uint16_t regindx, uint16_t cnt)
+{
+	BEGIN_RING(ring, cnt+1);
 	OUT_RING(ring, CP_TYPE0_PKT | ((cnt-1) << 16) | (regindx & 0x7FFF));
 }
 
 static inline void
-OUT_PKT3(struct kgsl_ringbuffer *ring, uint8_t opcode, uint16_t cnt)
+OUT_PKT3(struct fd_ringbuffer *ring, uint8_t opcode, uint16_t cnt)
 {
-	kgsl_ringbuffer_begin(ring, cnt+1);
+	BEGIN_RING(ring, cnt+1);
 	OUT_RING(ring, CP_TYPE3_PKT | ((cnt-1) << 16) | ((opcode & 0xFF) << 8));
+}
+
+static inline void
+OUT_IB(struct fd_ringbuffer *ring,
+		struct fd_ringbuffer *dst_ring)
+{
+	OUT_PKT3(ring, CP_INDIRECT_BUFFER_PFD, 2);
+	fd_ringbuffer_emit_reloc_ring(ring, dst_ring,
+			(uint8_t *)dst_ring->last_start - (uint8_t *)dst_ring->start);
+	OUT_RING(ring, dst_ring->cur - dst_ring->last_start);
 }
 
 /* convert float to dword */

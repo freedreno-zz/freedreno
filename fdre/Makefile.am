@@ -28,16 +28,16 @@ SUBDIRS = asm . tests
 libfreedreno_la_LTLIBRARIES  = libfreedreno.la
 libfreedreno_ladir           = $(libdir)
 libfreedreno_la_LDFLAGS      = -no-undefined
-libfreedreno_la_LIBADD       = asm/libasm.la
+libfreedreno_la_LIBADD       = asm/libasm.la $(DRM_LIBS)
 libfreedreno_la_CFLAGS       = \
 	-O0 -g \
 	$(WARN_CFLAGS) \
+	$(DRM_CFLAGS) \
 	-I$(top_srcdir)/../includes \
 	-I$(top_srcdir)/asm \
 	-I$(top_srcdir)
 
 libfreedreno_la_SOURCES      = \
 	bmp.c \
-	kgsl.c \
 	program.c \
 	freedreno.c

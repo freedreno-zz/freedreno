@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 	struct fd_state *state;
 	struct fd_surface *surface, *lolstex1, *lolstex2;
 	struct fd_program *cat_program, *tex_program;
-	struct kgsl_bo *position_vbo, *normal_vbo;
+	struct fd_bo *position_vbo, *normal_vbo;
 	const char *cat_vertex_shader_asm =
 		"@varying(R0)     vertex_normal                                                      \n"
 		"@varying(R1)     vertex_position                                                    \n"

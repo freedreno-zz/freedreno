@@ -24,6 +24,7 @@
 AM_CFLAGS = \
 	-O0 -g \
 	$(WARN_CFLAGS) \
+	$(DRM_CFLAGS) \
 	-I$(top_srcdir)/../util \
 	-I$(top_srcdir)/../includes \
 	-I$(top_srcdir)

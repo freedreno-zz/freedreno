@@ -39,7 +39,7 @@
 #include "msm_kgsl.h"
 #include "freedreno.h"
 #include "program.h"
-#include "kgsl.h"
+#include "ring.h"
 #include "ir.h"
 #include "bmp.h"
 
@@ -55,7 +55,7 @@ struct fd_param {
 		FD_PARAM_UNIFORM,
 	} type;
 	union {
-		struct kgsl_bo *bo;       /* FD_PARAM_ATTRIBUTE_VBO */
+		struct fd_bo *bo;         /* FD_PARAM_ATTRIBUTE_VBO */
 		struct fd_surface *tex;   /* FD_PARAM_TEXTURE */
 		struct { /* FD_PARAM_ATTRIBUTE and FD_PARAM_UNIFORM */
 			/* user ptr and dimensions for passed in uniform/attribute:
@@ -78,30 +78,28 @@ struct fd_parameters {
 
 struct fd_state {
 
-	int fd;
-
-	uint32_t drawctxt_id;
+	struct fd_device *dev;
+	struct fd_pipe *pipe;
 
 	/* device properties: */
-	struct kgsl_version version;
-	struct kgsl_devinfo devinfo;
-	struct kgsl_shadowprop shadowprop;
+	uint32_t gmemsize_bytes;
+	uint32_t device_id;
 
 	/* primary cmdstream buffer with render commands: */
-	struct kgsl_ringbuffer *ring;
+	struct fd_ringbuffer *ring;
 
 	/* if render target needs to be broken into tiles/bins, this cmd
 	 * buffer contains the per-tile setup, and then IB calls to the
 	 * primary cmdstream buffer for each tile.  The primary cmdstream
 	 * buffer is executed for each tile.
 	 */
-	struct kgsl_ringbuffer *ring_tile;
+	struct fd_ringbuffer *ring_tile;
 
 	/* program used internally for blits/fills */
 	struct fd_program *solid_program;
 
 	/* buffer for passing vertices to solid program */
-	struct kgsl_bo *solid_const;
+	struct fd_bo *solid_const;
 
 	/* shader program: */
 	struct fd_program *program;
@@ -118,7 +116,7 @@ struct fd_state {
 		 * so we don't immediately overwrite the parameters for the
 		 * last draw cmd which the gpu may still be using:
 		 */
-		struct kgsl_bo *bo;
+		struct fd_bo *bo;
 		uint32_t off;
 
 		struct fd_parameters params;
@@ -171,18 +169,20 @@ struct fd_state {
 		struct fb_fix_screeninfo fix;
 		struct fd_surface *surface;
 		void *ptr;
+		int fd;
 	} fb;
 };
 
 struct fd_surface {
-	struct kgsl_bo *bo;
+	struct fd_bo *bo;
 	uint32_t cpp;	/* bytes per pixel */
 	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
 	enum COLORFORMATX color;
 };
 
 struct fd_shader_const {
-	uint32_t gpuaddr, sz;
+	uint32_t offset, sz;
+	struct fd_bo *bo;
 	enum COLORFORMATX format;
 };
 
@@ -212,20 +212,20 @@ static enum SURFACEFORMAT color2fmt[] = {
 
 /* ************************************************************************* */
 
-static void emit_mem_write(struct fd_state *state, uint32_t gpuaddr,
+static void emit_mem_write(struct fd_state *state, struct fd_bo *bo,
 		void *data, uint32_t sizedwords)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	uint32_t *dwords = data;
 	OUT_PKT3(ring, CP_MEM_WRITE, sizedwords+1);
-	OUT_RING(ring, gpuaddr);
+	OUT_RELOC(ring, bo, 0, 0);
 	while (sizedwords--)
 		OUT_RING(ring, *(dwords++));
 }
 
 static void emit_pa_state(struct fd_state *state)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -305,7 +305,7 @@ static void emit_pa_state(struct fd_state *state)
 }
 
 /* val - shader linkage (I think..) */
-static void emit_shader_const(struct kgsl_ringbuffer *ring, uint32_t val,
+static void emit_shader_const(struct fd_ringbuffer *ring, uint32_t val,
 		struct fd_shader_const *consts, uint32_t n)
 {
 	uint32_t i;
@@ -313,8 +313,8 @@ static void emit_shader_const(struct kgsl_ringbuffer *ring, uint32_t val,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 1 + (2 * n));
 	OUT_RING(ring, (0x1 << 16) | (val & 0xffff));
 	for (i = 0; i < n; i++) {
-		OUT_RING(ring, consts[i].gpuaddr | consts[i].format);
-		OUT_RING(ring, consts[i].sz);
+		OUT_RELOC(ring, consts[i].bo, consts[i].offset, consts[i].format);
+		OUT_RING (ring, consts[i].sz);
 	}
 }
 
@@ -347,35 +347,15 @@ static float init_shader_const[] = {
 
 /* ************************************************************************* */
 
-static int getprop(int fd, enum kgsl_property_type type,
-		void *value, int sizebytes)
-{
-	struct kgsl_device_getproperty req = {
-			.type = type,
-			.value = value,
-			.sizebytes = sizebytes,
-	};
-	return ioctl(fd, IOCTL_KGSL_DEVICE_GETPROPERTY, &req);
-}
-
-#define GETPROP(fd, prop, x) do { \
-	if (getprop((fd), KGSL_PROP_##prop, &(x), sizeof(x))) {			\
-		ERROR_MSG("failed to get property: " #prop);					\
-		exit(-1);														\
-	} } while (0)
-
-
 struct fd_state * fd_init(void)
 {
-	struct kgsl_drawctxt_create req = {
-			.flags = 0x2000, /* ??? */
-	};
 	struct fd_state *state;
+	uint64_t val;
 	int fd, ret;
 
-	fd = open("/dev/kgsl-3d0", O_RDWR);
+	fd = drmOpen("kgsl", NULL);
 	if (fd < 0) {
-		ERROR_MSG("could not open kgsl-3d0 device: %d (%s)",
+		ERROR_MSG("could not open kgsl device: %d (%s)",
 				fd, strerror(errno));
 		return NULL;
 	}
@@ -383,50 +363,22 @@ struct fd_state * fd_init(void)
 	state = calloc(1, sizeof(*state));
 	assert(state);
 
-	state->fd = fd;
+	state->dev = fd_device_new(fd);
+	state->pipe = fd_pipe_new(state->dev, FD_PIPE_3D);
 
-	GETPROP(state->fd, VERSION,       state->version);
-	GETPROP(state->fd, DEVICE_INFO,   state->devinfo);
-	GETPROP(state->fd, DEVICE_SHADOW, state->shadowprop);
+	fd_pipe_get_param(state->pipe, FD_GMEM_SIZE, &val);
+	state->gmemsize_bytes = val;
 
-	INFO_MSG("Accel Info:");
-	INFO_MSG(" Chip-id:         %d.%d.%d.%d",
-			(state->devinfo.chip_id >> 24) & 0xff,
-			(state->devinfo.chip_id >> 16) & 0xff,
-			(state->devinfo.chip_id >>  8) & 0xff,
-			(state->devinfo.chip_id >>  0) & 0xff);
-	INFO_MSG(" Device-id:       %d", state->devinfo.device_id);
-	INFO_MSG(" GPU-id:          %d", state->devinfo.gpu_id);
-	INFO_MSG(" MMU enabled:     %d", state->devinfo.mmu_enabled);
-	INFO_MSG(" GMEM Base addr:  0x%08x", state->devinfo.gmem_gpubaseaddr);
-	INFO_MSG(" GMEM size:       0x%08x", state->devinfo.gmem_sizebytes);
-	INFO_MSG( "Shadow:          %08x (size:%d, flags:%x)",
-			state->shadowprop.gpuaddr, state->shadowprop.size,
-			state->shadowprop.flags);
-	INFO_MSG(" Driver version:  %d.%d",
-			state->version.drv_major, state->version.drv_minor);
-	INFO_MSG(" Device version:  %d.%d",
-			state->version.dev_major, state->version.dev_minor);
+	fd_pipe_get_param(state->pipe, FD_DEVICE_ID, &val);
+	state->device_id = val;
 
-	ret = ioctl(state->fd, IOCTL_KGSL_DRAWCTXT_CREATE, &req);
-	if (ret) {
-		ERROR_MSG("failed to allocate context: %d (%s)",
-				ret, strerror(errno));
-		goto fail;
-	}
+	state->ring = fd_ringbuffer_new(state->pipe, 0x10000);
+	state->ring_tile = fd_ringbuffer_new(state->pipe, 0x10000);
 
-	state->drawctxt_id = req.drawctxt_id;
-
-	state->ring = kgsl_ringbuffer_new(state->fd, 0x10000,
-			state->drawctxt_id);
-
-	state->ring_tile = kgsl_ringbuffer_new(state->fd, 0x10000,
-			state->drawctxt_id);
-
-	state->solid_const = kgsl_bo_new(state->fd, 0x1000, 0);
+	state->solid_const = fd_bo_new(state->dev, 0x1000, 0);
 
 	/* allocate bo to pass vertices: */
-	state->attributes.bo = kgsl_bo_new(state->fd, 0x20000, 0);
+	state->attributes.bo = fd_bo_new(state->dev, 0x20000, 0);
 
 	state->program = fd_program_new();
 
@@ -502,6 +454,7 @@ struct fd_state * fd_init(void)
 			state->fb.var.xres_virtual, state->fb.var.yres_virtual,
 			state->fb.fix.line_length);
 
+	state->fb.fd = fd;
 	state->fb.ptr = mmap(0,
 			state->fb.var.yres_virtual * state->fb.fix.line_length,
 			PROT_WRITE | PROT_READ,
@@ -521,8 +474,10 @@ fail:
 void fd_fini(struct fd_state *state)
 {
 	fd_surface_del(state, state->render_target.surface);
-	kgsl_ringbuffer_del(state->ring);
-	close(state->fd);
+	fd_ringbuffer_del(state->ring);
+	fd_ringbuffer_del(state->ring_tile);
+	fd_pipe_del(state->pipe);
+	fd_device_del(state->dev);
 	free(state);
 }
 
@@ -576,16 +531,16 @@ static struct fd_param * find_param(struct fd_parameters *params,
 }
 
 /* for VBO's */
-struct kgsl_bo * fd_attribute_bo_new(struct fd_state *state,
+struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 		uint32_t size, const void *data)
 {
-	struct kgsl_bo *bo = kgsl_bo_new(state->fd, size, 0); /* TODO read-only? */
-	memcpy(bo->hostptr, data, size);
+	struct fd_bo *bo = fd_bo_new(state->dev, size, 0); /* TODO read-only? */
+	memcpy(fd_bo_map(bo), data, size);
 	return bo;
 }
 
 int fd_attribute_bo(struct fd_state *state, const char *name,
-		struct kgsl_bo * bo)
+		struct fd_bo * bo)
 {
 	struct fd_param *p = find_param(&state->attributes.params, name);
 	if (!p)
@@ -637,11 +592,11 @@ int fd_set_texture(struct fd_state *state, const char *name,
 
 /* emit cmdstream to blit from GMEM back to the surface */
 static void emit_gmem2mem(struct fd_state *state,
-		struct kgsl_ringbuffer *ring, struct fd_surface *surface,
+		struct fd_ringbuffer *ring, struct fd_surface *surface,
 		uint32_t xoff, uint32_t yoff)
 {
 	emit_shader_const(ring, 0x9c, (struct fd_shader_const[]) {
-			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
+			{ .format = COLORX_8, .bo = state->solid_const, .sz = 48 },
 		}, 1 );
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
@@ -708,7 +663,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 6);
 	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
-	OUT_RING(ring, surface->bo->gpuaddr);   /* RB_COPY_DEST_BASE */
+	OUT_RELOC(ring, surface->bo, 0, 0);     /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);    /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(surface->color) |
 			RB_COPY_DEST_INFO_LINEAR |      /* RB_COPY_DEST_INFO */
@@ -752,14 +707,14 @@ void fd_clear_depth(struct fd_state *state, float depth)
 
 int fd_clear(struct fd_state *state, GLbitfield mask)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
 	uint32_t reg;
 
 	state->dirty = true;
 
 	emit_shader_const(ring, 0x9c, (struct fd_shader_const[]) {
-			{ .format = COLORX_8, .gpuaddr = state->solid_const->gpuaddr, .sz = 48 },
+			{ .format = COLORX_8, .bo = state->solid_const, .sz = 48 },
 		}, 1 );
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
@@ -1258,7 +1213,7 @@ int fd_tex_param(struct fd_state *state, GLenum name, GLint param)
 	}
 }
 
-static int upload_attributes(struct kgsl_bo *bo, uint32_t off,
+static int upload_attributes(struct fd_bo *bo, uint32_t off,
 		struct fd_param *p, uint32_t start, uint32_t count)
 {
 	uint32_t group_size = p->elem_size * p->size;
@@ -1266,13 +1221,13 @@ static int upload_attributes(struct kgsl_bo *bo, uint32_t off,
 	uint32_t align_size = ALIGN(total_size, 32);
 	uint32_t data_off   = group_size * start;
 
-	if ((off + align_size) > bo->size)
+	if ((off + align_size) > fd_bo_size(bo))
 		return -1;
 
-	memcpy(bo->hostptr + off, p->data + data_off, total_size);
+	memcpy(fd_bo_map(bo) + off, p->data + data_off, total_size);
 
 	/* zero pad up to multiple of 32 */
-	memset(bo->hostptr + off + total_size, 0, align_size - total_size);
+	memset(fd_bo_map(bo) + off + total_size, 0, align_size - total_size);
 
 	return align_size;
 }
@@ -1281,11 +1236,11 @@ static uint32_t emit_attributes(struct fd_state *state,
 		uint32_t start, uint32_t count,
 		uint32_t idx_size, const void *indices)
 {
-	struct kgsl_bo *bo = state->attributes.bo;
+	struct fd_bo *bo = state->attributes.bo;
 	struct fd_shader_const shader_const[MAX_PARAMS];
 	struct ir_attribute **attributes;
 	int n, attributes_count;
-	uint32_t idx_addr = 0;
+	uint32_t idx_offset = 0;
 
 	attributes = fd_program_attributes(state->program,
 			FD_SHADER_VERTEX, &attributes_count);
@@ -1295,8 +1250,9 @@ retry:
 				attributes[n]->name);
 
 		if (p->type == FD_PARAM_ATTRIBUTE_VBO) {
-			shader_const[n].gpuaddr = p->bo->gpuaddr;
-			shader_const[n].sz      = p->bo->size;
+			shader_const[n].offset = 0;
+			shader_const[n].bo = p->bo;
+			shader_const[n].sz = fd_bo_size(p->bo);
 		} else {
 			int align_size = upload_attributes(bo, state->attributes.off,
 					p, start, indices ? p->count : count);
@@ -1308,8 +1264,9 @@ retry:
 				goto retry;
 			}
 
-			shader_const[n].gpuaddr = bo->gpuaddr + state->attributes.off;
-			shader_const[n].sz      = align_size;
+			shader_const[n].offset = state->attributes.off;
+			shader_const[n].bo = bo;
+			shader_const[n].sz = align_size;
 
 			state->attributes.off += align_size;
 		}
@@ -1322,19 +1279,19 @@ retry:
 		if (indices) {
 			uint32_t align_size = ALIGN(idx_size, 32);
 
-			if ((state->attributes.off + align_size) > bo->size) {
+			if ((state->attributes.off + align_size) > fd_bo_size(bo)) {
 				state->attributes.off = 0;
 				n = 0;
 				goto retry;
 			}
 
-			memcpy(bo->hostptr + state->attributes.off, indices, idx_size);
-			idx_addr = bo->gpuaddr + state->attributes.off;
+			memcpy(fd_bo_map(bo) + state->attributes.off, indices, idx_size);
+			idx_offset = state->attributes.off;
 			state->attributes.off += align_size;
 		}
 	}
 
-	return idx_addr;
+	return idx_offset;
 }
 
 /* in the cmdstream, uniforms and conts are the same */
@@ -1342,7 +1299,7 @@ static void emit_uniconst(struct fd_state *state, enum fd_shader_type type,
 		const void *data, uint32_t size, uint32_t count,
 		uint32_t cstart, uint32_t num)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	uint32_t base = (type == FD_SHADER_VERTEX) ? 0x00000080 : 0x00000480;
 	const uint32_t *dwords = data;
 	uint32_t i, j;
@@ -1397,7 +1354,7 @@ static void emit_constants(struct fd_state *state, enum fd_shader_type type)
 
 static void emit_textures(struct fd_state *state)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	struct ir_sampler **samplers;
 	int n, samplers_count;
 
@@ -1415,7 +1372,7 @@ static void emit_textures(struct fd_state *state)
 				SQ_TEX0_CLAMP_X(state->textures.clamp_x) |
 				SQ_TEX0_CLAMP_Y(state->textures.clamp_y));
 
-		OUT_RING(ring, color2fmt[p->tex->color] | p->tex->bo->gpuaddr);
+		OUT_RELOC(ring, p->tex->bo, 0, color2fmt[p->tex->color]);
 
 		OUT_RING(ring, SQ_TEX2_HEIGHT(p->tex->height) |
 				SQ_TEX2_WIDTH(p->tex->width));
@@ -1441,7 +1398,7 @@ static void emit_textures(struct fd_state *state)
 
 static void emit_cacheflush(struct fd_state *state)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	uint32_t i;
 
 	for (i = 0; i < 12; i++) {
@@ -1453,11 +1410,11 @@ static void emit_cacheflush(struct fd_state *state)
 static int draw_impl(struct fd_state *state, GLenum mode,
 		GLint first, GLsizei count, GLenum type, const GLvoid *indices)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	struct fd_surface *surface = state->render_target.surface;
 	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
 	enum pc_di_src_sel src_sel;
-	uint32_t idx_addr, idx_size;
+	uint32_t idx_offset, idx_size;
 
 	if (indices) {
 		switch (type) {
@@ -1541,7 +1498,7 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	emit_constants(state, FD_SHADER_VERTEX);
 	emit_constants(state, FD_SHADER_FRAGMENT);
 
-	idx_addr = emit_attributes(state, first, count, idx_size, indices);
+	idx_offset = emit_attributes(state, first, count, idx_size, indices);
 
 	fd_program_emit_shader(state->program, FD_SHADER_VERTEX, ring);
 
@@ -1594,8 +1551,8 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	}
 	OUT_RING(ring, count);				/* NumIndices */
 	if (indices) {
-		OUT_RING(ring, idx_addr);
-		OUT_RING(ring, idx_size);
+		OUT_RELOC(ring, state->attributes.bo, idx_offset, 0);
+		OUT_RING (ring, idx_size);
 	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -1623,7 +1580,7 @@ int fd_swap_buffers(struct fd_state *state)
 {
 	struct fd_surface *surface = state->render_target.surface;
 	char *dstptr = state->fb.ptr;
-	char *srcptr = surface->bo->hostptr;
+	char *srcptr = fd_bo_map(surface->bo);
 	uint32_t len = surface->pitch * surface->cpp;
 	uint32_t i;
 
@@ -1647,7 +1604,7 @@ int fd_swap_buffers(struct fd_state *state)
 int fd_flush(struct fd_state *state)
 {
 	struct fd_surface *surface = state->render_target.surface;
-	struct kgsl_ringbuffer *ring;
+	struct fd_ringbuffer *ring;
 
 	if (!state->dirty)
 		return 0;
@@ -1695,7 +1652,7 @@ int fd_flush(struct fd_state *state)
 				OUT_RING(ring, xy2d(bin_w, bin_h));   /* PA_SC_SCREEN_SCISSOR_BR */
 
 				/* emit IB to drawcmds: */
-				kgsl_ringbuffer_emit_ib(ring, state->ring);
+				OUT_IB  (ring, state->ring);
 
 				/* emit gmem2mem to transfer tile back to system memory: */
 				emit_gmem2mem(state, ring, surface, xoff, yoff);
@@ -1707,10 +1664,10 @@ int fd_flush(struct fd_state *state)
 		}
 	}
 
-	kgsl_ringbuffer_flush(ring);
-	kgsl_ringbuffer_wait(ring);
-	kgsl_ringbuffer_reset(state->ring);
-	kgsl_ringbuffer_reset(state->ring_tile);
+	fd_ringbuffer_flush(ring);
+	fd_pipe_wait(state->pipe, fd_ringbuffer_timestamp(ring));
+	fd_ringbuffer_reset(state->ring);
+	fd_ringbuffer_reset(state->ring_tile);
 
 	state->dirty = false;
 
@@ -1738,7 +1695,7 @@ struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
 	surface->pitch  = ALIGN(width, 32);
 	surface->cpp    = cpp;
 
-	surface->bo = kgsl_bo_new(state->fd,
+	surface->bo = fd_bo_new(state->dev,
 			surface->pitch * surface->height * surface->cpp, 0);
 	return surface;
 }
@@ -1766,7 +1723,7 @@ struct fd_surface * fd_surface_screen(struct fd_state *state,
 		surface->height = state->fb.var.yres;
 		surface->pitch  = state->fb.fix.line_length / surface->cpp;
 
-		surface->bo = kgsl_bo_new_hostptr(state->fd, state->fb.ptr,
+		surface->bo = fd_bo_from_fbdev(state->pipe, state->fb.fd,
 				state->fb.var.yres_virtual * state->fb.fix.line_length);
 
 		state->fb.surface = surface;
@@ -1789,14 +1746,14 @@ void fd_surface_del(struct fd_state *state, struct fd_surface *surface)
 		return;
 	if (state->render_target.surface == surface)
 		state->render_target.surface = NULL;
-	kgsl_bo_del(surface->bo);
+	fd_bo_del(surface->bo);
 	free(surface);
 }
 
 void fd_surface_upload(struct fd_surface *surface, const void *data)
 {
 	uint32_t i;
-	uint8_t *surfp = surface->bo->hostptr;
+	uint8_t *surfp = fd_bo_map(surface->bo);
 	const uint8_t *datap = data;
 
 	for (i = 0; i < surface->height; i++) {
@@ -1812,7 +1769,7 @@ static void attach_render_target(struct fd_state *state,
 	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
 	uint32_t cpp = color2cpp[surface->color];
-	uint32_t gmem_size = state->devinfo.gmem_sizebytes;
+	uint32_t gmem_size = state->gmemsize_bytes;
 	uint32_t max_width = 992;
 
 	if (state->rb_depthcontrol & (RB_DEPTHCONTROL_Z_ENABLE |
@@ -1878,13 +1835,13 @@ static void set_viewport(struct fd_state *state, uint32_t x, uint32_t y,
 void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface)
 {
-	struct kgsl_ringbuffer *ring = state->ring;
+	struct fd_ringbuffer *ring = state->ring;
 	uint32_t bin_w;
 
 	attach_render_target(state, surface);
 	set_viewport(state, 0, 0, surface->width, surface->height);
 
-	emit_mem_write(state, state->solid_const->gpuaddr,
+	emit_mem_write(state, state->solid_const,
 			init_shader_const, ARRAY_SIZE(init_shader_const));
 
 	OUT_PKT0(ring, REG_TP0_CHICKEN, 1);
@@ -2092,16 +2049,16 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, CP_REG(REG_RB_SAMPLE_POS));
 	OUT_RING(ring, 0x88888888);
 
-	kgsl_ringbuffer_flush(ring);
+	fd_ringbuffer_flush(ring);
 }
 
 int fd_dump_hex(struct fd_surface *surface)
 {
-	uint32_t *dbuf = surface->bo->hostptr;
-	float   *fbuf = surface->bo->hostptr;
+	uint32_t *dbuf = fd_bo_map(surface->bo);
+	float   *fbuf = fd_bo_map(surface->bo);
 	uint32_t i;
 
-	for (i = 0; i < surface->bo->size / 4; i+=4) {
+	for (i = 0; i < fd_bo_size(surface->bo) / 4; i+=4) {
 		printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
 				(unsigned int) i*4,
 				dbuf[i], dbuf[i+1], dbuf[i+2], dbuf[i+3],
@@ -2113,7 +2070,7 @@ int fd_dump_hex(struct fd_surface *surface)
 
 int fd_dump_bmp(struct fd_surface *surface, const char *filename)
 {
-	return bmp_dump(surface->bo->hostptr,
+	return bmp_dump(fd_bo_map(surface->bo),
 			surface->width, surface->height,
 			surface->pitch * surface->cpp,
 			filename);
