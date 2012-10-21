@@ -218,7 +218,7 @@ OUT_RING(struct fd_ringbuffer *ring, unsigned data)
 static inline void
 OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo)
 {
-	fd_ringbuffer_emit_reloc(ring, bo, 0);
+	fd_ringbuffer_emit_reloc(ring, bo, 0, 0);
 }
 
 static inline void
