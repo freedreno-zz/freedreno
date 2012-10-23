@@ -40,4 +40,5 @@ libfreedreno_la_CFLAGS       = \
 libfreedreno_la_SOURCES      = \
 	bmp.c \
 	program.c \
+	ws-fbdev.c \
 	freedreno.c

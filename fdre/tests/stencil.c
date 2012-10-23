@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 {
 	struct fd_state *state;
 	struct fd_surface *surface;
-	int width, height;
+	uint32_t width, height;
 
 	static const GLfloat vertices[] = {
 			-0.75f, +0.25f, +0.50f, // Quad #0

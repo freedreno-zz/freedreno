@@ -25,11 +25,6 @@
 #include "config.h"
 #endif
 
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-
 #include "program.h"
 #include "ir.h"
 #include "ring.h"

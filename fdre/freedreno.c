@@ -25,26 +25,16 @@
 #include "config.h"
 #endif
 
-#include <errno.h>
-#include <assert.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <linux/fb.h>
-
+#include "util.h"
 #include "msm_kgsl.h"
 #include "freedreno.h"
 #include "program.h"
 #include "ring.h"
 #include "ir.h"
+#include "ws.h"
 #include "bmp.h"
 
 /* ************************************************************************* */
-struct fd_surface;
 
 struct fd_param {
 	const char *name;
@@ -78,8 +68,7 @@ struct fd_parameters {
 
 struct fd_state {
 
-	struct fd_device *dev;
-	struct fd_pipe *pipe;
+	struct fd_winsys *ws;
 
 	/* device properties: */
 	uint32_t gmemsize_bytes;
@@ -162,22 +151,6 @@ struct fd_state {
 	uint32_t rb_colorcontrol;
 	uint32_t rb_depthcontrol;
 	uint32_t rb_stencilrefmask;
-
-	/* framebuffer info, for presentation blit: */
-	struct {
-		struct fb_var_screeninfo var;
-		struct fb_fix_screeninfo fix;
-		struct fd_surface *surface;
-		void *ptr;
-		int fd;
-	} fb;
-};
-
-struct fd_surface {
-	struct fd_bo *bo;
-	uint32_t cpp;	/* bytes per pixel */
-	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
-	enum COLORFORMATX color;
 };
 
 struct fd_shader_const {
@@ -351,34 +324,26 @@ struct fd_state * fd_init(void)
 {
 	struct fd_state *state;
 	uint64_t val;
-	int fd, ret;
-
-	fd = drmOpen("kgsl", NULL);
-	if (fd < 0) {
-		ERROR_MSG("could not open kgsl device: %d (%s)",
-				fd, strerror(errno));
-		return NULL;
-	}
+	int ret;
 
 	state = calloc(1, sizeof(*state));
 	assert(state);
 
-	state->dev = fd_device_new(fd);
-	state->pipe = fd_pipe_new(state->dev, FD_PIPE_3D);
+	state->ws = fd_winsys_fbdev_open();
 
-	fd_pipe_get_param(state->pipe, FD_GMEM_SIZE, &val);
+	fd_pipe_get_param(state->ws->pipe, FD_GMEM_SIZE, &val);
 	state->gmemsize_bytes = val;
 
-	fd_pipe_get_param(state->pipe, FD_DEVICE_ID, &val);
+	fd_pipe_get_param(state->ws->pipe, FD_DEVICE_ID, &val);
 	state->device_id = val;
 
-	state->ring = fd_ringbuffer_new(state->pipe, 0x10000);
-	state->ring_tile = fd_ringbuffer_new(state->pipe, 0x10000);
+	state->ring = fd_ringbuffer_new(state->ws->pipe, 0x10000);
+	state->ring_tile = fd_ringbuffer_new(state->ws->pipe, 0x10000);
 
-	state->solid_const = fd_bo_new(state->dev, 0x1000, 0);
+	state->solid_const = fd_bo_new(state->ws->dev, 0x1000, 0);
 
 	/* allocate bo to pass vertices: */
-	state->attributes.bo = fd_bo_new(state->dev, 0x20000, 0);
+	state->attributes.bo = fd_bo_new(state->ws->dev, 0x20000, 0);
 
 	state->program = fd_program_new();
 
@@ -434,35 +399,6 @@ struct fd_state * fd_init(void)
 			RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ZERO) |
 			RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ZERO);
 
-	/* open framebuffer for displaying results: */
-	fd = open("/dev/fb0", O_RDWR);
-	ret = ioctl(fd, FBIOGET_VSCREENINFO, &state->fb.var);
-	if (ret) {
-		ERROR_MSG("failed to get var: %d (%s)",
-				ret, strerror(errno));
-		goto fail;
-	}
-	ret = ioctl(fd, FBIOGET_FSCREENINFO, &state->fb.fix);
-	if (ret) {
-		ERROR_MSG("failed to get fix: %d (%s)",
-				ret, strerror(errno));
-		goto fail;
-	}
-
-	INFO_MSG("res %dx%d virtual %dx%d, line_len %d",
-			state->fb.var.xres, state->fb.var.yres,
-			state->fb.var.xres_virtual, state->fb.var.yres_virtual,
-			state->fb.fix.line_length);
-
-	state->fb.fd = fd;
-	state->fb.ptr = mmap(0,
-			state->fb.var.yres_virtual * state->fb.fix.line_length,
-			PROT_WRITE | PROT_READ,
-			MAP_SHARED, fd, 0);
-	if(state->fb.ptr == MAP_FAILED) {
-		ERROR_MSG("mmap failed");
-		goto fail;
-	}
 
 	return state;
 
@@ -476,8 +412,7 @@ void fd_fini(struct fd_state *state)
 	fd_surface_del(state, state->render_target.surface);
 	fd_ringbuffer_del(state->ring);
 	fd_ringbuffer_del(state->ring_tile);
-	fd_pipe_del(state->pipe);
-	fd_device_del(state->dev);
+	state->ws->destroy(state->ws);
 	free(state);
 }
 
@@ -534,7 +469,7 @@ static struct fd_param * find_param(struct fd_parameters *params,
 struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 		uint32_t size, const void *data)
 {
-	struct fd_bo *bo = fd_bo_new(state->dev, size, 0); /* TODO read-only? */
+	struct fd_bo *bo = fd_bo_new(state->ws->dev, size, 0); /* TODO read-only? */
 	memcpy(fd_bo_map(bo), data, size);
 	return bo;
 }
@@ -1578,25 +1513,10 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 
 int fd_swap_buffers(struct fd_state *state)
 {
-	struct fd_surface *surface = state->render_target.surface;
-	char *dstptr = state->fb.ptr;
-	char *srcptr = fd_bo_map(surface->bo);
-	uint32_t len = surface->pitch * surface->cpp;
-	uint32_t i;
-
-	if (len > state->fb.fix.line_length)
-		len = state->fb.fix.line_length;
-
 	fd_flush(state);
 
-	/* if we are rendering to front-buffer, we can skip this */
-	if (surface != state->fb.surface) {
-		for (i = 0; i < surface->height; i++) {
-			memcpy(dstptr, srcptr, len);
-			dstptr += state->fb.fix.line_length;
-			srcptr += len;
-		}
-	}
+	state->ws->post_surface(state->ws,
+			state->render_target.surface);
 
 	return 0;
 }
@@ -1665,7 +1585,7 @@ int fd_flush(struct fd_state *state)
 	}
 
 	fd_ringbuffer_flush(ring);
-	fd_pipe_wait(state->pipe, fd_ringbuffer_timestamp(ring));
+	fd_pipe_wait(state->ws->pipe, fd_ringbuffer_timestamp(ring));
 	fd_ringbuffer_reset(state->ring);
 	fd_ringbuffer_reset(state->ring_tile);
 
@@ -1695,7 +1615,7 @@ struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
 	surface->pitch  = ALIGN(width, 32);
 	surface->cpp    = cpp;
 
-	surface->bo = fd_bo_new(state->dev,
+	surface->bo = fd_bo_new(state->ws->dev,
 			surface->pitch * surface->height * surface->cpp, 0);
 	return surface;
 }
@@ -1710,34 +1630,7 @@ struct fd_surface * fd_surface_new(struct fd_state *state,
 struct fd_surface * fd_surface_screen(struct fd_state *state,
 		uint32_t *width, uint32_t *height)
 {
-	struct fd_surface *surface;
-
-	if (!state->fb.surface) {
-		surface = calloc(1, sizeof(*surface));
-		assert(surface);
-
-		/* TODO don't hardcode: */
-		surface->color  = COLORX_8_8_8_8;
-		surface->cpp    = color2cpp[surface->color];
-		surface->width  = state->fb.var.xres;
-		surface->height = state->fb.var.yres;
-		surface->pitch  = state->fb.fix.line_length / surface->cpp;
-
-		surface->bo = fd_bo_from_fbdev(state->pipe, state->fb.fd,
-				state->fb.var.yres_virtual * state->fb.fix.line_length);
-
-		state->fb.surface = surface;
-	} else {
-		surface = state->fb.surface;
-	}
-
-	if (width)
-		*width = surface->width;
-
-	if (height)
-		*height = surface->height;
-
-	return surface;
+	return state->ws->get_surface(state->ws, width, height);
 }
 
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface)

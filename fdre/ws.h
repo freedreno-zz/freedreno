@@ -21,40 +21,35 @@
  * SOFTWARE.
  */
 
-#ifndef UTIL_H_
-#define UTIL_H_
+#ifndef WS_H_
+#define WS_H_
 
-#include <errno.h>
-#include <assert.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+#include <freedreno_drmif.h>
 
-typedef enum {
-	true = 1, false = 0
-} bool;
+/* TODO this needs to move somewhere.. */
+#include "a2xx_reg.h"
+struct fd_surface {
+	struct fd_bo *bo;
+	uint32_t cpp;	/* bytes per pixel */
+	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
+	enum COLORFORMATX color;
+};
 
-#define enable_debug 0  /* TODO make dynamic */
+struct fd_winsys {
+	struct fd_device *dev;
 
-#define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+	/* thanks to the bizarre way we have to map the fbdev buffer (since msm
+	 * driver isn't a proper KMS driver), we need the winsys to create the
+	 * pipe too..
+	 */
+	struct fd_pipe *pipe;
 
-#define INFO_MSG(fmt, ...) \
-		do { printf("[I] "fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
-#define DEBUG_MSG(fmt, ...) \
-		do if (enable_debug) { printf("[D] "fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
-#define WARN_MSG(fmt, ...) \
-		do { printf("[W] "fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
-#define ERROR_MSG(fmt, ...) \
-		do { printf("[E] " fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
+	void (*destroy)(struct fd_winsys *ws);
+	struct fd_surface * (*get_surface)(struct fd_winsys *ws,
+			uint32_t *width, uint32_t *height);
+	int (*post_surface)(struct fd_winsys *ws, struct fd_surface *surface);
+};
 
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#define max(a, b) (((a) > (b)) ? (a) : (b))
+struct fd_winsys * fd_winsys_fbdev_open(void);
 
-
-#endif /* UTIL_H_ */
+#endif /* WS_H_ */
