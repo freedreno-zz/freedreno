@@ -51,5 +51,8 @@ struct fd_winsys {
 };
 
 struct fd_winsys * fd_winsys_fbdev_open(void);
+#ifdef HAVE_X11
+struct fd_winsys * fd_winsys_dri2_open(void);
+#endif
 
 #endif /* WS_H_ */

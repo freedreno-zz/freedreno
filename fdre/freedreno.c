@@ -329,7 +329,11 @@ struct fd_state * fd_init(void)
 	state = calloc(1, sizeof(*state));
 	assert(state);
 
-	state->ws = fd_winsys_fbdev_open();
+#ifdef HAVE_X11
+	state->ws = fd_winsys_dri2_open();
+#endif
+	if (!state->ws)
+		state->ws = fd_winsys_fbdev_open();
 
 	fd_pipe_get_param(state->ws->pipe, FD_GMEM_SIZE, &val);
 	state->gmemsize_bytes = val;

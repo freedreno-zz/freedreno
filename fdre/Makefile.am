@@ -42,3 +42,9 @@ libfreedreno_la_SOURCES      = \
 	program.c \
 	ws-fbdev.c \
 	freedreno.c
+
+if ENABLE_X11
+libfreedreno_la_SOURCES += ws-dri2.c
+libfreedreno_la_CFLAGS += $(X11_CFLAGS)
+libfreedreno_la_LIBADD += $(X11_LIBS)
+endif
