@@ -234,6 +234,8 @@ struct fd_winsys * fd_winsys_dri2_open(void)
 	int fd, nbufs, w, h;
 
 	dpy = XOpenDisplay(NULL);
+	if (!dpy)
+		return NULL;
 	win = XCreateSimpleWindow(dpy, RootWindow(dpy, 0),
 			1, 1, 800, 600, 0, BlackPixel (dpy, 0),
 			BlackPixel(dpy, 0));

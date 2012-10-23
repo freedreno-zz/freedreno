@@ -331,6 +331,8 @@ struct fd_state * fd_init(void)
 
 #ifdef HAVE_X11
 	state->ws = fd_winsys_dri2_open();
+	if (!state->ws)
+		ERROR_MSG("failed to open dri2, trying fbdev");
 #endif
 	if (!state->ws)
 		state->ws = fd_winsys_fbdev_open();
