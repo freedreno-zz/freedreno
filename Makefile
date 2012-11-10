@@ -15,6 +15,7 @@ TESTS_2D = \
 	test-multi
 
 TESTS_3D = \
+	test-caps \
 	test-stencil \
 	test-compiler \
 	test-enable-disable \

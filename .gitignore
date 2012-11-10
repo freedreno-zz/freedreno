@@ -9,6 +9,7 @@ test-multi
 test-fb
 
 # 3d tests:
+test-caps
 test-triangle-quad
 test-triangle-smoothed
 test-strip-smoothed
