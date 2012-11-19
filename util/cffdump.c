@@ -699,7 +699,7 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 {
 	uint32_t w, h, p;
 	uint32_t gpuaddr, flags, mip_gpuaddr, mip_flags;
-	uint32_t min, mag, clamp_x, clamp_y;
+	uint32_t min, mag, clamp_x, clamp_y, clamp_z;
 	static const char *filter[] = {
 			"point", "bilinear", "bicubic",
 	};
@@ -715,6 +715,7 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	p = (dwords[0] >> 22) << 5;
 	clamp_x = (dwords[0] >> 10) & 0x3;
 	clamp_y = (dwords[0] >> 13) & 0x3;
+	clamp_z = (dwords[0] >> 16) & 0x3;
 
 	/* Format=6:8888_WZYX, EndianSwap=0:None, ReqSize=0:256bit, DimHi=0,
 	 * NearestClamp=1:OGL Mode
@@ -742,7 +743,8 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	parse_dword_addr(dwords[5], &mip_gpuaddr, &mip_flags, 0xfff);
 
 	printf("%sset texture const %04x\n", levels[level], val);
-	printf("%sclamp x/y: %s/%s\n", levels[level+1], clamp[clamp_x], clamp[clamp_y]);
+	printf("%sclamp x/y/z: %s/%s/%s\n", levels[level+1],
+			clamp[clamp_x], clamp[clamp_y], clamp[clamp_z]);
 	printf("%sfilter min/mag: %s/%s\n", levels[level+1], filter[min], filter[mag]);
 	printf("%saddr=%08x (flags=%03x), size=%dx%d, pitch=%d, format=%s\n",
 			levels[level+1], gpuaddr, flags, w, h, p,

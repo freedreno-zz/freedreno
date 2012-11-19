@@ -94,7 +94,7 @@ const char *fragment_shader_source =
 
 
 void test_cube_textured(GLint mag_filter, GLint min_filter,
-		GLint wrap_s, GLint wrap_t)
+		GLint wrap_s, GLint wrap_t, GLint wrap_r)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
@@ -206,8 +206,9 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	EGLSurface surface;
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	RD_START("cube-textured", "mag_filter=%04x, min_filter=%04x, wrap_s=%04x, wrap_t=%04x",
-			mag_filter, min_filter, wrap_s, wrap_t);
+	RD_START("cube-textured", "mag_filter=%04x, min_filter=%04x, "
+			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x",
+			mag_filter, min_filter, wrap_s, wrap_t, wrap_r);
 
 	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
 
@@ -228,28 +229,20 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 		GCHK(glBindAttribLocation(program, 2, "in_TexCoord"));
 
 		link_program(program);
-		GCHK(glFlush());
 	}
 
 	GCHK(glViewport(0, 0, width, height));
-	GCHK(glFlush());
 
 
 	/* clear the color buffer */
 	GCHK(glClearColor(0.5, 0.5, 0.5, 1.0));
-	GCHK(glFlush());
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vVertices));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, vNormals));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(1));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, vTexCoords));
 	GCHK(glEnableVertexAttribArray(2));
@@ -283,57 +276,38 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	normal[8] = modelview.m[2][2];
 
 	GCHK(glActiveTexture(GL_TEXTURE0));
-	GCHK(glFlush());
 	GCHK(glGenTextures(1, &texturename));
-	GCHK(glFlush());
 	GCHK(glBindTexture(GL_TEXTURE_2D, texturename));
-	GCHK(glFlush());
 	GCHK(glTexImage2D(
 			GL_TEXTURE_2D, 0, GL_RGB,
 			cube_texture.width, cube_texture.height, 0,
 			GL_RGB, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
-	GCHK(glFlush());
 
 	/* Note: cube turned black until these were defined. */
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter));
-	GCHK(glFlush());
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter));
-	GCHK(glFlush());
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s));
-	GCHK(glFlush());
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t));
-	GCHK(glFlush());
+	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R_OES, wrap_r));
 
 	GCHK(modelviewmatrix_handle = glGetUniformLocation(program, "modelviewMatrix"));
 	GCHK(modelviewprojectionmatrix_handle = glGetUniformLocation(program, "modelviewprojectionMatrix"));
 	GCHK(normalmatrix_handle = glGetUniformLocation(program, "normalMatrix"));
 	GCHK(texture_handle = glGetUniformLocation(program, "uTexture"));
-	GCHK(glFlush());
 
 	GCHK(glUniformMatrix4fv(modelviewmatrix_handle, 1, GL_FALSE, &modelview.m[0][0]));
-	GCHK(glFlush());
 	GCHK(glUniformMatrix4fv(modelviewprojectionmatrix_handle, 1, GL_FALSE, &modelviewprojection.m[0][0]));
-	GCHK(glFlush());
 	GCHK(glUniformMatrix3fv(normalmatrix_handle, 1, GL_FALSE, normal));
-	GCHK(glFlush());
 	GCHK(glUniform1i(texture_handle, 0)); /* '0' refers to texture unit 0. */
-	GCHK(glFlush());
 
 	GCHK(glEnable(GL_CULL_FACE));
-	GCHK(glFlush());
 
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 4, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 8, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 12, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 16, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 20, 4));
-	GCHK(glFlush());
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
@@ -355,13 +329,13 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT);
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT);
-	test_cube_textured(GL_NEAREST, GL_LINEAR,  GL_REPEAT,          GL_REPEAT);
-	test_cube_textured(GL_LINEAR,  GL_NEAREST, GL_CLAMP_TO_EDGE,   GL_REPEAT);
-	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE);
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT);
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_REPEAT);
+	test_cube_textured(GL_NEAREST, GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_CLAMP_TO_EDGE);
+	test_cube_textured(GL_LINEAR,  GL_NEAREST, GL_CLAMP_TO_EDGE,   GL_REPEAT,          GL_MIRRORED_REPEAT);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE,   GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT,          GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT, GL_REPEAT);
 
 	ECHK(eglTerminate(display));
 }
