@@ -785,7 +785,10 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 		dump_float((float *)(dwords+1), sizedwords-1, level+1);
 		break;
 	case 0x1:
-		if (val == 0x000) {
+		/* need to figure out how const space is partitioned between
+		 * attributes, textures, etc..
+		 */
+		if (val < 0x78) {
 			dump_tex_const(dwords+1, sizedwords-1, val, level);
 		} else {
 			dump_shader_const(dwords+1, sizedwords-1, val, level);

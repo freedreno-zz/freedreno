@@ -1307,7 +1307,7 @@ static void emit_textures(struct fd_state *state)
 				samplers[n]->name);
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 7);
-		OUT_RING(ring, 0x00010000);
+		OUT_RING(ring, 0x00010000 + (0x6 * n));
 
 		OUT_RING(ring, SQ_TEX0_PITCH(p->tex->pitch) |
 				SQ_TEX0_CLAMP_X(state->textures.clamp_x) |

@@ -18,6 +18,7 @@ test-quad-flat2
 test-cat
 test-cube
 test-cube-textured
+test-tex
 test-vertex
 test-enable-disable
 test-compiler

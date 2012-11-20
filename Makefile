@@ -25,6 +25,7 @@ TESTS_3D = \
 	test-cat \
 	test-cube \
 	test-cube-textured \
+	test-tex \
 	test-vertex \
 	test-triangle-smoothed \
 	test-triangle-quad
