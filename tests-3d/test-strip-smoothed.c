@@ -93,6 +93,15 @@ void test_strip_smoothed(void)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("strip-smoothed", "");
 
+	display = get_display();
+
+	/* get an appropriate EGL frame buffer configuration */
+	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
+	DEBUG_MSG("num_config: %d", num_config);
+
+	/* create an EGL rendering context */
+	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
+
 	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
@@ -132,23 +141,14 @@ void test_strip_smoothed(void)
 
 	ECHK(eglDestroySurface(display, surface));
 
+	ECHK(eglTerminate(display));
+
 	RD_END();
 }
 
 int main(int argc, char *argv[])
 {
-	display = get_display();
-
-	/* get an appropriate EGL frame buffer configuration */
-	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
-	DEBUG_MSG("num_config: %d", num_config);
-
-	/* create an EGL rendering context */
-	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
-
 	test_strip_smoothed();
-
-	ECHK(eglTerminate(display));
 }
 
 #ifdef BIONIC

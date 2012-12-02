@@ -88,6 +88,7 @@ void test_triangle_quad(void)
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("triangle-quad", "");
+
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */

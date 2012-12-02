@@ -88,6 +88,15 @@ void test_triangle_smoothed(void)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("triangle-smoothed", "");
 
+	display = get_display();
+
+	/* get an appropriate EGL frame buffer configuration */
+	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
+	DEBUG_MSG("num_config: %d", num_config);
+
+	/* create an EGL rendering context */
+	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
+
 	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
@@ -109,7 +118,6 @@ void test_triangle_smoothed(void)
 
 	GCHK(glViewport(0, 0, width, height));
 
-
 	/* clear the color buffer */
 	GCHK(glClearColor(0.0, 0.0, 0.0, 1.0));
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
@@ -127,23 +135,14 @@ void test_triangle_smoothed(void)
 
 	ECHK(eglDestroySurface(display, surface));
 
+	ECHK(eglTerminate(display));
+
 	RD_END();
 }
 
 int main(int argc, char *argv[])
 {
-	display = get_display();
-
-	/* get an appropriate EGL frame buffer configuration */
-	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
-	DEBUG_MSG("num_config: %d", num_config);
-
-	/* create an EGL rendering context */
-	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
-
 	test_triangle_smoothed();
-
-	ECHK(eglTerminate(display));
 }
 
 #ifdef BIONIC

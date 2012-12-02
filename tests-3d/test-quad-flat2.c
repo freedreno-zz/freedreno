@@ -89,6 +89,15 @@ void test_quad_flat2(int w, int h)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("quad-flat2", "%dx%d", w, h);
 
+	display = get_display();
+
+	/* get an appropriate EGL frame buffer configuration */
+	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
+	DEBUG_MSG("num_config: %d", num_config);
+
+	/* create an EGL rendering context */
+	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
+
 	surface = make_window(display, config, w, h);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
@@ -123,42 +132,18 @@ void test_quad_flat2(int w, int h)
 
 	ECHK(eglDestroySurface(display, surface));
 
+	ECHK(eglTerminate(display));
+
 	RD_END();
 }
 
 int main(int argc, char *argv[])
 {
-	display = get_display();
-
-	/* get an appropriate EGL frame buffer configuration */
-	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
-	DEBUG_MSG("num_config: %d", num_config);
-
-	/* create an EGL rendering context */
-	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
-
-	/* do the first test multiple times to figure out what part is one-time
-	 * initialization:
-	 */
-	/* 0000 */
 	test_quad_flat2(64, 64);
-
-	/* 0001 */
-	test_quad_flat2(64, 64);
-
-	/* 0002 */
 	test_quad_flat2(400, 240);
-
-	/* 0003 */
 	test_quad_flat2(500, 240);
-
-	/* 0003 */
 	test_quad_flat2(400, 340);
-
-	/* 0004 - I think this one should be big enoug to bump us over GMEM size */
 	test_quad_flat2(800, 600);
-
-	ECHK(eglTerminate(display));
 }
 
 #ifdef BIONIC

@@ -75,7 +75,16 @@ const char *fragment_shader_source =
 void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices)
 {
 	DEBUG_MSG("----------------------------------------------------------------");
+
 	RD_START("quad-flat", "");
+	display = get_display();
+
+	/* get an appropriate EGL frame buffer configuration */
+	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
+	DEBUG_MSG("num_config: %d", num_config);
+
+	/* create an EGL rendering context */
+	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
 	surface = make_window(display, config, 400, 240);
 
@@ -117,76 +126,48 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 
 	usleep(1000000);
 
+	eglTerminate(display);
+
 	RD_END();
 }
 
 int main(int argc, char *argv[])
 {
-	display = get_display();
-
-	/* get an appropriate EGL frame buffer configuration */
-	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
-	DEBUG_MSG("num_config: %d", num_config);
-
-	/* create an EGL rendering context */
-	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
-
-	/* do the first test twice to figure out what part is one-time
-	 * initialization:
-	 */
-	GCHK(test_quad_flat(NULL,
+	test_quad_flat(NULL,
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	//XXX
-	GCHK(test_quad_flat(NULL,
+				 0.45,  0.75, 0.0});
+	test_quad_flat((GLfloat[]){0.3125, 0.3125, 0.3125, 1.0},
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-
-	GCHK(test_quad_flat(NULL,
+				 0.45,  0.75, 0.0});
+	test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat((GLfloat[]){0.3125, 0.3125, 0.3125, 1.0},
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
+				 0.45,  0.75, 0.0});
+	test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
 			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0}));
-	GCHK(test_quad_flat(NULL,
+				 0.45,  0.75, 0.0});
+	test_quad_flat(NULL,
 			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
 			(GLfloat[]) {
 				-0.15, -0.23, 0.12,
 				 0.25, -0.33, 0.22,
 				-0.35,  0.43, 0.32,
-				 0.45,  0.53, 0.42}));
-
-	ECHK(eglTerminate(display));
+				 0.45,  0.53, 0.42});
 }
 
 #ifdef BIONIC

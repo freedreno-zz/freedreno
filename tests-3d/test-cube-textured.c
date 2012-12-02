@@ -204,6 +204,15 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x",
 			mag_filter, min_filter, wrap_s, wrap_t, wrap_r);
 
+	display = get_display();
+
+	/* get an appropriate EGL frame buffer configuration */
+	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
+	DEBUG_MSG("num_config: %d", num_config);
+
+	/* create an EGL rendering context */
+	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
+
 	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
@@ -307,29 +316,19 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 
 	ECHK(eglDestroySurface(display, surface));
 
+	ECHK(eglTerminate(display));
+
 	RD_END();
 }
 
 int main(int argc, char *argv[])
 {
-	display = get_display();
-
-	/* get an appropriate EGL frame buffer configuration */
-	ECHK(eglChooseConfig(display, config_attribute_list, &config, 1, &num_config));
-	DEBUG_MSG("num_config: %d", num_config);
-
-	/* create an EGL rendering context */
-	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
-
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_REPEAT);
 	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_REPEAT);
 	test_cube_textured(GL_NEAREST, GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_CLAMP_TO_EDGE);
 	test_cube_textured(GL_LINEAR,  GL_NEAREST, GL_CLAMP_TO_EDGE,   GL_REPEAT,          GL_MIRRORED_REPEAT);
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE,   GL_REPEAT);
 	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT,          GL_REPEAT);
 	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT, GL_REPEAT);
-
-	ECHK(eglTerminate(display));
 }
 
 #ifdef BIONIC
