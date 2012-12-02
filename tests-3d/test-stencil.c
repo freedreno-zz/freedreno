@@ -38,13 +38,6 @@ static EGLint const config_attribute_list[] = {
 	EGL_NONE
 };
 
-static EGLint const pbuffer_attribute_list[] = {
-	EGL_WIDTH, 256,
-	EGL_HEIGHT, 256,
-	EGL_LARGEST_PBUFFER, EGL_TRUE,
-	EGL_NONE
-};
-
 static const EGLint context_attribute_list[] = {
 	EGL_CONTEXT_CLIENT_VERSION, 2,
 	EGL_NONE
@@ -129,16 +122,15 @@ void test_stencil(void)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("stencil", "");
 
-	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
 
-	DEBUG_MSG("PBuffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d", width, height);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
-	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -263,7 +255,6 @@ void test_stencil(void)
 	GCHK(glFlush());
 
 	ECHK(eglDestroySurface(display, surface));
-	GCHK(glFlush());
 
 	usleep(1000000);
 

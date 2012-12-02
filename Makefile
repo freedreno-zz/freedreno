@@ -57,7 +57,7 @@ LD = ld --entry=_start -nostdlib --dynamic-linker /system/bin/linker -rpath /sys
 else ifeq ($(strip $(BUILD)),glibc)
 LFLAGS_3D = -lEGL -lGLESv2
 LFLAGS_2D =
-LDFLAGS_MISC =
+LDFLAGS_MISC = -lX11 -lm
 CC = gcc -L /usr/lib
 LD = gcc -L /usr/lib
 else

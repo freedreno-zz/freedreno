@@ -77,12 +77,6 @@ const char *fragment_shader_source =
 void test_quad_flat2(int w, int h)
 {
 	GLint width, height;
-	EGLint pbuffer_attribute_list[] = {
-		EGL_WIDTH, w,
-		EGL_HEIGHT, h,
-		EGL_LARGEST_PBUFFER, EGL_TRUE,
-		EGL_NONE
-	};
 
 	GLfloat quad_color[] =  {1.0, 0.0, 0.0, 1.0};
 	GLfloat vertices[] = {
@@ -95,16 +89,15 @@ void test_quad_flat2(int w, int h)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("quad-flat2", "%dx%d", w, h);
 
-	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+	surface = make_window(display, config, w, h);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
 
-	DEBUG_MSG("PBuffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d", width, height);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
-	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -112,30 +105,23 @@ void test_quad_flat2(int w, int h)
 		GCHK(glBindAttribLocation(program, 0, "aPosition"));
 
 		link_program(program);
-		GCHK(glFlush());
 	}
 
 	GCHK(glViewport(0, 0, width, height));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
-	GCHK(glFlush());
 
 	/* now set up our uniform. */
 	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
 
 	GCHK(glUniform4fv(uniform_location, 1, quad_color));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
-	GCHK(glFlush());
-
 	ECHK(eglSwapBuffers(display, surface));
+	GCHK(glFlush());
 
 	ECHK(eglDestroySurface(display, surface));
-	GCHK(glFlush());
 
 	RD_END();
 }

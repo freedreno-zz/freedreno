@@ -94,6 +94,13 @@ glStrError(GLenum error)
 	}
 }
 
+#ifndef BIONIC
+#  include <X11/Xlib.h>
+#  include <X11/Xutil.h>
+#  include <X11/keysym.h>
+#endif
+
+static EGLNativeDisplayType native_dpy;
 
 static EGLDisplay
 get_display(void)
@@ -101,7 +108,12 @@ get_display(void)
 	EGLDisplay display;
 	EGLint egl_major, egl_minor;
 
-	display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+#ifdef BIONIC
+	native_dpy = EGL_DEFAULT_DISPLAY;
+#else
+	native_dpy = XOpenDisplay(NULL);
+#endif
+	display = eglGetDisplay(native_dpy);
 	if (display == EGL_NO_DISPLAY) {
 		ERROR_MSG("No display found!");
 		exit(-1);
@@ -117,6 +129,75 @@ get_display(void)
 	DEBUG_MSG("EGL Extensions \"%s\"", eglQueryString(display, EGL_EXTENSIONS));
 
 	return display;
+}
+
+static EGLSurface make_window(EGLDisplay display, EGLConfig config, int width, int height)
+{
+	EGLSurface surface;
+#ifdef BIONIC
+	EGLint pbuffer_attribute_list[] = {
+		EGL_WIDTH, width,
+		EGL_HEIGHT, height,
+		EGL_LARGEST_PBUFFER, EGL_TRUE,
+		EGL_NONE
+	};
+	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+#else
+	XVisualInfo *visInfo, visTemplate;
+	int num_visuals;
+	Window root, xwin;
+	XSetWindowAttributes attr;
+	unsigned long mask;
+	EGLint vid;
+	const char *title = "egl";
+
+	ECHK(eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &vid));
+
+	/* The X window visual must match the EGL config */
+	visTemplate.visualid = vid;
+	visInfo = XGetVisualInfo(native_dpy, VisualIDMask, &visTemplate, &num_visuals);
+	if (!visInfo) {
+		ERROR_MSG("failed to get an visual of id 0x%x", vid);
+		exit(-1);
+	}
+
+	root = RootWindow(native_dpy, DefaultScreen(native_dpy));
+
+	/* window attributes */
+	attr.background_pixel = 0;
+	attr.border_pixel = 0;
+	attr.colormap = XCreateColormap(native_dpy,
+			root, visInfo->visual, AllocNone);
+	attr.event_mask = StructureNotifyMask | ExposureMask | KeyPressMask;
+	mask = CWBackPixel | CWBorderPixel | CWColormap | CWEventMask;
+
+	xwin = XCreateWindow(native_dpy, root, 0, 0, width, height,
+			0, visInfo->depth, InputOutput, visInfo->visual, mask, &attr);
+	if (!xwin) {
+		ERROR_MSG("failed to create a window");
+		exit (-1);
+	}
+
+	XFree(visInfo);
+
+	/* set hints and properties */
+	{
+		XSizeHints sizehints;
+		sizehints.x = 0;
+		sizehints.y = 0;
+		sizehints.width  = width;
+		sizehints.height = height;
+		sizehints.flags = USSize | USPosition;
+		XSetNormalHints(native_dpy, xwin, &sizehints);
+		XSetStandardProperties(native_dpy, xwin,
+				title, title, None, (char **) NULL, 0, &sizehints);
+	}
+
+	XMapWindow(native_dpy, xwin);
+
+	surface = eglCreateWindowSurface(display, config, xwin, NULL);
+#endif
+	return surface;
 }
 
 static void dump_bmp(EGLDisplay display, EGLSurface surface, const char *filename)
@@ -243,6 +324,7 @@ link_program(GLuint program)
 
 	GCHK(glUseProgram(program));
 
+#ifdef BIONIC
 	/* dump program binary: */
 	// TODO move this into wrap-gles.c .. just putting it here for now
 	// since I haven't created wrap-gles.c yet
@@ -253,6 +335,7 @@ link_program(GLuint program)
 	HEXDUMP(binary, len);
 	RD_WRITE_SECTION(RD_PROGRAM, binary, len);
 	free(binary);
+#endif
 }
 
 #endif /* TEST_UTIL_3D_H_ */

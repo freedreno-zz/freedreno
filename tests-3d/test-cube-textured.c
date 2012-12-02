@@ -99,12 +99,6 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
 	GLuint texturename = 0, texture_handle;
-	EGLint pbuffer_attribute_list[] = {
-		EGL_WIDTH, 256,
-		EGL_HEIGHT, 256,
-		EGL_LARGEST_PBUFFER, EGL_TRUE,
-		EGL_NONE
-	};
 	GLfloat vVertices[] = {
 			// front
 			-1.0f, -1.0f, +1.0f, // point blue
@@ -210,16 +204,15 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x",
 			mag_filter, min_filter, wrap_s, wrap_t, wrap_r);
 
-	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
 
-	DEBUG_MSG("PBuffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d", width, height);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
-	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -313,7 +306,6 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	GCHK(glFlush());
 
 	ECHK(eglDestroySurface(display, surface));
-	GCHK(glFlush());
 
 	RD_END();
 }

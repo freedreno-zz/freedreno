@@ -74,12 +74,6 @@ const char *fragment_shader_source =
 void test_strip_smoothed(void)
 {
 	GLint width, height;
-	EGLint pbuffer_attribute_list[] = {
-		EGL_WIDTH, 400,
-		EGL_HEIGHT, 240,
-		EGL_LARGEST_PBUFFER, EGL_TRUE,
-		EGL_NONE
-	};
 	GLfloat vVertices[] = {
 			-0.7,  0.7, -0.7,
 			-0.7,  0.2, -0.4,
@@ -99,16 +93,15 @@ void test_strip_smoothed(void)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("strip-smoothed", "");
 
-	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
 
-	DEBUG_MSG("PBuffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d", width, height);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
-	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -117,37 +110,27 @@ void test_strip_smoothed(void)
 		GCHK(glBindAttribLocation(program, 1, "aColor"));
 
 		link_program(program);
-		GCHK(glFlush());
 	}
 
 	GCHK(glViewport(0, 0, width, height));
-	GCHK(glFlush());
 
 
 	/* clear the color buffer */
 	GCHK(glClearColor(0.3125, 0.3125, 0.3125, 1.0));
-	GCHK(glFlush());
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vVertices));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, vColors));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(1));
-	GCHK(glFlush());
 
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 6));
-	GCHK(glFlush());
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
 
 	ECHK(eglDestroySurface(display, surface));
-	GCHK(glFlush());
 
 	RD_END();
 }

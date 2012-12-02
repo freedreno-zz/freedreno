@@ -307,7 +307,7 @@ const char *solid_fragment_shader_asm =
 		"EXEC_END ADDR(0x1) CNT(0x1)                             \n"
 		"      ALU:	MAXv	export0 = C0, C0	; gl_FragColor   \n";
 
-static float init_shader_const[] = {
+static const float init_shader_const[] = {
 		-1.000000, +1.000000, +1.000000, +1.100000,
 		+1.000000, +1.000000, -1.000000, -1.100000,
 		+1.000000, +1.100000, -1.100000, +1.000000,

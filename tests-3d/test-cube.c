@@ -91,12 +91,6 @@ void test_cube(void)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
-	EGLint pbuffer_attribute_list[] = {
-		EGL_WIDTH, 256,
-		EGL_HEIGHT, 256,
-		EGL_LARGEST_PBUFFER, EGL_TRUE,
-		EGL_NONE
-	};
 	GLfloat vVertices[] = {
 			// front
 			-1.0f, -1.0f, +1.0f, // point blue
@@ -200,16 +194,15 @@ void test_cube(void)
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("cube", "");
 
-	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
 
-	DEBUG_MSG("PBuffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d", width, height);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
-	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -219,28 +212,19 @@ void test_cube(void)
 		GCHK(glBindAttribLocation(program, 2, "in_color"));
 
 		link_program(program);
-		GCHK(glFlush());
 	}
 
 	GCHK(glViewport(0, 0, width, height));
-	GCHK(glFlush());
-
 
 	/* clear the color buffer */
 	GCHK(glClearColor(0.5, 0.5, 0.5, 1.0));
-	GCHK(glFlush());
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vVertices));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(0));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, vNormals));
-	GCHK(glFlush());
 	GCHK(glEnableVertexAttribArray(1));
-	GCHK(glFlush());
 
 	GCHK(glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, vColors));
 	GCHK(glEnableVertexAttribArray(2));
@@ -276,36 +260,24 @@ void test_cube(void)
 	GCHK(modelviewmatrix_handle = glGetUniformLocation(program, "modelviewMatrix"));
 	GCHK(modelviewprojectionmatrix_handle = glGetUniformLocation(program, "modelviewprojectionMatrix"));
 	GCHK(normalmatrix_handle = glGetUniformLocation(program, "normalMatrix"));
-	GCHK(glFlush());
 
 	GCHK(glUniformMatrix4fv(modelviewmatrix_handle, 1, GL_FALSE, &modelview.m[0][0]));
-	GCHK(glFlush());
 	GCHK(glUniformMatrix4fv(modelviewprojectionmatrix_handle, 1, GL_FALSE, &modelviewprojection.m[0][0]));
-	GCHK(glFlush());
 	GCHK(glUniformMatrix3fv(normalmatrix_handle, 1, GL_FALSE, normal));
-	GCHK(glFlush());
 
 	GCHK(glEnable(GL_CULL_FACE));
-	GCHK(glFlush());
 
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 4, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 8, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 12, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 16, 4));
-	GCHK(glFlush());
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 20, 4));
-	GCHK(glFlush());
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
 
 	ECHK(eglDestroySurface(display, surface));
-	GCHK(glFlush());
 
 	RD_END();
 }

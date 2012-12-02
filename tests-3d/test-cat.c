@@ -114,27 +114,20 @@ void test_cube(void)
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
 	GLuint position_vbo, normal_vbo;
-	EGLint pbuffer_attribute_list[] = {
-		EGL_WIDTH, 256,
-		EGL_HEIGHT, 256,
-		EGL_LARGEST_PBUFFER, EGL_TRUE,
-		EGL_NONE
-	};
 	EGLSurface surface;
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("cat", "");
 
-	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
+	surface = make_window(display, config, 400, 240);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
 
-	DEBUG_MSG("PBuffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d", width, height);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
-	GCHK(glFlush());
 
 	if (!program) {
 		program = get_program(vertex_shader_source, fragment_shader_source);
@@ -146,20 +139,15 @@ void test_cube(void)
 		GCHK(glGenBuffers(1, &normal_vbo));
 		GCHK(glBindBuffer(GL_ARRAY_BUFFER, normal_vbo));
 		GCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(cat_normal), cat_normal, GL_STATIC_DRAW));
-		GCHK(glFlush());
 
 		GCHK(glGenBuffers(1, &position_vbo));
 		GCHK(glBindBuffer(GL_ARRAY_BUFFER, position_vbo));
 		GCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(cat_position), cat_position, GL_STATIC_DRAW));
-		GCHK(glFlush());
 
 		link_program(program);
-		GCHK(glFlush());
 	}
 
 	GCHK(glViewport(0, 0, width, height));
-	GCHK(glFlush());
-
 
 	/* clear the color buffer */
 	GCHK(glClearColor(0.5, 0.5, 0.5, 1.0));
@@ -168,17 +156,14 @@ void test_cube(void)
 	GCHK(glEnable(GL_CULL_FACE));
 	GCHK(glCullFace(GL_BACK));
 	GCHK(glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT));
-	GCHK(glFlush());
 
 	GCHK(glEnableVertexAttribArray(0));
 	GCHK(glBindBuffer(GL_ARRAY_BUFFER, normal_vbo));
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, NULL));
-	GCHK(glFlush());
 
 	GCHK(glEnableVertexAttribArray(1));
 	GCHK(glBindBuffer(GL_ARRAY_BUFFER, position_vbo));
 	GCHK(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL));
-	GCHK(glFlush());
 
 	ESMatrix modelview;
 	esMatrixLoadIdentity(&modelview);
@@ -211,14 +196,10 @@ void test_cube(void)
 	GCHK(modelviewmatrix_handle = glGetUniformLocation(program, "ModelViewMatrix"));
 	GCHK(modelviewprojectionmatrix_handle = glGetUniformLocation(program, "ModelViewProjectionMatrix"));
 	GCHK(normalmatrix_handle = glGetUniformLocation(program, "NormalMatrix"));
-	GCHK(glFlush());
 
 	GCHK(glUniformMatrix4fv(modelviewmatrix_handle, 1, GL_FALSE, &modelview.m[0][0]));
-	GCHK(glFlush());
 	GCHK(glUniformMatrix4fv(modelviewprojectionmatrix_handle, 1, GL_FALSE, &modelviewprojection.m[0][0]));
-	GCHK(glFlush());
 	GCHK(glUniformMatrix3fv(normalmatrix_handle, 1, GL_FALSE, normal));
-	GCHK(glFlush());
 
 	GCHK(glDrawArrays(GL_TRIANGLES, 0, cat_vertices));
 
@@ -226,7 +207,6 @@ void test_cube(void)
 	GCHK(glFlush());
 
 	ECHK(eglDestroySurface(display, surface));
-	GCHK(glFlush());
 
 	RD_END();
 }
