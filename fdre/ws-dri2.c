@@ -106,6 +106,9 @@ static int post_surface(struct fd_winsys *ws, struct fd_surface *surface)
 	struct fd_winsys_dri2 *ws_dri2 = to_dri2_ws(ws);
 	CARD64 count;
 
+	if (!ws_dri2->surface)
+		get_surface(ws, NULL, NULL);
+
 	/* if we are rendering to front-buffer, we can skip this */
 	if (surface != ws_dri2->surface) {
 		char *dstptr = fd_bo_map(ws_dri2->surface->bo);
