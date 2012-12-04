@@ -23,6 +23,7 @@ test-vertex
 test-enable-disable
 test-compiler
 test-stencil
+test-es2gears
 
 # misc:
 redump

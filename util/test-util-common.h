@@ -37,6 +37,19 @@ void *malloc(size_t size);
 void free(void *ptr);
 size_t strlen(const char *s);
 
+typedef struct
+{
+	int quot;                   /* Quotient.  */
+	int rem;                    /* Remainder.  */
+} div_t;
+
+div_t div(int numerator, int denominator);
+void sincos(double x, double *sin, double *cos);
+void sincosf(float x, float *sin, float *cos);
+void sincosl(long double x, long double *sin, long double *cos);
+void *memcpy(void *dest, const void *src, size_t n);
+
+
 /*****************************************************************************/
 
 #define DEBUG_MSG(fmt, ...) \
