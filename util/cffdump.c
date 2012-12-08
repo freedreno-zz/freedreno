@@ -351,7 +351,7 @@ static void reg_rb_depthcontrol(const char *name, uint32_t dword, int level)
 			(dword & RB_DEPTHCONTROL_Z_WRITE_ENABLE) ? "z-write, " : "",
 			(dword & RB_DEPTHCONTROL_EARLY_Z_ENABLE) ? "early-z, " : "",
 			gl_func[(dword >> 4) & 0x7],
-			(dword & RB_DEPTHCONTROL_BACKFACE_ENABLE) ? "depth-write, " : "",
+			(dword & RB_DEPTHCONTROL_BACKFACE_ENABLE) ? "backface, " : "",
 			gl_func[(dword >> 8) & 0x7],
 			stencil_op[(dword >> 11) & 0x7],
 			stencil_op[(dword >> 14) & 0x7],
@@ -360,6 +360,17 @@ static void reg_rb_depthcontrol(const char *name, uint32_t dword, int level)
 			stencil_op[(dword >> 23) & 0x7],
 			stencil_op[(dword >> 26) & 0x7],
 			stencil_op[(dword >> 29) & 0x7]);
+}
+
+static void reg_rb_depth_info(const char *name, uint32_t dword, int level)
+{
+	static const char *depth_format[] = {
+			"DEPTHX_16", "DEPTHX_24_8",
+	};
+	uint32_t fmt = dword & 0x1;
+	uint32_t base = dword >> 12;
+	printf("%s%s: %08x (format=%s, base=%d)\n",
+			levels[level], name, dword, depth_format[fmt], base);
 }
 
 static void reg_clear_color(const char *name, uint32_t dword, int level)
@@ -576,7 +587,7 @@ static const const struct {
 		REG(PA_SC_AA_CONFIG, reg_hex),
 		REG(VGT_VERTEX_REUSE_BLOCK_CNTL, reg_hex),
 		REG(SQ_INTERPOLATOR_CNTL, reg_hex),
-		REG(RB_DEPTH_INFO, reg_hex),
+		REG(RB_DEPTH_INFO, reg_rb_depth_info),
 		REG(COHER_DEST_BASE_0, reg_hex),
 		REG(RB_FOG_COLOR, reg_hex),
 		REG(RB_STENCILREFMASK_BF, reg_hex),
