@@ -199,14 +199,14 @@ static const char *dither_type_name[4] = {
 };
 
 static const char *stencil_op[8] = {
-	NAME(STENCIL_KEEP),
-	NAME(STENCIL_ZERO),
-	NAME(STENCIL_REPLACE),
-	NAME(STENCIL_INCR_CLAMP),
-	NAME(STENCIL_DECR_CLAMP),
-	NAME(STENCIL_INVERT),
-	NAME(STENCIL_INCR_WRAP),
-	NAME(STENCIL_DECR_WRAP),
+		NAME(STENCIL_KEEP),
+		NAME(STENCIL_ZERO),
+		NAME(STENCIL_REPLACE),
+		NAME(STENCIL_INCR_CLAMP),
+		NAME(STENCIL_DECR_CLAMP),
+		NAME(STENCIL_INVERT),
+		NAME(STENCIL_INCR_WRAP),
+		NAME(STENCIL_DECR_WRAP),
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
@@ -305,9 +305,20 @@ static void reg_hex(const char *name, uint32_t dword, int level)
 	printf("%s%s: %08x (%d)\n", levels[level], name, dword, dword);
 }
 
+static inline float d2f(uint32_t d)
+{
+	union {
+		float f;
+		uint32_t d;
+	} u = {
+		.d = d,
+	};
+	return u.f;
+}
+
 static void reg_float(const char *name, uint32_t dword, int level)
 {
-	printf("%s%s: %f (%08x)\n", levels[level], name, *(float *)&dword, dword);
+	printf("%s%s: %f (%08x)\n", levels[level], name, d2f(dword), dword);
 }
 
 static void reg_gpuaddr(const char *name, uint32_t dword, int level)
@@ -435,6 +446,49 @@ static void reg_rb_depth_info(const char *name, uint32_t dword, int level)
 	uint32_t base = dword >> 12;
 	printf("%s%s: %08x (format=%s, base=%d)\n",
 			levels[level], name, dword, depth_format[fmt], base);
+}
+
+static void reg_rb_blend_control(const char *name, uint32_t dword, int level)
+{
+	static const char *op[] = {
+			NAME(RB_BLEND_ZERO),
+			NAME(RB_BLEND_ONE),
+			NAME(RB_BLEND_SRC_COLOR),
+			NAME(RB_BLEND_ONE_MINUS_SRC_COLOR),
+			NAME(RB_BLEND_SRC_ALPHA),
+			NAME(RB_BLEND_ONE_MINUS_SRC_ALPHA),
+			NAME(RB_BLEND_DST_COLOR),
+			NAME(RB_BLEND_ONE_MINUS_DST_COLOR),
+			NAME(RB_BLEND_DST_ALPHA),
+			NAME(RB_BLEND_ONE_MINUS_DST_ALPHA),
+			NAME(RB_BLEND_CONSTANT_COLOR),
+			NAME(RB_BLEND_ONE_MINUS_CONSTANT_COLOR),
+			NAME(RB_BLEND_CONSTANT_ALPHA),
+			NAME(RB_BLEND_ONE_MINUS_CONSTANT_ALPHA),
+			NAME(RB_BLEND_SRC_ALPHA_SATURATE),
+	};
+	static const char *func[] = {
+		"DST_PLUS_SRC", "SRC_MINUS_DST", "MIN_DST_SRC",
+		"MAX_DST_SRC", "DST_MINUS_SRC", "DST_PLUS_SRC_BIAS",
+	};
+	uint32_t csrcblend, cfunc, cdstblend;
+	uint32_t asrcblend, afunc, adstblend;
+
+	csrcblend = (dword >> 0) & 0x1f;
+	cfunc     = (dword >> 5) & 0x7;
+	cdstblend = (dword >> 8) & 0x1f;
+
+	asrcblend = (dword >> 16) & 0x1f;
+	afunc     = (dword >> 21) & 0x7;
+	adstblend = (dword >> 24) & 0x1f;
+
+	printf("%s%s: %08x (color-src-blend=%s, color-func=%s, color-dst-blend=%s, "
+			"alpha-src-blend=%s, alpha-func=%s, alpha-dst-blend=%s%s%s)\n",
+			levels[level], name, dword,
+			op[csrcblend], func[cfunc], op[cdstblend],
+			op[asrcblend], func[afunc], op[adstblend],
+			(dword & RB_BLENDCONTROL_BLEND_FORCE_ENABLE) ? ", force-enable" : "",
+			(dword & RB_BLENDCONTROL_BLEND_FORCE) ? ", force" : "");
 }
 
 static void reg_clear_color(const char *name, uint32_t dword, int level)
@@ -618,7 +672,7 @@ static const const struct {
 		REG(RB_BLEND_GREEN, reg_hex),
 		REG(RB_BLEND_ALPHA, reg_hex),
 		REG(RB_ALPHA_REF, reg_hex),
-		REG(RB_BLEND_CONTROL, reg_hex),
+		REG(RB_BLEND_CONTROL, reg_rb_blend_control),
 		REG(CLEAR_COLOR, reg_clear_color),
 
 		REG(SCRATCH_ADDR, reg_hex),
@@ -774,13 +828,14 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 {
 	uint32_t w, h, p;
 	uint32_t gpuaddr, flags, mip_gpuaddr, mip_flags;
-	uint32_t min, mag, clamp_x, clamp_y, clamp_z;
+	uint32_t min, mag, swiz, clamp_x, clamp_y, clamp_z;
 	static const char *filter[] = {
 			"point", "bilinear", "bicubic",
 	};
 	static const char *clamp[] = {
 			"wrap", "mirror", "clamp-last-texel",
 	};
+	static const char swiznames[] = "xyzw01??";
 
 	/* see sys2gmem_tex_const[] in adreno_a2xxx.c */
 
@@ -806,6 +861,7 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	 */
 	mag = (dwords[3] >> 19) & 0x3;
 	min = (dwords[3] >> 21) & 0x3;
+	swiz = (dwords[3] >> 1) & 0xfff;
 
 	/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
 	 * Dim3d=0
@@ -821,9 +877,12 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	printf("%sclamp x/y/z: %s/%s/%s\n", levels[level+1],
 			clamp[clamp_x], clamp[clamp_y], clamp[clamp_z]);
 	printf("%sfilter min/mag: %s/%s\n", levels[level+1], filter[min], filter[mag]);
+	printf("%sswizzle: %c%c%c%c\n", levels[level+1],
+			swiznames[(swiz >> 0) & 0x7], swiznames[(swiz >> 3) & 0x7],
+			swiznames[(swiz >> 6) & 0x7], swiznames[(swiz >> 9) & 0x7]);
 	printf("%saddr=%08x (flags=%03x), size=%dx%d, pitch=%d, format=%s\n",
 			levels[level+1], gpuaddr, flags, w, h, p,
-			color_name[flags & 0xf]);
+			fmt_name[flags & 0xf]);
 	printf("%smipaddr=%08x (flags=%03x)\n", levels[level+1],
 			mip_gpuaddr, mip_flags);
 }
@@ -909,11 +968,11 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 		void *ptr = hostptr(dwords[3]);
 		printf("%sgpuaddr:       %08x\n", levels[level], dwords[3]);
 		printf("%sidx_size:      %d\n", levels[level], dwords[4]);
-		printf("%sidxs:         ", levels[level]);
 		if (ptr) {
 			enum pc_di_index_size size =
 					((dwords[1] >> 11) & 1) | ((dwords[1] >> 12) & 2);
 			int i;
+			printf("%sidxs:         ", levels[level]);
 			if (size == INDEX_SIZE_8_BIT) {
 				uint8_t *idx = ptr;
 				for (i = 0; i < dwords[4]; i++)
