@@ -89,7 +89,7 @@ static const char *event_name[] = {
 		NAME(FACENESS_FLUSH),
 };
 
-static const char *format_name[] = {
+static const char *color_name[] = {
 		NAME(COLORX_4_4_4_4),
 		NAME(COLORX_1_5_5_5),
 		NAME(COLORX_5_6_5),
@@ -105,6 +105,70 @@ static const char *format_name[] = {
 		NAME(COLORX_32_32_32_32_FLOAT),
 		NAME(COLORX_2_3_3),
 		NAME(COLORX_8_8_8),
+};
+
+static const char *fmt_name[] = {
+		NAME(FMT_1_REVERSE),
+		NAME(FMT_1),
+		NAME(FMT_8),
+		NAME(FMT_1_5_5_5),
+		NAME(FMT_5_6_5),
+		NAME(FMT_6_5_5),
+		NAME(FMT_8_8_8_8),
+		NAME(FMT_2_10_10_10),
+		NAME(FMT_8_A),
+		NAME(FMT_8_B),
+		NAME(FMT_8_8),
+		NAME(FMT_Cr_Y1_Cb_Y0),
+		NAME(FMT_Y1_Cr_Y0_Cb),
+		NAME(FMT_5_5_5_1),
+		NAME(FMT_8_8_8_8_A),
+		NAME(FMT_4_4_4_4),
+		NAME(FMT_10_11_11),
+		NAME(FMT_11_11_10),
+		NAME(FMT_DXT1),
+		NAME(FMT_DXT2_3),
+		NAME(FMT_DXT4_5),
+		NAME(FMT_24_8),
+		NAME(FMT_24_8_FLOAT),
+		NAME(FMT_16),
+		NAME(FMT_16_16),
+		NAME(FMT_16_16_16_16),
+		NAME(FMT_16_EXPAND),
+		NAME(FMT_16_16_EXPAND),
+		NAME(FMT_16_16_16_16_EXPAND),
+		NAME(FMT_16_FLOAT),
+		NAME(FMT_16_16_FLOAT),
+		NAME(FMT_16_16_16_16_FLOAT),
+		NAME(FMT_32),
+		NAME(FMT_32_32),
+		NAME(FMT_32_32_32_32),
+		NAME(FMT_32_FLOAT),
+		NAME(FMT_32_32_FLOAT),
+		NAME(FMT_32_32_32_32_FLOAT),
+		NAME(FMT_32_AS_8),
+		NAME(FMT_32_AS_8_8),
+		NAME(FMT_16_MPEG),
+		NAME(FMT_16_16_MPEG),
+		NAME(FMT_8_INTERLACED),
+		NAME(FMT_32_AS_8_INTERLACED),
+		NAME(FMT_32_AS_8_8_INTERLACED),
+		NAME(FMT_16_INTERLACED),
+		NAME(FMT_16_MPEG_INTERLACED),
+		NAME(FMT_16_16_MPEG_INTERLACED),
+		NAME(FMT_DXN),
+		NAME(FMT_8_8_8_8_AS_16_16_16_16),
+		NAME(FMT_DXT1_AS_16_16_16_16),
+		NAME(FMT_DXT2_3_AS_16_16_16_16),
+		NAME(FMT_DXT4_5_AS_16_16_16_16),
+		NAME(FMT_2_10_10_10_AS_16_16_16_16),
+		NAME(FMT_10_11_11_AS_16_16_16_16),
+		NAME(FMT_11_11_10_AS_16_16_16_16),
+		NAME(FMT_32_32_32_FLOAT),
+		NAME(FMT_DXT3A),
+		NAME(FMT_DXT5A),
+		NAME(FMT_CTX1),
+		NAME(FMT_DXT3A_AS_1_1_1_1),
 };
 
 static const char *vgt_prim_types[32] = {
@@ -269,7 +333,7 @@ static void reg_rb_copy_dest_info(const char *name, uint32_t dword, int level)
 	uint32_t dither_type = (dword >> 12) & 0x3;
 	uint32_t write_mask  = (dword >> 14) & 0xf;
 	printf("%s%s: endian=%s, format=%s, swap=%x, dither-mode=%s, dither-type=%s, write-mask=%x (%08x)\n",
-			levels[level], name, endian_name[endian], format_name[format], swap,
+			levels[level], name, endian_name[endian], color_name[format], swap,
 			dither_mode_name[dither_mode], dither_type_name[dither_type],
 			write_mask, dword);
 }
@@ -393,7 +457,7 @@ static void reg_rb_color_info(const char *name, uint32_t dword, int level)
 	 * BUG_ON(tmp_ctx.gmem_base & 0xFFF);
 	 */
 	printf("%s%s: %08x (%s)\n", levels[level], name, dword,
-			format_name[dword & 0xf]);
+			color_name[dword & 0xf]);
 }
 
 /* sign-extend a 2s-compliment signed number of nbits size */
@@ -759,7 +823,7 @@ static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, 
 	printf("%sfilter min/mag: %s/%s\n", levels[level+1], filter[min], filter[mag]);
 	printf("%saddr=%08x (flags=%03x), size=%dx%d, pitch=%d, format=%s\n",
 			levels[level+1], gpuaddr, flags, w, h, p,
-			format_name[flags & 0xf]);
+			color_name[flags & 0xf]);
 	printf("%smipaddr=%08x (flags=%03x)\n", levels[level+1],
 			mip_gpuaddr, mip_flags);
 }
@@ -775,7 +839,7 @@ static void dump_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t va
 		if (addr) {
 			uint32_t size = dwords[i++];
 			printf("%saddr=%08x, size=%d, format=%s\n", levels[level+1],
-					gpuaddr, size, format_name[flags & 0xf]);
+					gpuaddr, size, fmt_name[flags & 0xf]);
 			// TODO maybe dump these as bytes instead of dwords?
 			size = (size + 3) / 4; // for now convert to dwords
 			dump_hex(addr, min(size, 64), level + 1);
