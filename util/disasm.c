@@ -138,9 +138,9 @@ struct {
 		INSTR(TRUNCv, 1),
 		INSTR(FLOORv, 1),
 		INSTR(MULADDv, 3),
-		INSTR(CNDEv, 2),
-		INSTR(CNDGTEv, 2),
-		INSTR(CNDGTv, 2),
+		INSTR(CNDEv, 3),
+		INSTR(CNDGTEv, 3),
+		INSTR(CNDGTv, 3),
 		INSTR(DOT4v, 2),
 		INSTR(DOT3v, 2),
 		INSTR(DOT2ADDv, 3),  // ???
@@ -249,6 +249,9 @@ static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
 				alu->src2_reg_negate, alu->src2_reg_abs);
 	}
 
+	if (alu->vector_clamp)
+		printf(" CLAMP");
+
 	if (alu->export_data)
 		print_export_comment(alu->vector_dest, type);
 
@@ -272,6 +275,8 @@ static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
 		print_srcreg(alu->src3_reg, alu->src3_sel, alu->src3_swiz,
 				alu->src3_reg_negate, alu->src3_reg_abs);
 		// TODO ADD/MUL must have another src?!?
+		if (alu->scalar_clamp)
+			printf(" CLAMP");
 		if (alu->export_data)
 			print_export_comment(alu->scalar_dest, type);
 		printf("\n");
