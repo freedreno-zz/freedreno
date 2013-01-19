@@ -15,6 +15,7 @@ test-triangle-smoothed
 test-strip-smoothed
 test-quad-flat
 test-quad-flat2
+test-quad-textured
 test-cat
 test-cube
 test-cube-textured

@@ -22,6 +22,7 @@ TESTS_3D = \
 	test-enable-disable \
 	test-quad-flat \
 	test-quad-flat2 \
+	test-quad-textured \
 	test-strip-smoothed \
 	test-cat \
 	test-cube \
