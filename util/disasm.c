@@ -223,7 +223,7 @@ static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
 
 	printf("   %sALU:\t", sync ? "(S)" : "   ");
 
-	printf(vector_instructions[alu->vector_opc].name);
+	printf("%s", vector_instructions[alu->vector_opc].name);
 
 	if (alu->pred_select & 0x2) {
 		/* seems to work similar to conditional execution in ARM instruction
@@ -324,6 +324,14 @@ static void print_fetch_dst(uint32_t dst_reg, uint32_t dst_swiz)
 static void print_fetch_vtx(instr_fetch_t *fetch)
 {
 	instr_fetch_vtx_t *vtx = &fetch->vtx;
+
+	if (vtx->pred_select) {
+		/* seems to work similar to conditional execution in ARM instruction
+		 * set, so let's use a similar syntax for now:
+		 */
+		printf(vtx->pred_condition ? "EQ" : "NE");
+	}
+
 	print_fetch_dst(vtx->dst_reg, vtx->dst_swiz);
 	printf(" = R%u.", vtx->src_reg);
 	printf("%c", chan_names[vtx->src_swiz & 0x3]);
@@ -333,12 +341,12 @@ static void print_fetch_vtx(instr_fetch_t *fetch)
 		printf(" TYPE(0x%x)", vtx->format);
 	}
 	printf(" %s", vtx->format_comp_all ? "SIGNED" : "UNSIGNED");
+	if (!vtx->num_format_all)
+		printf(" NORMALIZED");
 	printf(" STRIDE(%u)", vtx->stride);
 	if (vtx->offset)
 		printf(" OFFSET(%u)", vtx->offset);
 	printf(" CONST(%u, %u)", vtx->const_index, vtx->const_index_sel);
-	if (vtx->pred_select)
-		printf(" COND(%u)", vtx->pred_condition);
 	if (0) {
 		// XXX
 		printf(" src_reg_am=%u", vtx->src_reg_am);
@@ -380,6 +388,13 @@ static void print_fetch_tex(instr_fetch_t *fetch)
 	uint32_t src_swiz = tex->src_swiz;
 	int i;
 
+	if (tex->pred_select) {
+		/* seems to work similar to conditional execution in ARM instruction
+		 * set, so let's use a similar syntax for now:
+		 */
+		printf(tex->pred_condition ? "EQ" : "NE");
+	}
+
 	print_fetch_dst(tex->dst_reg, tex->dst_swiz);
 	printf(" = R%u.", tex->src_reg);
 	for (i = 0; i < 3; i++) {
@@ -409,8 +424,6 @@ static void print_fetch_tex(instr_fetch_t *fetch)
 		printf(" LOD(%u)", tex->use_comp_lod);
 		printf(" LOD_BIAS(%u)", tex->lod_bias);
 	}
-	if (tex->pred_select)
-		printf(" COND(%u)", tex->pred_condition);
 	if (tex->use_reg_gradients)
 		printf(" USE_REG_GRADIENTS");
 	printf(" LOCATION(%s)", sample_loc[tex->sample_location]);
@@ -447,7 +460,7 @@ static int disasm_fetch(uint32_t *dwords, uint32_t alu_off, int level, int sync)
 	}
 
 	printf("   %sFETCH:\t", sync ? "(S)" : "   ");
-	printf(fetch_instructions[fetch->opc].name);
+	printf("%s", fetch_instructions[fetch->opc].name);
 	fetch_instructions[fetch->opc].fxn(fetch);
 	printf("\n");
 
@@ -566,7 +579,7 @@ static void print_cf(instr_cf_t *cf, int level)
 		printf("    %04x %04x %04x            \t",
 				words[0], words[1], words[2]);
 	}
-	printf(cf_instructions[cf->opc].name);
+	printf("%s", cf_instructions[cf->opc].name);
 	cf_instructions[cf->opc].fxn(cf);
 	printf("\n");
 }
@@ -581,7 +594,7 @@ static void print_cf(instr_cf_t *cf, int level)
 int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 {
 	instr_cf_t *cfs = (instr_cf_t *)dwords;
-	int off, idx, max_idx;
+	int idx, max_idx;
 
 	for (idx = 0; ; idx++) {
 		instr_cf_t *cf = &cfs[idx];
