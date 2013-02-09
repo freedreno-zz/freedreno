@@ -56,12 +56,16 @@ LDFLAGS_MISC = -lgsl -llog -lcutils -lstdc++ -lstlport
 CFLAGS += -DBIONIC
 CC = gcc -L /system/lib
 LD = ld --entry=_start -nostdlib --dynamic-linker /system/bin/linker -rpath /system/lib -L /system/lib
+# only build c2d2 bits for android, otherwise we don't have the right
+# headers/libs:
+WRAP_C2D2 = wrap-c2d2.o
 else ifeq ($(strip $(BUILD)),glibc)
 LFLAGS_3D = -lEGL -lGLESv2
 LFLAGS_2D =
 LDFLAGS_MISC = -lX11 -lm
 CC = gcc -L /usr/lib
 LD = gcc -L /usr/lib
+WRAP_C2D2 =
 else
 error "Invalid build type"
 endif
@@ -82,7 +86,7 @@ clean:
 %.o: %.c
 	$(CC) -fPIC -g -c $(CFLAGS) $(LFLAGS) $< -o $@
 
-libwrap.so: wrap-util.o wrap-syscall.o wrap-c2d2.o
+libwrap.so: wrap-util.o wrap-syscall.o $(WRAP_C2D2)
 	$(LD) -shared -ldl -lc $^ -o $@
 
 test-%: test-%.o $(UTILS)

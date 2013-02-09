@@ -533,6 +533,11 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 		struct kgsl_device_getproperty *param)
 {
 	printf("\t\ttype:\t\t%08x (%s)\n", param->type, propnames[param->type]);
+	if ((param->type == KGSL_PROP_DEVICE_INFO) && wrap_gpu_id()) {
+		struct kgsl_devinfo *devinfo = param->value;
+		devinfo->gpu_id = wrap_gpu_id();
+		printf("\t\tEMULATING: %d !!!\n", devinfo->gpu_id);
+	}
 	hexdump(param->value, param->sizebytes);
 }
 
@@ -879,7 +884,21 @@ int ioctl(int fd, unsigned long int request, ...)
 	else
 		printf("> [%4d]         : <unknown> (%08lx)\n", fd, request);
 
-	ret = orig_ioctl(fd, request, ptr);
+	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
+			get_kgsl_info(fd) && wrap_safe()) {
+		sync();
+		sleep(1);
+	}
+
+	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
+			get_kgsl_info(fd) && wrap_gpu_id()) {
+		/* don't actually submit cmds to hw.. because we are pretending to
+		 * be something different from the actual hw
+		 */
+		ret = 0;
+	} else {
+		ret = orig_ioctl(fd, request, ptr);
+	}
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_post(fd, request, ptr, ret);
@@ -889,6 +908,12 @@ int ioctl(int fd, unsigned long int request, ...)
 		drm_ioctl_post(fd, request, ptr, ret);
 	else
 		printf("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, request, ret);
+
+	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
+			get_kgsl_info(fd) && wrap_safe()) {
+		sync();
+		sleep(1);
+	}
 
 	return ret;
 }

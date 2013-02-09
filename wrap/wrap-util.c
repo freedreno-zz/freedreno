@@ -64,39 +64,81 @@ static void rd_write(const void *buf, int sz)
 
 void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
 {
-	if (fd == -1)
-		return;
+	if (fd == -1) {
+		rd_start("unknown", "unknown");
+		printf("opened rd, %d\n", fd);
+	}
 	rd_write(&type, sizeof(type));
 	rd_write(&sz, 4);
 	rd_write(buf, sz);
+	if (wrap_safe())
+		fsync(fd);
 }
 
-
-static void * _dlopen(const char *libname)
+/* in safe mode, sync log file frequently, and insert delays before/after
+ * issueibcmds.. useful when we are crashing things and want to be sure to
+ * capture as much of the log as possible
+ */
+unsigned int wrap_safe(void)
 {
-	void *dl = dlopen(libname, RTLD_LAZY);
-	if (!dl) {
-		printf("Failed to dlopen %s: %s\n", libname, dlerror());
-		exit(-1);
+	static unsigned int val = -1;
+	if (val == -1) {
+		const char *str = getenv("WRAP_SAFE");
+		val = str ? strtol(str, NULL, 0) : 0;
 	}
-	return dl;
+	return val;
+}
+
+/* if non-zero, emulate a different gpu-id.  The issueibcmds will be stubbed
+ * so we don't actually submit cmds to the gpu.  This is useful to generate
+ * cmdstream dumps for different gpu versions for comparision.
+ */
+unsigned int wrap_gpu_id(void)
+{
+	static unsigned int val = -1;
+	if (val == -1) {
+		const char *str = getenv("WRAP_GPU_ID");
+		val = str ? strtol(str, NULL, 0) : 0;
+	}
+	return val;
 }
 
 void * _dlsym_helper(const char *name)
 {
 	static void *libc_dl;
+#ifdef BIONIC
 	static void *libc2d2_dl;
+#endif
 	void *func;
 
+#ifndef BIONIC
 	if (!libc_dl)
-		libc_dl = _dlopen("libc.so");
+		libc_dl = dlopen("/lib/arm-linux-gnueabihf/libc-2.15.so", RTLD_LAZY);
+#endif
+	if (!libc_dl)
+		libc_dl = dlopen("libc.so", RTLD_LAZY);
+
+	if (!libc_dl) {
+		printf("Failed to dlopen libc: %s\n", dlerror());
+		exit(-1);
+	}
+
+#ifdef BIONIC
 	if (!libc2d2_dl)
-		libc2d2_dl = _dlopen("libC2D2.so");
+		libc2d2_dl = dlopen("libC2D2.so", RTLD_LAZY);
+
+	if (!libc2d2_dl) {
+		printf("Failed to dlopen c2d2: %s\n", dlerror());
+		exit(-1);
+	}
+#endif
 
 	func = dlsym(libc_dl, name);
 
+#ifdef BIONIC
 	if (!func)
 		func = dlsym(libc2d2_dl, name);
+#endif
 
 	if (!func) {
 		printf("Failed to find %s: %s\n", name, dlerror());

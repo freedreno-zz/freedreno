@@ -63,4 +63,7 @@ void * _dlsym_helper(const char *name);
 		orig_##func = _dlsym_helper(#func);	\
 
 
+unsigned int wrap_safe(void);
+unsigned int wrap_gpu_id(void);
+
 #endif /* WRAP_H_ */
