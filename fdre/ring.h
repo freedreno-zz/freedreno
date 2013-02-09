@@ -85,37 +85,12 @@ OUT_PKT3(struct fd_ringbuffer *ring, uint8_t opcode, uint16_t cnt)
 }
 
 static inline void
-OUT_IB(struct fd_ringbuffer *ring,
-		struct fd_ringbuffer *dst_ring)
+OUT_IB(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
+		struct fd_ringmarker *end)
 {
 	OUT_PKT3(ring, CP_INDIRECT_BUFFER_PFD, 2);
-	fd_ringbuffer_emit_reloc_ring(ring, dst_ring,
-			(uint8_t *)dst_ring->last_start - (uint8_t *)dst_ring->start);
-	OUT_RING(ring, dst_ring->cur - dst_ring->last_start);
-}
-
-/* convert float to dword */
-static inline uint32_t f2d(float f)
-{
-	union {
-		float f;
-		uint32_t d;
-	} u = {
-		.f = f,
-	};
-	return u.d;
-}
-
-/* convert float to 12.4 fixed point */
-static inline uint32_t f2d12_4(float f)
-{
-	return (uint32_t)(f * 8.0);
-}
-
-/* convert x,y to dword */
-static inline uint32_t xy2d(uint16_t x, uint16_t y)
-{
-	return ((y & 0x3fff) << 16) | (x & 0x3fff);
+	fd_ringbuffer_emit_reloc_ring(ring, start);
+	OUT_RING(ring, fd_ringmarker_dwords(start, end));
 }
 
 #endif /* KGSL_H_ */

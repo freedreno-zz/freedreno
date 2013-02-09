@@ -172,13 +172,24 @@ static const char *fmt_name[] = {
 };
 
 static const char *vgt_prim_types[32] = {
-		NAME(POINTLIST),
-		NAME(LINELIST),
-		NAME(LINESTRIP),
-		NAME(TRILIST),
-		NAME(TRIFAN),
-		NAME(TRISTRIP),
-		NAME(RECTLIST),
+		NAME(DI_PT_NONE),
+		NAME(DI_PT_POINTLIST),
+		NAME(DI_PT_LINELIST),
+		NAME(DI_PT_LINESTRIP),
+		NAME(DI_PT_TRILIST),
+		NAME(DI_PT_TRIFAN),
+		NAME(DI_PT_TRISTRIP),
+		NAME(DI_PT_RECTLIST),
+		NAME(DI_PT_QUADLIST),
+		NAME(DI_PT_QUADSTRIP),
+		NAME(DI_PT_POLYGON),
+		NAME(DI_PT_2D_COPY_RECT_LIST_V0),
+		NAME(DI_PT_2D_COPY_RECT_LIST_V1),
+		NAME(DI_PT_2D_COPY_RECT_LIST_V2),
+		NAME(DI_PT_2D_COPY_RECT_LIST_V3),
+		NAME(DI_PT_2D_FILL_RECT_LIST),
+		NAME(DI_PT_2D_LINE_STRIP),
+		NAME(DI_PT_2D_TRI_STRIP),
 };
 
 static const char *vgt_source_select[4] = {
@@ -364,12 +375,12 @@ static void reg_pa_su_sc_mode_cntl(const char *name, uint32_t dword, int level)
 	printf("%s%s: %08x (front-ptype=%s, back-ptype=%s, provoking-vtx=%s%s%s%s%s)\n",
 			levels[level], name, dword,
 			ptype[(dword >> 5) & 0x3], ptype[(dword >> 8) & 0x3],
-			(dword & PA_SU_SC_PROVOKING_VTX_LAST) ? "last" : "first",
-			(dword & PA_SU_SC_VTX_WINDOW_OFF_ENABLE) ? ", vtx-win-off-enable" : "",
-			(dword & PA_SU_SC_CULL_FRONT) ? ", cull-front" : "",
-			(dword & PA_SU_SC_CULL_BACK) ? ", cull-back" : "",
-			(dword & PA_SU_SC_POLY_OFFSET_FRONT) ? ", poly-offset-front" : "",
-			(dword & PA_SU_SC_POLY_OFFSET_BACK) ? ", poly-offset-back" : "");
+			(dword & PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST) ? "last" : "first",
+			(dword & PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE) ? ", vtx-win-off-enable" : "",
+			(dword & PA_SU_SC_MODE_CNTL_CULL_FRONT) ? ", cull-front" : "",
+			(dword & PA_SU_SC_MODE_CNTL_CULL_BACK) ? ", cull-back" : "",
+			(dword & PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE) ? ", poly-offset-front" : "",
+			(dword & PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE) ? ", poly-offset-back" : "");
 }
 
 static void reg_sq_program_cntl(const char *name, uint32_t dword, int level)

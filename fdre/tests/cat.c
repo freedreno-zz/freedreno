@@ -224,7 +224,7 @@ void main(void)
 	fd_enable(state, GL_DEPTH_TEST);
 	fd_tex_param(state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	fd_tex_param(state, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	fd_blend_func(state, GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR);
+	fd_blend_func(state, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	/* this needs to come after enabling depth test as enabling depth test
 	 * effects bin sizes:

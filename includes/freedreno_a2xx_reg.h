@@ -26,6 +26,29 @@
 
 #include <GLES2/gl2.h>
 
+/* convert float to dword */
+static inline uint32_t f2d(float f)
+{
+	union {
+		float f;
+		uint32_t d;
+	} u = {
+		.f = f,
+	};
+	return u.d;
+}
+
+/* convert float to 12.4 fixed point */
+static inline uint32_t f2d12_4(float f)
+{
+	return (uint32_t)(f * 8.0);
+}
+
+/* convert x,y to dword */
+static inline uint32_t xy2d(uint16_t x, uint16_t y)
+{
+	return ((y & 0x3fff) << 16) | (x & 0x3fff);
+}
 
 /*
  * Registers that we have figured out but are not in kernel:
@@ -72,13 +95,24 @@
 
 /* see VGT_PRIMITIVE_TYPE.PRIM_TYPE? */
 enum pc_di_primtype {
-	POINTLIST = 1,
-	LINELIST  = 2,
-	LINESTRIP = 3,
-	TRILIST   = 4,
-	TRIFAN    = 5,
-	TRISTRIP  = 6,
-	RECTLIST  = 8,
+	DI_PT_NONE = 0,
+	DI_PT_POINTLIST = 1,
+	DI_PT_LINELIST = 2,
+	DI_PT_LINESTRIP = 3,
+	DI_PT_TRILIST = 4,
+	DI_PT_TRIFAN = 5,
+	DI_PT_TRISTRIP = 6,
+	DI_PT_RECTLIST = 8,
+	DI_PT_QUADLIST = 13,
+	DI_PT_QUADSTRIP = 14,
+	DI_PT_POLYGON = 15,
+	DI_PT_2D_COPY_RECT_LIST_V0 = 16,
+	DI_PT_2D_COPY_RECT_LIST_V1 = 17,
+	DI_PT_2D_COPY_RECT_LIST_V2 = 18,
+	DI_PT_2D_COPY_RECT_LIST_V3 = 19,
+	DI_PT_2D_FILL_RECT_LIST = 20,
+	DI_PT_2D_LINE_STRIP = 21,
+	DI_PT_2D_TRI_STRIP = 22,
 };
 
 /* see VGT:VGT_DRAW_INITIATOR.SOURCE_SELECT? */
@@ -95,6 +129,7 @@ enum pc_di_index_size {
 	INDEX_SIZE_16_BIT = 0,
 	INDEX_SIZE_32_BIT = 1,
 	INDEX_SIZE_8_BIT  = 2,
+	INDEX_SIZE_INVALID
 };
 
 enum pc_di_vis_cull_mode {
@@ -153,37 +188,92 @@ static inline uint32_t PA_CL_CLIP_CNTL_DX_CLIP_SPACE_DEF(enum dx_clip_space val)
 
 /*
  * Bits for PA_SU_SC_MODE_CNTL:
- * (seems to be same as r600)
  */
 
-#define PA_SU_SC_CULL_FRONT            0x00000001
-#define PA_SU_SC_CULL_BACK             0x00000002
-#define PA_SU_SC_POLY_OFFSET_FRONT     0x00000800
-#define PA_SU_SC_POLY_OFFSET_BACK      0x00001000
-#define PA_SU_SC_PROVOKING_VTX_LAST    0x00080000
-#define PA_SU_SC_VTX_WINDOW_OFF_ENABLE 0x00010000
-enum pa_su_sc_draw {
-	POINTS       = 0,
-	LINES        = 1,
-	TRIANGLES    = 2,
+#define PA_SU_SC_MODE_CNTL_CULL_FRONT                      0x00000001
+#define PA_SU_SC_MODE_CNTL_CULL_BACK                       0x00000002
+#define PA_SU_SC_MODE_CNTL_FACE                            0x00000004
+enum pa_su_sc_polymode {
+	POLY_DISABLED     = 0,
+	POLY_DUALMODE     = 1,
 };
-static inline uint32_t PA_SU_SC_POLYMODE_FRONT_PTYPE(enum pa_su_sc_draw val)
+static inline uint32_t PA_SU_SC_MODE_CNTL_POLYMODE(enum pa_su_sc_polymode val)
+{
+	return val << 3;
+}
+enum pa_su_sc_draw {
+	DRAW_POINTS       = 0,
+	DRAW_LINES        = 1,
+	DRAW_TRIANGLES    = 2,
+};
+static inline uint32_t PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(enum pa_su_sc_draw val)
 {
 	return val << 5;
 }
-static inline uint32_t PA_SU_SC_POLYMODE_BACK_PTYPE(enum pa_su_sc_draw val)
+static inline uint32_t PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(enum pa_su_sc_draw val)
 {
 	return val << 8;
+}
+#define PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE        0x00000800
+#define PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE         0x00001000
+#define PA_SU_SC_MODE_CNTL_POLY_OFFSET_PARA_ENABLE         0x00002000
+#define PA_SU_SC_MODE_CNTL_MSAA_ENABLE                     0x00008000
+#define PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE        0x00010000
+#define PA_SU_SC_MODE_CNTL_LINE_STIPPLE_ENABLE             0x00040000
+#define PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST              0x00080000
+#define PA_SU_SC_MODE_CNTL_PERSP_CORR_DIS                  0x00100000
+#define PA_SU_SC_MODE_CNTL_MULTI_PRIM_IB_ENA               0x00200000
+#define PA_SU_SC_MODE_CNTL_QUAD_ORDER_ENABLE               0x00800000
+#define PA_SU_SC_MODE_CNTL_WAIT_RB_IDLE_ALL_TRI            0x02000000
+#define PA_SU_SC_MODE_CNTL_WAIT_RB_IDLE_FIRST_TRI_NEW_STATE 0x04000000
+#define PA_SU_SC_MODE_CNTL_CLAMPED_FACENESS                0x10000000
+#define PA_SU_SC_MODE_CNTL_ZERO_AREA_FACENESS              0x20000000
+#define PA_SU_SC_MODE_CNTL_FACE_KILL_ENABLE                0x40000000
+#define PA_SU_SC_MODE_CNTL_FACE_WRITE_ENABLE               0x80000000
+
+
+/*
+ * Bits for PA_SC_LINE_STIPPLE:
+ */
+
+#define PA_SC_LINE_STIPPLE_LINE_PATTERN(val)     ((val) & 0x0000ffff)
+#define PA_SC_LINE_STIPPLE_REPEAT_COUNT(val)     (((val) << 16) & 0x00ff0000)
+enum pa_sc_pattern_bit_order {
+	PATTERN_BIT_ORDER_LITTLE = 0,
+	PATTERN_BIT_ORDER_BIG    = 1,
+};
+static inline uint32_t PA_SC_LINE_STIPPLE_PATTERN_BIT_ORDER(enum pa_sc_pattern_bit_order val)
+{
+	return val << 28;
+}
+enum pa_sc_auto_reset_cntl {
+	AUTO_RESET_NEVER          = 0,
+	AUTO_RESET_EACH_PRIMITIVE = 1,
+	AUTO_RESET_EACH_PACKET    = 2,
+};
+static inline uint32_t PA_SC_LINE_STIPPLE_AUTO_RESET_CNTL(enum pa_sc_auto_reset_cntl val)
+{
+	return val << 29;
 }
 
 
 /*
- * PA_SU_VTX_CNTL
+ * Bits for PA_SC_LINE_CNTL:
+ */
+
+#define PA_SC_LINE_CNTL_BRES_CNTL_MASK(val)      ((val) & 0x000000ff)
+#define PA_SC_LINE_CNTL_USE_BRES_CNTL            0x00000100
+#define PA_SC_LINE_CNTL_EXPAND_LINE_WIDTH        0x00000200
+#define PA_SC_LINE_CNTL_LAST_PIXEL               0x00000400
+
+
+/*
+ * Bits for PA_SU_VTX_CNTL:
  */
 
 enum pa_pixcenter {
-    PIXCENTER_D3D = 0,
-    PIXCENTER_OGL = 1,
+	PIXCENTER_D3D = 0,
+	PIXCENTER_OGL = 1,
 };
 static inline uint32_t PA_SU_VTX_CNTL_PIX_CENTER(enum pa_pixcenter val)
 {
@@ -191,10 +281,10 @@ static inline uint32_t PA_SU_VTX_CNTL_PIX_CENTER(enum pa_pixcenter val)
 }
 
 enum pa_roundmode {
-    TRUNCATE = 0,
-    ROUND = 1,
-    ROUNDTOEVEN = 2,
-    ROUNDTOODD = 3,
+	TRUNCATE = 0,
+	ROUND = 1,
+	ROUNDTOEVEN = 2,
+	ROUNDTOODD = 3,
 };
 static inline uint32_t PA_SU_VTX_CNTL_ROUND_MODE_MASK(enum pa_roundmode val)
 {
@@ -202,11 +292,11 @@ static inline uint32_t PA_SU_VTX_CNTL_ROUND_MODE_MASK(enum pa_roundmode val)
 }
 
 enum pa_quantmode {
-    ONE_SIXTEENTH = 0,
-    ONE_EIGHTH = 1,
-    ONE_QUARTER = 2,
-    ONE_HALF = 3,
-    ONE = 4,
+	ONE_SIXTEENTH = 0,
+	ONE_EIGHTH = 1,
+	ONE_QUARTER = 2,
+	ONE_HALF = 3,
+	ONE = 4,
 };
 static inline uint32_t PA_SU_VTX_CNTL_QUANT_MODE(enum pa_quantmode val)
 {
@@ -271,6 +361,9 @@ static inline uint32_t SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(enum sq_sample_cntl val)
 /*
  * Bits for SQ_PROGRAM_CNTL:
  */
+/* note: only 0x3f worth of valid register values, but high bit is
+ * set to indicate '0 registers used':
+ */
 #define SQ_PROGRAM_CNTL_VS_REGS(val)   ((val) & 0xff)
 #define SQ_PROGRAM_CNTL_PS_REGS(val)   (((val) & 0xff) << 8)
 #define SQ_PROGRAM_CNTL_VS_RESOURCE    0x00010000
@@ -297,15 +390,49 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 
 
 /*
+ * Bits for SQ_VS_CONST
+ */
+
+#define SQ_VS_CONST_BASE(val)          ((val) & 0x1ff)
+#define SQ_VS_CONST_SIZE(val)          (((val) & 0x1ff) << 12)
+
+
+/*
+ * Bits for SQ_PS_CONST
+ */
+
+#define SQ_PS_CONST_BASE(val)          ((val) & 0x1ff)
+#define SQ_PS_CONST_SIZE(val)          (((val) & 0x1ff) << 12)
+
+
+/*
  * Bits for tex sampler:
  */
 
 /* dword0 */
-#define SQ_TEX0_WRAP                   0    /* GL_REPEAT */
-#define SQ_TEX0_MIRROR                 1    /* GL_MIRRORED_REPEAT */
-#define SQ_TEX0_CLAMP_LAST_TEXEL       2    /* GL_CLAMP_TO_EDGE */
-#define SQ_TEX0_CLAMP_X(val)           ((val) << 10)
-#define SQ_TEX0_CLAMP_Y(val)           ((val) << 13)
+enum sq_tex_clamp {
+	SQ_TEX_WRAP                    = 0,    /* GL_REPEAT */
+	SQ_TEX_MIRROR                  = 1,    /* GL_MIRRORED_REPEAT */
+	SQ_TEX_CLAMP_LAST_TEXEL        = 2,    /* GL_CLAMP_TO_EDGE */
+	/* TODO confirm these: */
+	SQ_TEX_MIRROR_ONCE_LAST_TEXEL  = 3,
+	SQ_TEX_CLAMP_HALF_BORDER       = 4,
+	SQ_TEX_MIRROR_ONCE_HALF_BORDER = 5,
+	SQ_TEX_CLAMP_BORDER            = 6,
+	SQ_TEX_MIRROR_ONCE_BORDER      = 7,
+};
+static inline uint32_t SQ_TEX0_CLAMP_X(enum sq_tex_clamp val)
+{
+	return (val & 0x7) << 10;
+}
+static inline uint32_t SQ_TEX0_CLAMP_Y(enum sq_tex_clamp val)
+{
+	return (val & 0x7) << 13;
+}
+static inline uint32_t SQ_TEX0_CLAMP_Z(enum sq_tex_clamp val)
+{
+	return (val & 0x7) << 16;
+}
 #define SQ_TEX0_PITCH(val)             (((val) >> 5) << 22)
 
 /* dword2 */
@@ -313,11 +440,44 @@ static inline uint32_t SQ_PROGRAM_CNTL_PS_EXPORT_MODE(enum sq_ps_vtx_mode val)
 #define SQ_TEX2_WIDTH(val)             ((val) - 1)
 
 /* dword3 */
-#define SQ_TEX3_XY_FILTER_POINT        0
-#define SQ_TEX3_XY_FILTER_BILINEAR     1
-#define SQ_TEX3_XY_FILTER_BICUBIC      2  /* presumed */
-#define SQ_TEX3_XY_MAG_FILTER(val)     ((val) << 19)
-#define SQ_TEX3_XY_MIN_FILTER(val)     ((val) << 21)
+enum sq_tex_swiz {
+	SQ_TEX_X    = 0,
+	SQ_TEX_Y    = 1,
+	SQ_TEX_Z    = 2,
+	SQ_TEX_W    = 3,
+	SQ_TEX_ZERO = 4,
+	SQ_TEX_ONE  = 5,
+};
+static inline uint32_t SQ_TEX3_SWIZ_X(enum sq_tex_swiz val)
+{
+	return (val & 0x7) << 1;
+}
+static inline uint32_t SQ_TEX3_SWIZ_Y(enum sq_tex_swiz val)
+{
+	return (val & 0x7) << 4;
+}
+static inline uint32_t SQ_TEX3_SWIZ_Z(enum sq_tex_swiz val)
+{
+	return (val & 0x7) << 7;
+}
+static inline uint32_t SQ_TEX3_SWIZ_W(enum sq_tex_swiz val)
+{
+	return (val & 0x7) << 10;
+}
+
+enum sq_tex_filter {
+	SQ_TEX_FILTER_POINT    = 0,
+	SQ_TEX_FILTER_BILINEAR = 1,
+	SQ_TEX_FILTER_BICUBIC  = 2,  /* presumed */
+};
+static inline uint32_t SQ_TEX3_XY_MAG_FILTER(enum sq_tex_filter val)
+{
+	return (val & 0x3) << 19;
+}
+static inline uint32_t SQ_TEX3_XY_MIN_FILTER(enum sq_tex_filter val)
+{
+	return (val & 0x3) << 21;
+}
 
 
 /*
@@ -395,6 +555,23 @@ static inline uint32_t RB_BLENDCONTROL_ALPHA_DESTBLEND(enum rb_blend_op val)
 
 
 /*
+ * Bits for RB_COLOR_INFO:
+ */
+
+#define RB_COLOR_INFO_COLOR_FORMAT_MASK          0x0000000f
+static inline uint32_t RB_COLOR_INFO_COLOR_FORMAT(enum COLORFORMATX val)
+{
+	return val & RB_COLOR_INFO_COLOR_FORMAT_MASK;
+}
+
+#define RB_COLOR_INFO_COLOR_ROUND_MODE(val)      (((val) & 0x3) << 4)
+#define RB_COLOR_INFO_COLOR_LINEAR               0x00000040
+#define RB_COLOR_INFO_COLOR_ENDIAN(val)          (((val) & 0x3) << 7)
+#define RB_COLOR_INFO_COLOR_SWAP(val)            (((val) & 0x3) << 9)
+#define RB_COLOR_INFO_COLOR_BASE(val)            (((val) & 0xfffff) << 12)
+
+
+/*
  * Bits for RB_MODECONTROL:
  */
 
@@ -420,11 +597,11 @@ static inline uint32_t RB_MODECONTROL_EDRAM_MODE(enum rb_edram_mode val)
 #define RB_DEPTHCONTROL_EARLY_Z_ENABLE      0x00000008
 #define RB_DEPTHCONTROL_ZFUNC_MASK          0x00000070
 #define RB_DEPTHCONTROL_ZFUNC(depth_func) \
-	((((depth_func) - GL_NEVER) << 4) & RB_DEPTHCONTROL_ZFUNC_MASK)
+	(((depth_func) << 4) & RB_DEPTHCONTROL_ZFUNC_MASK)
 #define RB_DEPTHCONTROL_BACKFACE_ENABLE     0x00000080
 #define RB_DEPTHCONTROL_STENCILFUNC_MASK    0x00000700
 #define RB_DEPTHCONTROL_STENCILFUNC(depth_func) \
-	((((depth_func) - GL_NEVER) << 8) & RB_DEPTHCONTROL_STENCILFUNC_MASK)
+	(((depth_func) << 8) & RB_DEPTHCONTROL_STENCILFUNC_MASK)
 enum rb_stencil_op {
 	STENCIL_KEEP = 0,
 	STENCIL_ZERO = 1,
@@ -452,7 +629,7 @@ static inline uint32_t RB_DEPTHCONTROL_STENCILZFAIL(enum rb_stencil_op val)
 }
 #define RB_DEPTHCONTROL_STENCILFUNC_BF_MASK      0x00700000
 #define RB_DEPTHCONTROL_STENCILFUNC_BF(depth_func) \
-	((((depth_func) - GL_NEVER) << 20) & RB_DEPTHCONTROL_STENCILFUNC_BF_MASK)
+	(((depth_func) << 20) & RB_DEPTHCONTROL_STENCILFUNC_BF_MASK)
 #define RB_DEPTHCONTROL_STENCILFAIL_BF_MASK      0x03800000
 static inline uint32_t RB_DEPTHCONTROL_STENCILFAIL_BF(enum rb_stencil_op val)
 {
@@ -535,7 +712,7 @@ static inline uint32_t RB_COPY_DEST_INFO_DITHER_TYPE(enum rb_dither_type val)
  * Bits for RB_COLORCONTROL:
  */
 
-#define RB_COLORCONTROL_ALPHA_FUNC(val)          (((val) - GL_NEVER) & 0x7)
+#define RB_COLORCONTROL_ALPHA_FUNC(val)          ((val) & 0x7)
 #define RB_COLORCONTROL_ALPHA_TEST_ENABLE        0x00000008
 #define RB_COLORCONTROL_ALPHA_TO_MASK_ENABLE     0x00000010
 #define RB_COLORCONTROL_BLEND_DISABLE            0x00000020
@@ -564,6 +741,7 @@ static inline uint32_t RB_COLORCONTROL_DITHER_TYPE(enum rb_dither_type val)
 enum rb_depth_format {
 	DEPTHX_16 = 0,
 	DEPTHX_24_8 = 1,
+	DEPTHX_INVALID,
 };
 
 static inline uint32_t RB_DEPTH_INFO_DEPTH_FORMAT(enum rb_depth_format val)

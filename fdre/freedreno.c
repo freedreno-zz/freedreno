@@ -76,6 +76,7 @@ struct fd_state {
 
 	/* primary cmdstream buffer with render commands: */
 	struct fd_ringbuffer *ring;
+	struct fd_ringmarker *draw_start, *draw_end;
 
 	/* if render target needs to be broken into tiles/bins, this cmd
 	 * buffer contains the per-tile setup, and then IB calls to the
@@ -113,8 +114,8 @@ struct fd_state {
 
 	/* texture related params: */
 	struct {
-		uint8_t min_filter, mag_filter;
-		uint8_t clamp_x, clamp_y;
+		enum sq_tex_filter min_filter, mag_filter;
+		enum sq_tex_clamp clamp_x, clamp_y;
 
 		struct fd_parameters params;
 	} textures;
@@ -182,6 +183,11 @@ static enum SURFACEFORMAT color2fmt[] = {
 		[COLORX_32_32_FLOAT]       = FMT_32_32_FLOAT,
 		[COLORX_32_32_32_32_FLOAT] = FMT_32_32_32_32_FLOAT,
 };
+
+/* ************************************************************************* */
+
+/* some adreno register enum's map directly to GL enum's minus GL_NEVER: */
+#define g2a(val) ((val) - GL_NEVER)
 
 /* ************************************************************************* */
 
@@ -344,6 +350,8 @@ struct fd_state * fd_init(void)
 	state->device_id = val;
 
 	state->ring = fd_ringbuffer_new(state->ws->pipe, 0x10000);
+	state->draw_start = fd_ringmarker_new(state->ring);
+	state->draw_end = fd_ringmarker_new(state->ring);
 	state->ring_tile = fd_ringbuffer_new(state->ws->pipe, 0x10000);
 
 	state->solid_const = fd_bo_new(state->ws->dev, 0x1000, 0);
@@ -372,28 +380,28 @@ struct fd_state * fd_init(void)
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
 
-	state->pa_su_sc_mode_cntl = PA_SU_SC_PROVOKING_VTX_LAST |
-			PA_SU_SC_POLYMODE_FRONT_PTYPE(POINTS) |
-			PA_SU_SC_POLYMODE_BACK_PTYPE(POINTS);
+	state->pa_su_sc_mode_cntl = PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
+			PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(DRAW_POINTS) |
+			PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(DRAW_POINTS);
 	state->rb_colorcontrol =
 			RB_COLORCONTROL_ROP_CODE(12) |
-			RB_COLORCONTROL_ALPHA_FUNC(GL_ALWAYS) |
+			RB_COLORCONTROL_ALPHA_FUNC(g2a(GL_ALWAYS)) |
 			RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS) |
 			RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol =
 			RB_DEPTHCONTROL_Z_WRITE_ENABLE |
 			RB_DEPTHCONTROL_EARLY_Z_ENABLE |
-			RB_DEPTHCONTROL_ZFUNC(GL_LESS) |
-			RB_DEPTHCONTROL_STENCILFUNC(GL_ALWAYS) |
+			RB_DEPTHCONTROL_ZFUNC(g2a(GL_LESS)) |
+			RB_DEPTHCONTROL_STENCILFUNC(g2a(GL_ALWAYS)) |
 			RB_DEPTHCONTROL_BACKFACE_ENABLE |
-			RB_DEPTHCONTROL_STENCILFUNC_BF(GL_ALWAYS);
+			RB_DEPTHCONTROL_STENCILFUNC_BF(g2a(GL_ALWAYS));
 	state->rb_stencilrefmask = 0xff000000 |
 			RB_STENCILREFMASK_STENCILWRITEMASK(0xff);
 
-	state->textures.clamp_x = SQ_TEX0_WRAP;
-	state->textures.clamp_y = SQ_TEX0_WRAP;
-	state->textures.min_filter = SQ_TEX3_XY_FILTER_POINT;
-	state->textures.mag_filter = SQ_TEX3_XY_FILTER_POINT;
+	state->textures.clamp_x = SQ_TEX_WRAP;
+	state->textures.clamp_y = SQ_TEX_WRAP;
+	state->textures.min_filter = SQ_TEX_FILTER_POINT;
+	state->textures.mag_filter = SQ_TEX_FILTER_POINT;
 
 	state->clear.depth = 1;
 	state->clear.stencil = 0;
@@ -567,9 +575,9 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
-			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
-			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES));
+	OUT_RING(ring, PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
+			PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(DRAW_TRIANGLES) |
+			PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(DRAW_TRIANGLES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
@@ -608,6 +616,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, surface->pitch >> 5);    /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(surface->color) |
 			RB_COPY_DEST_INFO_LINEAR |      /* RB_COPY_DEST_INFO */
+			RB_COPY_DEST_INFO_SWAP(1) |
 			RB_COPY_DEST_INFO_WRITE_RED |
 			RB_COPY_DEST_INFO_WRITE_GREEN |
 			RB_COPY_DEST_INFO_WRITE_BLUE |
@@ -620,7 +629,8 @@ static void emit_gmem2mem(struct fd_state *state,
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(RECTLIST, DI_SRC_SEL_AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
+			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -713,13 +723,13 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
 	reg = 0;
 	if (mask & GL_DEPTH_BUFFER_BIT) {
-		reg |= RB_DEPTHCONTROL_ZFUNC(GL_ALWAYS) |
+		reg |= RB_DEPTHCONTROL_ZFUNC(g2a(GL_ALWAYS)) |
 				RB_DEPTHCONTROL_Z_ENABLE |
 				RB_DEPTHCONTROL_Z_WRITE_ENABLE |
 				RB_DEPTHCONTROL_EARLY_Z_ENABLE;
 	}
 	if (mask & GL_STENCIL_BUFFER_BIT) {
-		reg |= RB_DEPTHCONTROL_STENCILFUNC(GL_ALWAYS) |
+		reg |= RB_DEPTHCONTROL_STENCILFUNC(g2a(GL_ALWAYS)) |
 				RB_DEPTHCONTROL_STENCIL_ENABLE |
 				RB_DEPTHCONTROL_STENCILZPASS(STENCIL_REPLACE);
 	}
@@ -734,9 +744,9 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST |
-			PA_SU_SC_POLYMODE_FRONT_PTYPE(TRIANGLES) |
-			PA_SU_SC_POLYMODE_BACK_PTYPE(TRIANGLES));
+	OUT_RING(ring, PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
+			PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(DRAW_TRIANGLES) |
+			PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(DRAW_TRIANGLES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -779,7 +789,8 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, DRAW(RECTLIST, DI_SRC_SEL_AUTO_INDEX, INDEX_SIZE_IGN, IGNORE_VISIBILITY));
+	OUT_RING(ring, DRAW(DI_PT_RECTLIST, DI_SRC_SEL_AUTO_INDEX,
+			INDEX_SIZE_IGN, IGNORE_VISIBILITY));
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -796,7 +807,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_PROVOKING_VTX_LAST);
+	OUT_RING(ring, PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
@@ -831,7 +842,7 @@ int fd_cull(struct fd_state *state, GLenum mode)
 int fd_depth_func(struct fd_state *state, GLenum depth_func)
 {
 	state->rb_depthcontrol &= ~RB_DEPTHCONTROL_ZFUNC_MASK;
-	state->rb_depthcontrol |= RB_DEPTHCONTROL_ZFUNC(depth_func);
+	state->rb_depthcontrol |= RB_DEPTHCONTROL_ZFUNC(g2a(depth_func));
 	return 0;
 }
 
@@ -847,16 +858,17 @@ int fd_enable(struct fd_state *state, GLenum cap)
 	case GL_CULL_FACE:
 		if ((state->cull_mode == GL_FRONT) ||
 				(state->cull_mode == GL_FRONT_AND_BACK)) {
-			state->pa_su_sc_mode_cntl |= PA_SU_SC_CULL_FRONT;
+			state->pa_su_sc_mode_cntl |= PA_SU_SC_MODE_CNTL_CULL_FRONT;
 		}
 		if ((state->cull_mode == GL_BACK) ||
 				(state->cull_mode == GL_FRONT_AND_BACK)) {
-			state->pa_su_sc_mode_cntl |= PA_SU_SC_CULL_BACK;
+			state->pa_su_sc_mode_cntl |= PA_SU_SC_MODE_CNTL_CULL_BACK;
 		}
 		return 0;
 	case GL_POLYGON_OFFSET_FILL:
 		state->pa_su_sc_mode_cntl |=
-				(PA_SU_SC_POLY_OFFSET_FRONT | PA_SU_SC_POLY_OFFSET_BACK);
+				(PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE |
+						PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE);
 		return 0;
 	case GL_BLEND:
 		state->rb_colorcontrol &= ~RB_COLORCONTROL_BLEND_DISABLE;
@@ -881,11 +893,12 @@ int fd_disable(struct fd_state *state, GLenum cap)
 	switch (cap) {
 	case GL_CULL_FACE:
 		state->pa_su_sc_mode_cntl &=
-				~(PA_SU_SC_CULL_FRONT | PA_SU_SC_CULL_BACK);
+				~(PA_SU_SC_MODE_CNTL_CULL_FRONT | PA_SU_SC_MODE_CNTL_CULL_BACK);
 		return 0;
 	case GL_POLYGON_OFFSET_FILL:
 		state->pa_su_sc_mode_cntl &=
-				~(PA_SU_SC_POLY_OFFSET_FRONT | PA_SU_SC_POLY_OFFSET_BACK);
+				~(PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE |
+						PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE);
 		return 0;
 	case GL_BLEND:
 		state->rb_colorcontrol |= RB_COLORCONTROL_BLEND_DISABLE;
@@ -1033,8 +1046,8 @@ int fd_stencil_func(struct fd_state *state, GLenum func,
 			RB_DEPTHCONTROL_STENCILFUNC_MASK |
 			RB_DEPTHCONTROL_STENCILFUNC_BF_MASK);
 	state->rb_depthcontrol |=
-			RB_DEPTHCONTROL_STENCILFUNC(func) |
-			RB_DEPTHCONTROL_STENCILFUNC_BF(func);
+			RB_DEPTHCONTROL_STENCILFUNC(g2a(func)) |
+			RB_DEPTHCONTROL_STENCILFUNC_BF(g2a(func));
 	return 0;
 }
 
@@ -1104,14 +1117,14 @@ int fd_stencil_mask(struct fd_state *state, GLuint mask)
 	return 0;
 }
 
-static int set_filter(uint8_t *filter, GLint param)
+static int set_filter(enum sq_tex_filter *filter, GLint param)
 {
 	switch (param) {
 	case GL_LINEAR:
-		*filter = SQ_TEX3_XY_FILTER_BILINEAR;
+		*filter = SQ_TEX_FILTER_BILINEAR;
 		return 0;
 	case GL_NEAREST:
-		*filter = SQ_TEX3_XY_FILTER_POINT;
+		*filter = SQ_TEX_FILTER_POINT;
 		return 0;
 	default:
 		ERROR_MSG("unsupported param: 0x%04x", param);
@@ -1119,17 +1132,17 @@ static int set_filter(uint8_t *filter, GLint param)
 	}
 }
 
-static int set_clamp(uint8_t *clamp, GLint param)
+static int set_clamp(enum sq_tex_clamp *clamp, GLint param)
 {
 	switch (param) {
 	case GL_REPEAT:
-		*clamp = SQ_TEX0_WRAP;
+		*clamp = SQ_TEX_WRAP;
 		return 0;
 	case GL_MIRRORED_REPEAT:
-		*clamp = SQ_TEX0_MIRROR;
+		*clamp = SQ_TEX_MIRROR;
 		return 0;
 	case GL_CLAMP_TO_EDGE:
-		*clamp = SQ_TEX0_CLAMP_LAST_TEXEL;
+		*clamp = SQ_TEX_CLAMP_LAST_TEXEL;
 		return 0;
 	default:
 		ERROR_MSG("unsupported param: 0x%04x", param);
@@ -1321,7 +1334,11 @@ static void emit_textures(struct fd_state *state)
 		/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
 		 * Mip=2:BaseMap
 		 */
-		OUT_RING(ring, 0x01001910 |  // XXX
+		OUT_RING(ring,
+				SQ_TEX3_SWIZ_X(SQ_TEX_X) |
+				SQ_TEX3_SWIZ_Y(SQ_TEX_Y) |
+				SQ_TEX3_SWIZ_Z(SQ_TEX_Z) |
+				SQ_TEX3_SWIZ_W(SQ_TEX_W) |
 				SQ_TEX3_XY_MAG_FILTER(state->textures.mag_filter) |
 				SQ_TEX3_XY_MIN_FILTER(state->textures.min_filter));
 
@@ -1478,13 +1495,13 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, 0x00000000);		/* viz query info. */
 	switch (mode) {
 	case GL_TRIANGLE_STRIP:
-		OUT_RING(ring, DRAW(TRISTRIP, src_sel, idx_type, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(DI_PT_TRISTRIP, src_sel, idx_type, IGNORE_VISIBILITY));
 		break;
 	case GL_TRIANGLE_FAN:
-		OUT_RING(ring, DRAW(TRIFAN, src_sel, idx_type, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(DI_PT_TRIFAN, src_sel, idx_type, IGNORE_VISIBILITY));
 		break;
 	case GL_TRIANGLES:
-		OUT_RING(ring, DRAW(TRILIST, src_sel, idx_type, IGNORE_VISIBILITY));
+		OUT_RING(ring, DRAW(DI_PT_TRILIST, src_sel, idx_type, IGNORE_VISIBILITY));
 		break;
 	default:
 		ERROR_MSG("unsupported mode: %d", mode);
@@ -1535,6 +1552,8 @@ int fd_flush(struct fd_state *state)
 	if (!state->dirty)
 		return 0;
 
+	fd_ringmarker_mark(state->draw_end);
+
 	if ((state->render_target.nbins_x == 1) &&
 			(state->render_target.nbins_y == 1)) {
 		/* no binning needed, just emit the primary ringbuffer: */
@@ -1578,7 +1597,7 @@ int fd_flush(struct fd_state *state)
 				OUT_RING(ring, xy2d(bin_w, bin_h));   /* PA_SC_SCREEN_SCISSOR_BR */
 
 				/* emit IB to drawcmds: */
-				OUT_IB  (ring, state->ring);
+				OUT_IB  (ring, state->draw_start, state->draw_end);
 
 				/* emit gmem2mem to transfer tile back to system memory: */
 				emit_gmem2mem(state, ring, surface, xoff, yoff);
@@ -1594,6 +1613,8 @@ int fd_flush(struct fd_state *state)
 	fd_pipe_wait(state->ws->pipe, fd_ringbuffer_timestamp(ring));
 	fd_ringbuffer_reset(state->ring);
 	fd_ringbuffer_reset(state->ring_tile);
+
+	fd_ringmarker_mark(state->draw_start);
 
 	state->dirty = false;
 
@@ -1698,9 +1719,9 @@ static void attach_render_target(struct fd_state *state,
 	}
 
 	if ((nbins_x > 1) || (nbins_y > 1)) {
-		state->pa_su_sc_mode_cntl |= PA_SU_SC_VTX_WINDOW_OFF_ENABLE;
+		state->pa_su_sc_mode_cntl |= PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE;
 	} else {
-		state->pa_su_sc_mode_cntl &= ~PA_SU_SC_VTX_WINDOW_OFF_ENABLE;
+		state->pa_su_sc_mode_cntl &= ~PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE;
 	}
 
 	INFO_MSG("using %d bins of size %dx%d", nbins_x*nbins_y, bin_w, bin_h);
@@ -1949,6 +1970,8 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x88888888);
 
 	fd_ringbuffer_flush(ring);
+
+	fd_ringmarker_mark(state->draw_start);
 }
 
 int fd_dump_hex(struct fd_surface *surface)
