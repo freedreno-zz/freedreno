@@ -372,7 +372,7 @@ static void reg_pa_su_sc_mode_cntl(const char *name, uint32_t dword, int level)
 	static const char *ptype[] = {
 			"points", "lines", "triangles", "???",
 	};
-	printf("%s%s: %08x (front-ptype=%s, back-ptype=%s, provoking-vtx=%s%s%s%s%s)\n",
+	printf("%s%s: %08x (front-ptype=%s, back-ptype=%s, provoking-vtx=%s%s%s%s%s%s)\n",
 			levels[level], name, dword,
 			ptype[(dword >> 5) & 0x3], ptype[(dword >> 8) & 0x3],
 			(dword & PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST) ? "last" : "first",
@@ -398,7 +398,7 @@ static void reg_sq_program_cntl(const char *name, uint32_t dword, int level)
 		vs_regs = 0;
 	if (ps_regs == 0x81)
 		ps_regs = 0;
-	printf("%s%s: %08x (vs-regs=%u, ps-regs=%u, vs-export=%u %s%s%s%s)\n",
+	printf("%s%s: %08x (vs-regs=%u, ps-regs=%u, vs-export=%u %s%s%s%s%s)\n",
 			levels[level], name, dword, vs_regs, ps_regs, vs_export, vtx_mode[vtx],
 			(dword & SQ_PROGRAM_CNTL_VS_RESOURCE) ? ", vs" : "",
 			(dword & SQ_PROGRAM_CNTL_PS_RESOURCE) ? ", ps" : "",
@@ -525,6 +525,31 @@ static void reg_rb_color_info(const char *name, uint32_t dword, int level)
 			color_name[dword & 0xf]);
 }
 
+static void reg_rb_bc_control(const char *name, uint32_t dword, int level)
+{
+	printf("%s%s: %08x (%stimeout-select=%d%s%s%s%s, az-throttle-count=%d%s%s%s%s"
+			", accum-alloc-mask=%x%s, accum-data-fifo-limit=%d, "
+			"mem-export-timeout-select=%d%s%s%s)\n", levels[level], name, dword,
+			(dword & RB_BC_CONTROL_ACCUM_LINEAR_MODE_ENABLE) ? "accum-linear-mode, " : "",
+			((dword >> 1) & 0x3),
+			(dword & RB_BC_CONTROL_DISABLE_EZ_FAST_CONTEXT_SWITCH) ? ", disable-ez-fast-ctx-switch" : "",
+			(dword & RB_BC_CONTROL_DISABLE_EZ_NULL_ZCMD_DROP) ? ", disable-ez-null-zcmd-drop" : "",
+			(dword & RB_BC_CONTROL_DISABLE_LZ_NULL_ZCMD_DROP) ? ", disable-lz-null-zcmd-drop" : "",
+			(dword & RB_BC_CONTROL_ENABLE_AZ_THROTTLE) ? ", enable-az-throttle" : "",
+			((dword >> 8) & 0x1f),
+			(dword & RB_BC_CONTROL_ENABLE_CRC_UPDATE) ? ", enable-crc-update" : "",
+			(dword & RB_BC_CONTROL_CRC_MODE) ? ", crc-update" : "",
+			(dword & RB_BC_CONTROL_DISABLE_SAMPLE_COUNTERS) ? ", disable-sample-counters" : "",
+			(dword & RB_BC_CONTROL_DISABLE_ACCUM) ? ", disable-accum" : "",
+			((dword >> 18) & 0xf),
+			(dword & RB_BC_CONTROL_LINEAR_PERFORMANCE_ENABLE) ? ", linear-performance" : "",
+			((dword >> 23) & 0xf),
+			((dword >> 27) & 0x3),
+			(dword & RB_BC_CONTROL_MEM_EXPORT_LINEAR_MODE_ENABLE) ? ", mem-export-linear-mode" : "",
+			(dword & RB_BC_CONTROL_CRC_SYSTEM) ? ", crc-system" : "",
+			(dword & RB_BC_CONTROL_RESERVED6) ? ", reserved6" : "");
+}
+
 /* sign-extend a 2s-compliment signed number of nbits size */
 static int32_t u2i(uint32_t val, int nbits)
 {
@@ -544,6 +569,15 @@ static void reg_rb_copy_dest_offset(const char *name, uint32_t dword, int level)
 	uint32_t x = (dword >>  0) & 0x3fff;
 	uint32_t y = (dword >> 13) & 0x3fff;
 	printf("%s%s: %d,%d (%08x)\n", levels[level], name, x, y, dword);
+}
+
+static void reg_vgt_current_bin_id_min_max(const char *name, uint32_t dword, int level)
+{
+	uint32_t col = (dword >> 0) & 0x7;
+	uint32_t row = (dword >> 3) & 0x7;
+	uint32_t gb  = (dword >> 6) & 0x7;
+	printf("%s%s: %08x (col=%d, row=%d, guard-band=%d)\n", levels[level],
+			name, dword, col, row, gb);
 }
 
 static void reg_xy(const char *name, uint32_t dword, int level)
@@ -685,6 +719,7 @@ static const const struct {
 		REG(RB_ALPHA_REF, reg_hex),
 		REG(RB_BLEND_CONTROL, reg_rb_blend_control),
 		REG(CLEAR_COLOR, reg_clear_color),
+		REG(RB_BC_CONTROL, reg_rb_bc_control),
 
 		REG(SCRATCH_ADDR, reg_hex),
 		REG(SCRATCH_REG0, reg_hex),
@@ -710,6 +745,9 @@ static const const struct {
 		REG(VGT_INDX_OFFSET, reg_hex),
 		REG(VGT_MAX_VTX_INDX, reg_hex),
 		REG(VGT_MIN_VTX_INDX, reg_hex),
+		REG(VGT_OUT_DEALLOC_CNTL, reg_hex),
+		REG(VGT_CURRENT_BIN_ID_MAX, reg_vgt_current_bin_id_min_max),
+		REG(VGT_CURRENT_BIN_ID_MIN, reg_vgt_current_bin_id_min_max),
 
 		REG(TP0_CHICKEN, reg_hex),
 		REG(TC_CNTL_STATUS, reg_hex),
@@ -1223,6 +1261,8 @@ int main(int argc, char **argv)
 				buffers[i].hostptr = NULL;
 			}
 			nbuffers = 0;
+			break;
+		default:
 			break;
 		}
 	}
