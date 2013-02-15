@@ -138,29 +138,27 @@ void test_vertex(GLint *sizes, GLenum *types)
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 	GCHK(glFlush());
 
-	if (!program) {
-		program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
-		GCHK(glBindAttribLocation(program, 0, "aPosition"));
-		GCHK(glBindAttribLocation(program, 1, "aColor1"));
-		GCHK(glBindAttribLocation(program, 2, "aColor2"));
-		GCHK(glBindAttribLocation(program, 3, "aColor3"));
-		GCHK(glBindAttribLocation(program, 4, "aColor4"));
-		GCHK(glBindAttribLocation(program, 5, "aColor5"));
-		GCHK(glBindAttribLocation(program, 6, "aColor6"));
-		GCHK(glBindAttribLocation(program, 7, "aColor7"));
-		GCHK(glBindAttribLocation(program, 8, "aColor8"));
-		GCHK(glBindAttribLocation(program, 9, "aColor9"));
-		GCHK(glBindAttribLocation(program, 10, "aColor10"));
-		GCHK(glBindAttribLocation(program, 11, "aColor11"));
-		GCHK(glBindAttribLocation(program, 12, "aColor12"));
-		GCHK(glBindAttribLocation(program, 13, "aColor13"));
-		GCHK(glBindAttribLocation(program, 14, "aColor14"));
-		GCHK(glBindAttribLocation(program, 15, "aColor15"));
+	GCHK(glBindAttribLocation(program, 0, "aPosition"));
+	GCHK(glBindAttribLocation(program, 1, "aColor1"));
+	GCHK(glBindAttribLocation(program, 2, "aColor2"));
+	GCHK(glBindAttribLocation(program, 3, "aColor3"));
+	GCHK(glBindAttribLocation(program, 4, "aColor4"));
+	GCHK(glBindAttribLocation(program, 5, "aColor5"));
+	GCHK(glBindAttribLocation(program, 6, "aColor6"));
+	GCHK(glBindAttribLocation(program, 7, "aColor7"));
+	GCHK(glBindAttribLocation(program, 8, "aColor8"));
+	GCHK(glBindAttribLocation(program, 9, "aColor9"));
+	GCHK(glBindAttribLocation(program, 10, "aColor10"));
+	GCHK(glBindAttribLocation(program, 11, "aColor11"));
+	GCHK(glBindAttribLocation(program, 12, "aColor12"));
+	GCHK(glBindAttribLocation(program, 13, "aColor13"));
+	GCHK(glBindAttribLocation(program, 14, "aColor14"));
+	GCHK(glBindAttribLocation(program, 15, "aColor15"));
 
-		link_program(program);
-		GCHK(glFlush());
-	}
+	link_program(program);
+	GCHK(glFlush());
 
 	GCHK(glViewport(0, 0, width, height));
 	GCHK(glFlush());

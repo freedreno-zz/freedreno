@@ -141,16 +141,14 @@ void test_stencil(void)
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	if (!program) {
-		program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
-		GCHK(glBindAttribLocation(program, 0, "aPosition"));
+	GCHK(glBindAttribLocation(program, 0, "aPosition"));
 
-		link_program(program);
+	link_program(program);
 
-		/* now set up our uniform. */
-		GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
-	}
+	/* now set up our uniform. */
+	GCHK(uniform_location = glGetUniformLocation(program, "uColor"));
 
 	GCHK(glClearColor(0.0, 0.0, 0.0, 0.0));
 	GCHK(glClearStencil(0x1));

@@ -87,7 +87,7 @@ const char *fragment_shader_source =
 		"}                                  \n";
 
 
-void test_cube(void)
+void test_cat(void)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
@@ -213,15 +213,13 @@ void test_cube(void)
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	if (!program) {
-		program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
-		GCHK(glBindAttribLocation(program, 0, "in_position"));
-		GCHK(glBindAttribLocation(program, 1, "in_normal"));
-		GCHK(glBindAttribLocation(program, 2, "in_color"));
+	GCHK(glBindAttribLocation(program, 0, "in_position"));
+	GCHK(glBindAttribLocation(program, 1, "in_normal"));
+	GCHK(glBindAttribLocation(program, 2, "in_color"));
 
-		link_program(program);
-	}
+	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
 
@@ -295,7 +293,7 @@ void test_cube(void)
 
 int main(int argc, char *argv[])
 {
-	test_cube();
+	test_cat();
 }
 
 #ifdef BIONIC

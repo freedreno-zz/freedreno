@@ -107,14 +107,12 @@ void test_triangle_smoothed(void)
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	if (!program) {
-		program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
-		GCHK(glBindAttribLocation(program, 0, "aPosition"));
-		GCHK(glBindAttribLocation(program, 1, "aColor"));
+	GCHK(glBindAttribLocation(program, 0, "aPosition"));
+	GCHK(glBindAttribLocation(program, 1, "aColor"));
 
-		link_program(program);
-	}
+	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
 

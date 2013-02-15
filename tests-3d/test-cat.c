@@ -109,7 +109,7 @@ const char *fragment_shader_source =
 		"    gl_FragColor = result;                                                              \n"
 		"}                                                                                       \n";
 
-void test_cube(void)
+void test_cat(void)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
@@ -138,23 +138,21 @@ void test_cube(void)
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	if (!program) {
-		program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
-		GCHK(glBindAttribLocation(program, 0, "normal"));
-		GCHK(glBindAttribLocation(program, 1, "position"));
+	GCHK(glBindAttribLocation(program, 0, "normal"));
+	GCHK(glBindAttribLocation(program, 1, "position"));
 
-		/* upload the attribute vbo's, only done once: */
-		GCHK(glGenBuffers(1, &normal_vbo));
-		GCHK(glBindBuffer(GL_ARRAY_BUFFER, normal_vbo));
-		GCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(cat_normal), cat_normal, GL_STATIC_DRAW));
+	/* upload the attribute vbo's, only done once: */
+	GCHK(glGenBuffers(1, &normal_vbo));
+	GCHK(glBindBuffer(GL_ARRAY_BUFFER, normal_vbo));
+	GCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(cat_normal), cat_normal, GL_STATIC_DRAW));
 
-		GCHK(glGenBuffers(1, &position_vbo));
-		GCHK(glBindBuffer(GL_ARRAY_BUFFER, position_vbo));
-		GCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(cat_position), cat_position, GL_STATIC_DRAW));
+	GCHK(glGenBuffers(1, &position_vbo));
+	GCHK(glBindBuffer(GL_ARRAY_BUFFER, position_vbo));
+	GCHK(glBufferData(GL_ARRAY_BUFFER, sizeof(cat_position), cat_position, GL_STATIC_DRAW));
 
-		link_program(program);
-	}
+	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
 
@@ -224,7 +222,7 @@ void test_cube(void)
 
 int main(int argc, char *argv[])
 {
-	test_cube();
+	test_cat();
 }
 
 #ifdef BIONIC

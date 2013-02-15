@@ -223,15 +223,13 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	if (!program) {
-		program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source, fragment_shader_source);
 
-		GCHK(glBindAttribLocation(program, 0, "in_position"));
-		GCHK(glBindAttribLocation(program, 1, "in_normal"));
-		GCHK(glBindAttribLocation(program, 2, "in_TexCoord"));
+	GCHK(glBindAttribLocation(program, 0, "in_position"));
+	GCHK(glBindAttribLocation(program, 1, "in_normal"));
+	GCHK(glBindAttribLocation(program, 2, "in_TexCoord"));
 
-		link_program(program);
-	}
+	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
 
