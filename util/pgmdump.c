@@ -66,7 +66,7 @@ struct fs_header {
 };
 
 struct attribute {
-	uint32_t unknown1;
+	uint32_t type_info;
 	uint32_t reg;       /* seems to be the register the fetch instruction loads to */
 	uint32_t const_idx; /* the CONST() indx value for sampler */
 	uint32_t unknown2;
@@ -77,7 +77,7 @@ struct attribute {
 };
 
 struct uniform {
-	uint32_t unknown1;
+	uint32_t type_info;
 	uint32_t unknown2;
 	uint32_t unknown3;
 	uint32_t unknown4;
@@ -91,7 +91,7 @@ struct uniform {
 };
 
 struct sampler {
-	uint32_t unknown1;
+	uint32_t type_info;
 	uint32_t unknown2;
 	uint32_t unknown3;
 	uint32_t unknown4;
@@ -103,7 +103,7 @@ struct sampler {
 };
 
 struct varying {
-	uint32_t unknown1;
+	uint32_t type_info;
 	uint32_t unknown2;
 	uint32_t unknown3;
 	uint32_t reg;       /* the register holding the value (on entry to the shader) */
@@ -263,6 +263,17 @@ void *next_sect(char **buf, int *sz, int *sect_size)
 	return sect;
 }
 
+static int valid_type(uint32_t type_info)
+{
+	switch ((type_info >> 8) & 0xff) {
+	case 0x8b:     /* vector */
+	case 0x14:     /* float */
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 static void dump_attribute(struct attribute *attrib)
 {
 	printf("\tR%d, CONST(%d): %s\n", attrib->reg,
@@ -317,12 +328,20 @@ void dump_program(char *buf, int sz)
 		dump_hex((void *)hdr, sect_size);
 	printf("\n");
 
-	/* there seems to be two 0xba5eba11's at the end of the header: */
-	sz  -= 4;
-	buf += 4;
+	/* there seems to be two 0xba5eba11's at the end of the header, possibly
+	 * with some other stuff between them:
+	 */
+	next_sect(&buf, &sz, &sect_size);
 
 	for (i = 0; (i < hdr->num_attribs) && (sz > 0); i++) {
 		attribs[i] = next_sect(&buf, &sz, &sect_size);
+
+		/* hmm, for a3xx (or maybe just newer driver version), we have some
+		 * extra sections that don't seem useful, so skip these:
+		 */
+		while (!valid_type(attribs[i]->type_info))
+			attribs[i] = next_sect(&buf, &sz, &sect_size);
+
 		clean_ascii(attribs[i]->name, sect_size - 28);
 		if (full_dump) {
 			printf("######## ATTRIBUTE: (size %d)\n", sect_size);
@@ -333,6 +352,13 @@ void dump_program(char *buf, int sz)
 
 	for (i = 0; (i < hdr->num_uniforms) && (sz > 0); i++) {
 		uniforms[i] = next_sect(&buf, &sz, &sect_size);
+
+		/* hmm, for a3xx (or maybe just newer driver version), we have some
+		 * extra sections that don't seem useful, so skip these:
+		 */
+		while (!valid_type(uniforms[i]->type_info))
+			uniforms[i] = next_sect(&buf, &sz, &sect_size);
+
 		clean_ascii(uniforms[i]->name, sect_size - 41);
 		if (full_dump) {
 			printf("######## UNIFORM: (size %d)\n", sect_size);
@@ -343,6 +369,13 @@ void dump_program(char *buf, int sz)
 
 	for (i = 0; (i < hdr->num_samplers) && (sz > 0); i++) {
 		samplers[i] = next_sect(&buf, &sz, &sect_size);
+
+		/* hmm, for a3xx (or maybe just newer driver version), we have some
+		 * extra sections that don't seem useful, so skip these:
+		 */
+		while (!valid_type(samplers[i]->type_info))
+			samplers[i] = next_sect(&buf, &sz, &sect_size);
+
 		clean_ascii(samplers[i]->name, sect_size - 33);
 		if (full_dump) {
 			printf("######## SAMPLER: (size %d)\n", sect_size);
@@ -353,6 +386,13 @@ void dump_program(char *buf, int sz)
 
 	for (i = 0; (i < hdr->num_varyings) && (sz > 0); i++) {
 		varyings[i] = next_sect(&buf, &sz, &sect_size);
+
+		/* hmm, for a3xx (or maybe just newer driver version), we have some
+		 * extra sections that don't seem useful, so skip these:
+		 */
+		while (!valid_type(varyings[i]->type_info))
+			varyings[i] = next_sect(&buf, &sz, &sect_size);
+
 		clean_ascii(varyings[i]->name, sect_size - 16);
 		if (full_dump) {
 			printf("######## VARYING: (size %d)\n", sect_size);
@@ -375,7 +415,7 @@ void dump_program(char *buf, int sz)
 			dump_hex((void *)vs_hdr, sect_size);
 		}
 
-		for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
+		for (j = 0; j < (int)vs_hdr->unknown1 - 1; j++) {
 			constants[j] = next_sect(&buf, &sz, &sect_size);
 			if (full_dump) {
 				printf("######## VS%d CONST: (size=%d)\n", i, sect_size);
