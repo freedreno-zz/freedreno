@@ -24,6 +24,7 @@
 #include "wrap.h"
 
 static int fd = -1;
+static unsigned int gpu_id;
 
 void rd_start(const char *name, const char *fmt, ...)
 {
@@ -40,6 +41,14 @@ void rd_start(const char *name, const char *fmt, ...)
 	va_end(args);
 
 	rd_write_section(RD_TEST, buf, strlen(buf));
+
+	if (gpu_id) {
+		/* no guarantee that blob driver will again get devinfo property,
+		 * so we could miss the GPU_ID section in the new rd file.. so
+		 * just hack around it:
+		 */
+		rd_write_section(RD_GPU_ID, &gpu_id, sizeof(gpu_id));
+	}
 }
 
 void rd_end(void)
@@ -68,6 +77,11 @@ void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
 		rd_start("unknown", "unknown");
 		printf("opened rd, %d\n", fd);
 	}
+
+	if (type == RD_GPU_ID) {
+		gpu_id = *(unsigned int *)buf;
+	}
+
 	rd_write(&type, sizeof(type));
 	rd_write(&sz, 4);
 	rd_write(buf, sz);
