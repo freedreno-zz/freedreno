@@ -38,6 +38,8 @@
 /* originally based on kernel recovery dump code: */
 #include "a2xx_reg.h"
 #include "freedreno_a2xx_reg.h"
+#include "a3xx_reg.h"
+#include "freedreno_a3xx_reg.h"
 #include "adreno_pm4types.h"
 
 typedef enum {
@@ -601,11 +603,11 @@ static void reg_bin_size(const char *name, uint32_t dword, int level)
 
 static uint32_t type0_reg_vals[0x7fff];
 
-#define REG(x, fxn) [REG_ ## x] = { #x, fxn }
 static const const struct {
 	const char *name;
 	void (*fxn)(const char *name, uint32_t dword, int level);
-} type0_reg[0x7fff] = {
+} reg_a2xx[0x7fff] = {
+#define REG(x, fxn) [REG_ ## x] = { #x, fxn }
 		REG(CP_CSQ_IB1_STAT, reg_hex),
 		REG(CP_CSQ_IB2_STAT, reg_hex),
 		REG(CP_CSQ_RB_STAT, reg_hex),
@@ -821,7 +823,200 @@ static const const struct {
 		REG(SQ_DEBUG_PIX_TB_STATE_MEM, reg_hex),
 		REG(SQ_DEBUG_MISC_0, reg_hex),
 		REG(SQ_DEBUG_MISC_1, reg_hex),
-};
+#undef REG
+}, reg_a3xx[0x7fff] = {
+#define REG(x, fxn) [A3XX_ ## x] = { #x, fxn }
+		REG(RBBM_HW_VERSION, reg_hex),
+		REG(RBBM_HW_RELEASE, reg_hex),
+		REG(RBBM_HW_CONFIGURATION, reg_hex),
+		REG(RBBM_SW_RESET_CMD, reg_hex),
+		REG(RBBM_AHB_CTL0, reg_hex),
+		REG(RBBM_AHB_CTL1, reg_hex),
+		REG(RBBM_AHB_CMD, reg_hex),
+		REG(RBBM_AHB_ERROR_STATUS, reg_hex),
+		REG(RBBM_GPR0_CTL, reg_hex),
+/* This the same register as on A2XX, just in a different place */
+		REG(RBBM_STATUS, reg_hex),
+		REG(RBBM_INTERFACE_HANG_INT_CTL, reg_hex),
+		REG(RBBM_INTERFACE_HANG_MASK_CTL0, reg_hex),
+		REG(RBBM_INTERFACE_HANG_MASK_CTL1, reg_hex),
+		REG(RBBM_INTERFACE_HANG_MASK_CTL2, reg_hex),
+		REG(RBBM_INTERFACE_HANG_MASK_CTL3, reg_hex),
+		REG(RBBM_INT_CLEAR_CMD, reg_hex),
+		REG(RBBM_INT_0_MASK, reg_hex),
+		REG(RBBM_INT_0_STATUS, reg_hex),
+		REG(RBBM_GPU_BUSY_MASKED, reg_hex),
+		REG(RBBM_RBBM_CTL, reg_hex),
+		REG(RBBM_RBBM_CTL, reg_hex),
+		REG(RBBM_PERFCTR_PWR_1_LO, reg_hex),
+		REG(RBBM_PERFCTR_PWR_1_HI, reg_hex),
+		REG(RBBM_DEBUG_BUS_CTL, reg_hex),
+		REG(RBBM_DEBUG_BUS_DATA_STATUS, reg_hex),
+/* Following two are same as on A2XX, just in a different place */
+		REG(CP_PFP_UCODE_ADDR, reg_hex),
+		REG(CP_PFP_UCODE_DATA, reg_hex),
+		REG(CP_ROQ_ADDR, reg_hex),
+		REG(CP_ROQ_DATA, reg_hex),
+		REG(CP_MEQ_ADDR, reg_hex),
+		REG(CP_MEQ_DATA, reg_hex),
+		REG(CP_HW_FAULT , reg_hex),
+		REG(CP_AHB_FAULT, reg_hex),
+		REG(CP_PROTECT_CTRL, reg_hex),
+		REG(CP_PROTECT_STATUS, reg_hex),
+		REG(CP_PROTECT_REG_0, reg_hex),
+		REG(CP_PROTECT_REG_1, reg_hex),
+		REG(CP_PROTECT_REG_2, reg_hex),
+		REG(CP_PROTECT_REG_3, reg_hex),
+		REG(CP_PROTECT_REG_4, reg_hex),
+		REG(CP_PROTECT_REG_5, reg_hex),
+		REG(CP_PROTECT_REG_6, reg_hex),
+		REG(CP_PROTECT_REG_7, reg_hex),
+		REG(CP_PROTECT_REG_8, reg_hex),
+		REG(CP_PROTECT_REG_9, reg_hex),
+		REG(CP_PROTECT_REG_A, reg_hex),
+		REG(CP_PROTECT_REG_B, reg_hex),
+		REG(CP_PROTECT_REG_C, reg_hex),
+		REG(CP_PROTECT_REG_D, reg_hex),
+		REG(CP_PROTECT_REG_E, reg_hex),
+		REG(CP_PROTECT_REG_F, reg_hex),
+		REG(CP_SCRATCH_REG2, reg_hex),
+		REG(CP_SCRATCH_REG3, reg_hex),
+		REG(VSC_BIN_SIZE, reg_hex),
+		REG(VSC_SIZE_ADDRESS, reg_hex),
+		REG(VSC_PIPE_CONFIG_0, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_0, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_0, reg_hex),
+		REG(VSC_PIPE_CONFIG_1, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_1, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_1, reg_hex),
+		REG(VSC_PIPE_CONFIG_2, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_2, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_2, reg_hex),
+		REG(VSC_PIPE_CONFIG_3, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_3, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_3, reg_hex),
+		REG(VSC_PIPE_CONFIG_4, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_4, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_4, reg_hex),
+		REG(VSC_PIPE_CONFIG_5, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_5, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_5, reg_hex),
+		REG(VSC_PIPE_CONFIG_6, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_6, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_6, reg_hex),
+		REG(VSC_PIPE_CONFIG_7, reg_hex),
+		REG(VSC_PIPE_DATA_ADDRESS_7, reg_hex),
+		REG(VSC_PIPE_DATA_LENGTH_7, reg_hex),
+		REG(GRAS_CL_USER_PLANE_X0, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Y0, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Z0, reg_hex),
+		REG(GRAS_CL_USER_PLANE_W0, reg_hex),
+		REG(GRAS_CL_USER_PLANE_X1, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Y1, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Z1, reg_hex),
+		REG(GRAS_CL_USER_PLANE_W1, reg_hex),
+		REG(GRAS_CL_USER_PLANE_X2, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Y2, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Z2, reg_hex),
+		REG(GRAS_CL_USER_PLANE_W2, reg_hex),
+		REG(GRAS_CL_USER_PLANE_X3, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Y3, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Z3, reg_hex),
+		REG(GRAS_CL_USER_PLANE_W3, reg_hex),
+		REG(GRAS_CL_USER_PLANE_X4, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Y4, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Z4, reg_hex),
+		REG(GRAS_CL_USER_PLANE_W4, reg_hex),
+		REG(GRAS_CL_USER_PLANE_X5, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Y5, reg_hex),
+		REG(GRAS_CL_USER_PLANE_Z5, reg_hex),
+		REG(GRAS_CL_USER_PLANE_W5, reg_hex),
+		REG(VPC_VPC_DEBUG_RAM_SEL, reg_hex),
+		REG(VPC_VPC_DEBUG_RAM_READ, reg_hex),
+		REG(UCHE_CACHE_INVALIDATE0_REG, reg_hex),
+		REG(GRAS_CL_CLIP_CNTL, reg_hex),
+		REG(GRAS_CL_GB_CLIP_ADJ, reg_hex),
+		REG(GRAS_CL_VPORT_XOFFSET, reg_float),
+		REG(GRAS_CL_VPORT_XSCALE, reg_float),
+		REG(GRAS_CL_VPORT_YOFFSET, reg_float),
+		REG(GRAS_CL_VPORT_YSCALE, reg_float),
+		REG(GRAS_CL_VPORT_ZOFFSET, reg_float),
+		REG(GRAS_CL_VPORT_ZSCALE, reg_float),
+		REG(GRAS_SU_POINT_MINMAX, reg_hex),
+		REG(GRAS_SU_POINT_SIZE, reg_hex),
+		REG(GRAS_SU_POLY_OFFSET_SCALE, reg_hex),
+		REG(GRAS_SU_POLY_OFFSET_OFFSET, reg_hex),
+		REG(GRAS_SU_MODE_CONTROL, reg_hex),
+		REG(GRAS_SC_CONTROL, reg_hex),
+		REG(GRAS_SC_SCREEN_SCISSOR_TL, reg_xy),
+		REG(GRAS_SC_SCREEN_SCISSOR_BR, reg_xy),
+		REG(GRAS_SC_WINDOW_SCISSOR_TL, reg_xy),
+		REG(GRAS_SC_WINDOW_SCISSOR_BR, reg_xy),
+		REG(RB_MODE_CONTROL, reg_hex),
+		REG(RB_RENDER_CONTROL, reg_hex),
+		REG(RB_MSAA_CONTROL, reg_hex),
+		REG(RB_MRT_CONTROL0, reg_hex),
+		REG(RB_MRT_BUF_INFO0, reg_hex),
+		REG(RB_MRT_BLEND_CONTROL0, reg_hex),
+		REG(RB_MRT_BLEND_CONTROL1, reg_hex),
+		REG(RB_MRT_BLEND_CONTROL2, reg_hex),
+		REG(RB_MRT_BLEND_CONTROL3, reg_hex),
+		REG(RB_BLEND_RED, reg_hex),
+		REG(RB_COPY_CONTROL, reg_hex),
+		REG(RB_COPY_DEST_INFO, reg_hex),
+		REG(RB_DEPTH_CONTROL, reg_hex),
+		REG(RB_STENCIL_CONTROL, reg_hex),
+		REG(PC_VSTREAM_CONTROL, reg_hex),
+		REG(PC_VERTEX_REUSE_BLOCK_CNTL, reg_hex),
+		REG(PC_PRIM_VTX_CNTL, reg_hex),
+		REG(PC_RESTART_INDEX, reg_hex),
+		REG(HLSQ_CONTROL_0_REG, reg_hex),
+		REG(HLSQ_VS_CONTROL_REG, reg_hex),
+		REG(HLSQ_CONST_FSPRESV_RANGE_REG, reg_hex),
+		REG(HLSQ_CL_NDRANGE_0_REG, reg_hex),
+		REG(HLSQ_CL_NDRANGE_2_REG, reg_hex),
+		REG(HLSQ_CL_CONTROL_0_REG, reg_hex),
+		REG(HLSQ_CL_CONTROL_1_REG, reg_hex),
+		REG(HLSQ_CL_KERNEL_CONST_REG, reg_hex),
+		REG(HLSQ_CL_KERNEL_GROUP_X_REG, reg_hex),
+		REG(HLSQ_CL_KERNEL_GROUP_Z_REG, reg_hex),
+		REG(HLSQ_CL_WG_OFFSET_REG, reg_hex),
+		REG(VFD_CONTROL_0, reg_hex),
+		REG(VFD_INDEX_MIN, reg_hex),
+		REG(VFD_FETCH_INSTR_0_0, reg_hex),
+		REG(VFD_FETCH_INSTR_0_4, reg_hex),
+		REG(VFD_DECODE_INSTR_0, reg_hex),
+		REG(VFD_VS_THREADING_THRESHOLD, reg_hex),
+		REG(VPC_ATTR, reg_hex),
+		REG(VPC_VARY_CYLWRAP_ENABLE_1, reg_hex),
+		REG(SP_SP_CTRL_REG, reg_hex),
+		REG(SP_VS_CTRL_REG0, reg_hex),
+		REG(SP_VS_CTRL_REG1, reg_hex),
+		REG(SP_VS_PARAM_REG, reg_hex),
+		REG(SP_VS_OUT_REG_7, reg_hex),
+		REG(SP_VS_VPC_DST_REG_0, reg_hex),
+		REG(SP_VS_OBJ_OFFSET_REG, reg_hex),
+		REG(SP_VS_PVT_MEM_SIZE_REG, reg_hex),
+		REG(SP_VS_LENGTH_REG, reg_hex),
+		REG(SP_FS_CTRL_REG0, reg_hex),
+		REG(SP_FS_CTRL_REG1, reg_hex),
+		REG(SP_FS_OBJ_OFFSET_REG, reg_hex),
+		REG(SP_FS_PVT_MEM_SIZE_REG, reg_hex),
+		REG(SP_FS_FLAT_SHAD_MODE_REG_0, reg_hex),
+		REG(SP_FS_FLAT_SHAD_MODE_REG_1, reg_hex),
+		REG(SP_FS_OUTPUT_REG, reg_hex),
+		REG(SP_FS_MRT_REG_0, reg_hex),
+		REG(SP_FS_IMAGE_OUTPUT_REG_0, reg_hex),
+		REG(SP_FS_IMAGE_OUTPUT_REG_3, reg_hex),
+		REG(SP_FS_LENGTH_REG, reg_hex),
+		REG(TPL1_TP_VS_TEX_OFFSET, reg_hex),
+		REG(TPL1_TP_FS_TEX_OFFSET, reg_hex),
+		REG(TPL1_TP_FS_BORDER_COLOR_BASE_ADDR, reg_hex),
+		REG(VBIF_FIXED_SORT_EN, reg_hex),
+		REG(VBIF_FIXED_SORT_SEL0, reg_hex),
+		REG(VBIF_FIXED_SORT_SEL1, reg_hex),
+#undef REG
+}, *type0_reg = reg_a2xx; // XXX figure this out dynamically
 
 static void dump_registers(uint32_t regbase,
 		uint32_t *dwords, uint32_t sizedwords, int level)
@@ -871,6 +1066,10 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 		write(fd, dwords + 2, (sizedwords - 2) * 4);
 	}
+}
+
+static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
+{
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
@@ -1008,11 +1207,6 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 			vgt_source_select[source_select], source_select);
 	printf("%snum_indices:   %d\n", levels[level], num_indices);
 
-/*
-00004804 - GL_UNSIGNED_INT
-00004004 - GL_UNSIGNED_SHORT
-00006004 - GL_UNSIGNED_BYTE
- */
 	if (sizedwords == 5) {
 		void *ptr = hostptr(dwords[3]);
 		printf("%sgpuaddr:       %08x\n", levels[level], dwords[3]);
@@ -1042,7 +1236,7 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	/* dump current state of registers: */
 	printf("%scurrent register values\n", levels[level]);
-	for (i = 0; i < ARRAY_SIZE(type0_reg); i++) {
+	for (i = 0; i < 0x7fff; i++) {
 		uint32_t regbase = i;
 		uint32_t lastval = type0_reg_vals[regbase];
 		/* skip registers we don't know about or have zero: */
@@ -1139,10 +1333,9 @@ static const struct {
 		/* for a22x */
 		CP(SET_DRAW_INIT_FLAGS, NULL),
 
-		/* note also some different values for a3xx it seems.. probably
-		 * need to have different tables for different cores, but we
-		 * can worry about that later
-		 */
+		/* for a3xx */
+		CP(LOAD_STATE, cp_load_state),
+		CP(SET_BIN_DATA, NULL),
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)

@@ -58,6 +58,9 @@
 /* register read/modify/write */
 #define CP_REG_RMW		0x21
 
+/* Set binning configuration registers */
+#define CP_SET_BIN_DATA             0x2f
+
 /* reads register in chip and writes to memory */
 #define CP_REG_TO_MEM		0x3e
 
