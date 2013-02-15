@@ -1016,7 +1016,7 @@ static const const struct {
 		REG(VBIF_FIXED_SORT_SEL0, reg_hex),
 		REG(VBIF_FIXED_SORT_SEL1, reg_hex),
 #undef REG
-}, *type0_reg = reg_a2xx; // XXX figure this out dynamically
+}, *type0_reg = reg_a2xx; /* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
 
 static void dump_registers(uint32_t regbase,
 		uint32_t *dwords, uint32_t sizedwords, int level)
@@ -1501,6 +1501,12 @@ int main(int argc, char **argv)
 				buffers[i].hostptr = NULL;
 			}
 			nbuffers = 0;
+			break;
+		case RD_GPU_ID:
+			printf("gpu_id: %d\n", *((unsigned int *)buf));
+			if (*((unsigned int *)buf) >= 300) {
+				type0_reg = reg_a3xx;
+			}
 			break;
 		default:
 			break;

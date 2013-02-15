@@ -37,7 +37,8 @@ enum rd_sect_type {
 	RD_PROGRAM,    /* shader program, raw dump */
 	RD_VERT_SHADER,
 	RD_FRAG_SHADER,
-	RD_BUFFER_CONTENTS
+	RD_BUFFER_CONTENTS,
+	RD_GPU_ID,
 };
 
 /* RD_PARAM types: */

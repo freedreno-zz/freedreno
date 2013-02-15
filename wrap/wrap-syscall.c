@@ -538,6 +538,12 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 		devinfo->gpu_id = wrap_gpu_id();
 		printf("\t\tEMULATING: %d !!!\n", devinfo->gpu_id);
 	}
+	if (param->type == KGSL_PROP_DEVICE_INFO) {
+		struct kgsl_devinfo *devinfo = param->value;
+		rd_write_section(RD_GPU_ID, &devinfo->gpu_id, sizeof(devinfo->gpu_id));
+		printf("\t\tgpu_id: %d\n", devinfo->gpu_id);
+		printf("\t\tgmem_sizebytes: 0x%x\n", devinfo->gmem_sizebytes);
+	}
 	hexdump(param->value, param->sizebytes);
 }
 
