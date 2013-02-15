@@ -1070,6 +1070,53 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
+/*
+
+#define HLSQ_DIRECT 0
+#define HLSQ_BLOCK_ID_SP_VS 4
+#define HLSQ_SP_VS_INSTR 0
+#define HLSQ_SP_FS_INSTR 0
+#define HLSQ_BLOCK_ID_SP_FS 6
+#define HLSQ_TWO_PIX_QUADS 0
+#define HLSQ_TWO_VTX_QUADS 0
+#define HLSQ_BLOCK_ID_TP_TEX 2
+#define HLSQ_TP_TEX_SAMPLERS 0
+#define HLSQ_TP_TEX_MEMOBJ 1
+#define HLSQ_BLOCK_ID_TP_MIPMAP 3
+#define HLSQ_TP_MIPMAP_BASE 1
+#define HLSQ_FOUR_PIX_QUADS 1
+
+#define CP_LOADSTATE_DSTOFFSET_SHIFT 0x00000000
+#define CP_LOADSTATE_STATESRC_SHIFT 0x00000010
+#define CP_LOADSTATE_STATEBLOCKID_SHIFT 0x00000013
+#define CP_LOADSTATE_NUMOFUNITS_SHIFT 0x00000016
+#define CP_LOADSTATE_STATETYPE_SHIFT 0x00000000
+#define CP_LOADSTATE_EXTSRCADDR_SHIFT 0x00000002
+
+ */
+	uint32_t dst_off = dwords[0] & 0xffff;
+	uint32_t state_src = (dwords[0] >> 16) & 0x7;
+	uint32_t state_block_id = (dwords[0] >> 19) & 0x7;
+	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
+	uint32_t state_type = dwords[1] & 0x3;
+	uint32_t ext_src_addr = (dwords[1] >> 2) & 0x3fffffff;
+	const char *type = NULL;
+
+	switch (state_block_id) {
+	case HLSQ_BLOCK_ID_SP_VS:
+		type = "vertex";
+		break;
+	case HLSQ_BLOCK_ID_SP_FS:
+		type = "fragment";
+		break;
+	}
+
+	printf("%s%s shader, dst_off=%04x, state_src=%04x, state_block_id=%d, "
+			"num_unit=%d, state_type=%d, ext_src_addr=%08x, size=%04x\n",
+			levels[level], type, dst_off, state_src, state_block_id,
+			num_unit, state_type, ext_src_addr, sizedwords-2);
+	// TODO replace with disassembly dump:
+	dump_hex(dwords+2, sizedwords-2, level+1);
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
