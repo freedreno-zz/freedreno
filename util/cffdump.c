@@ -229,7 +229,7 @@ struct buffer {
 	unsigned int gpuaddr, len;
 };
 
-static struct buffer buffers[32];
+static struct buffer buffers[128];
 static int nbuffers;
 
 static int buffer_contains_gpuaddr(struct buffer *buf, uint32_t gpuaddr, uint32_t len)
