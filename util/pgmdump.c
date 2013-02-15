@@ -317,6 +317,259 @@ static void dump_constant(struct constant *constant)
 			constant->val[2], constant->val[3]);
 }
 
+/* dump attr/uniform/sampler/varying/const summary: */
+static void dump_short_summary(struct state *state, int nconsts,
+		struct constant **constants)
+{
+	int i;
+
+	/* dump attr/uniform/sampler/varying/const summary: */
+	for (i = 0; i < state->hdr->num_varyings; i++) {
+		dump_varying(state->varyings[i]);
+	}
+	for (i = 0; i < state->hdr->num_attribs; i++) {
+		dump_attribute(state->attribs[i]);
+	}
+	for (i = 0; i < state->hdr->num_uniforms; i++) {
+		dump_uniform(state->uniforms[i]);
+	}
+	for (i = 0; i < state->hdr->num_samplers; i++) {
+		dump_sampler(state->samplers[i]);
+	}
+	for (i = 0; i < nconsts - 1; i++) {
+		if (constants[i]->unknown2 == 0) {
+			dump_constant(constants[i]);
+		}
+	}
+	printf("\n");
+}
+
+static void dump_shaders_a2xx(struct state *state)
+{
+	int i, sect_size;
+	uint8_t *ptr;
+
+	/* dump vertex shaders: */
+	for (i = 0; i < 3; i++) {
+		struct vs_header *vs_hdr = next_sect(state, &sect_size);
+		struct constant *constants[32];
+		int j, level = 0;
+
+		printf("\n");
+
+		if (full_dump) {
+			printf("#######################################################\n");
+			printf("######## VS%d HEADER: (size %d)\n", i, sect_size);
+			dump_hex((void *)vs_hdr, sect_size);
+		}
+
+		for (j = 0; j < (int)vs_hdr->unknown1 - 1; j++) {
+			constants[j] = next_sect(state, &sect_size);
+			if (full_dump) {
+				printf("######## VS%d CONST: (size=%d)\n", i, sect_size);
+				dump_constant(constants[j]);
+				dump_hex((char *)constants[j], sect_size);
+			}
+		}
+
+		ptr = next_sect(state, &sect_size);
+		printf("######## VS%d SHADER: (size=%d)\n", i, sect_size);
+		if (full_dump) {
+			dump_hex(ptr, sect_size);
+			level = 1;
+		} else {
+			dump_short_summary(state, vs_hdr->unknown1 - 1, constants);
+		}
+		disasm_a2xx((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_VERTEX);
+		free(ptr);
+
+		for (j = 0; j < vs_hdr->unknown9; j++) {
+			ptr = next_sect(state, &sect_size);
+			if (full_dump) {
+				printf("######## VS%d CONST?: (size=%d)\n", i, sect_size);
+				dump_hex(ptr, sect_size);
+			}
+			free(ptr);
+		}
+
+		for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
+			free(constants[j]);
+		}
+
+		free(vs_hdr);
+	}
+
+	/* dump fragment shaders: */
+	for (i = 0; i < 1; i++) {
+		struct fs_header *fs_hdr = next_sect(state, &sect_size);
+		struct constant *constants[32];
+		int j, level = 0;
+
+		printf("\n");
+
+		if (full_dump) {
+			printf("#######################################################\n");
+			printf("######## FS%d HEADER: (size %d)\n", i, sect_size);
+			dump_hex((void *)fs_hdr, sect_size);
+		}
+
+		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
+			constants[j] = next_sect(state, &sect_size);
+			if (full_dump) {
+				printf("######## FS%d CONST: (size=%d)\n", i, sect_size);
+				dump_constant(constants[j]);
+				dump_hex((char *)constants[j], sect_size);
+			}
+		}
+
+		ptr = next_sect(state, &sect_size);
+		printf("######## FS%d SHADER: (size=%d)\n", i, sect_size);
+		if (full_dump) {
+			dump_hex(ptr, sect_size);
+			level = 1;
+		} else {
+			dump_short_summary(state, fs_hdr->unknown1 - 1, constants);
+		}
+		disasm_a2xx((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_FRAGMENT);
+		free(ptr);
+
+		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
+			free(constants[j]);
+		}
+
+		free(fs_hdr);
+	}
+}
+
+static void dump_shaders_a3xx(struct state *state)
+{
+	int i, j;
+
+	/* dump vertex shaders: */
+	for (i = 0; i < 2; i++) {
+		int instrs_size, hdr_size, sect_size, nconsts = 0, level = 0, compact = 0;
+		uint8_t *vs_hdr;
+		struct constant *constants[32];
+		uint8_t *instrs = NULL;
+
+		vs_hdr = next_sect(state, &hdr_size);
+
+		/* seems like there are two cases, either:
+		 *  1) 152 byte header,
+		 *  2) zero or more 32 byte compiler const sections
+		 *  3) followed by shader instructions
+		 * or, if there are no compiler consts, this can be
+		 * all smashed in one large section
+		 */
+
+		if (hdr_size > 152) {
+			instrs = &vs_hdr[152];
+			instrs_size = hdr_size - 152;
+			hdr_size = 152;
+			compact = 1;
+		} else {
+			while (1) {
+				void *ptr = next_sect(state, &sect_size);
+				if (sect_size != 32) {
+					/* end of constants: */
+					instrs = ptr;
+					instrs_size = sect_size;
+					break;
+				}
+				constants[nconsts++] = ptr;
+			}
+		}
+
+		printf("\n");
+
+		if (full_dump) {
+			printf("#######################################################\n");
+			printf("######## VS%d HEADER: (size %d)\n", i, hdr_size);
+			dump_hex((void *)vs_hdr, hdr_size);
+			for (j = 0; j < nconsts; j++) {
+				printf("######## VS%d CONST: (size=%d)\n", i, sizeof(constants[i]));
+				dump_constant(constants[j]);
+				dump_hex((char *)constants[j], sizeof(constants[j]));
+			}
+		}
+
+		printf("######## VS%d SHADER: (size=%d)\n", i, instrs_size);
+		if (full_dump) {
+			dump_hex(instrs, instrs_size);
+			level = 1;
+		} else {
+			dump_short_summary(state, nconsts, constants);
+		}
+
+		if (!compact) {
+			instrs += 32;
+			instrs_size -= 32;
+		}
+		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level, SHADER_VERTEX);
+
+		free(vs_hdr);
+	}
+
+	/* dump fragment shaders: */
+	for (i = 0; i < 1; i++) {
+		int instrs_size, hdr_size, sect_size, nconsts = 0, level = 0, compact = 0;
+		uint8_t *fs_hdr;
+		struct constant *constants[32];
+		uint8_t *instrs = NULL;
+
+		fs_hdr = next_sect(state, &hdr_size);
+
+		/* two cases, similar to vertex shader, but magic # is 200.. */
+
+		if (hdr_size > 200) {
+			instrs = &fs_hdr[200];
+			instrs_size = hdr_size - 200;
+			hdr_size = 200;
+			compact = 1;
+		} else {
+			while (1) {
+				void *ptr = next_sect(state, &sect_size);
+				if (sect_size != 32) {
+					/* end of constants: */
+					instrs = ptr;
+					instrs_size = sect_size;
+					break;
+				}
+				constants[nconsts++] = ptr;
+			}
+		}
+
+		printf("\n");
+
+		if (full_dump) {
+			printf("#######################################################\n");
+			printf("######## FS%d HEADER: (size %d)\n", i, hdr_size);
+			dump_hex((void *)fs_hdr, hdr_size);
+			for (j = 0; j < nconsts; j++) {
+				printf("######## FS%d CONST: (size=%d)\n", i, sizeof(constants[i]));
+				dump_constant(constants[j]);
+				dump_hex((char *)constants[j], sizeof(constants[j]));
+			}
+		}
+
+		printf("######## FS%d SHADER: (size=%d)\n", i, instrs_size);
+		if (full_dump) {
+			dump_hex(instrs, instrs_size);
+			level = 1;
+		} else {
+			dump_short_summary(state, nconsts, constants);
+		}
+
+		if (!compact) {
+			instrs += 32;
+			instrs_size -= 32;
+		}
+		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level, SHADER_FRAGMENT);
+
+		free(fs_hdr);
+	}
+}
+
 void dump_program(struct state *state)
 {
 	int i, sect_size;
@@ -407,135 +660,10 @@ void dump_program(struct state *state)
 		}
 	}
 
-	/* dump vertex shaders: */
-	for (i = 0; i < 3; i++) {
-		struct vs_header *vs_hdr = next_sect(state, &sect_size);
-		struct constant *constants[32];
-		int j, level = 0;
-
-		printf("\n");
-
-		if (full_dump) {
-			printf("#######################################################\n");
-			printf("######## VS%d HEADER: (size %d)\n", i, sect_size);
-			dump_hex((void *)vs_hdr, sect_size);
-		}
-
-		for (j = 0; j < (int)vs_hdr->unknown1 - 1; j++) {
-			constants[j] = next_sect(state, &sect_size);
-			if (full_dump) {
-				printf("######## VS%d CONST: (size=%d)\n", i, sect_size);
-				dump_constant(constants[j]);
-				dump_hex((char *)constants[j], sect_size);
-			}
-		}
-
-		ptr = next_sect(state, &sect_size);
-		printf("######## VS%d SHADER: (size=%d)\n", i, sect_size);
-		if (full_dump) {
-			dump_hex(ptr, sect_size);
-			level = 1;
-		} else {
-			/* dump attr/uniform/sampler/varying/const summary: */
-			for (j = 0; j < state->hdr->num_varyings; j++) {
-				dump_varying(state->varyings[j]);
-			}
-			for (j = 0; j < state->hdr->num_attribs; j++) {
-				dump_attribute(state->attribs[j]);
-			}
-			for (j = 0; j < state->hdr->num_uniforms; j++) {
-				dump_uniform(state->uniforms[j]);
-			}
-			for (j = 0; j < state->hdr->num_samplers; j++) {
-				dump_sampler(state->samplers[j]);
-			}
-			for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
-				if (constants[j]->unknown2 == 0) {
-					dump_constant(constants[j]);
-				}
-			}
-			printf("\n");
-		}
-		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_VERTEX);
-		free(ptr);
-
-		for (j = 0; j < vs_hdr->unknown9; j++) {
-			ptr = next_sect(state, &sect_size);
-			if (full_dump) {
-				printf("######## VS%d CONST?: (size=%d)\n", i, sect_size);
-				dump_hex(ptr, sect_size);
-			}
-			free(ptr);
-		}
-
-		for (j = 0; j < vs_hdr->unknown1 - 1; j++) {
-			free(constants[j]);
-		}
-
-		free(vs_hdr);
-	}
-
-	/* dump fragment shaders: */
-	for (i = 0; i < 1; i++) {
-		struct fs_header *fs_hdr = next_sect(state, &sect_size);
-		struct constant *constants[32];
-		int j, level = 0;
-
-		printf("\n");
-
-		if (full_dump) {
-			printf("#######################################################\n");
-			printf("######## FS%d HEADER: (size %d)\n", i, sect_size);
-			dump_hex((void *)fs_hdr, sect_size);
-		}
-
-		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
-			constants[j] = next_sect(state, &sect_size);
-			if (full_dump) {
-				printf("######## FS%d CONST: (size=%d)\n", i, sect_size);
-				dump_constant(constants[j]);
-				dump_hex((char *)constants[j], sect_size);
-			}
-		}
-
-		ptr = next_sect(state, &sect_size);
-		printf("######## FS%d SHADER: (size=%d)\n", i, sect_size);
-		if (full_dump) {
-			dump_hex(ptr, sect_size);
-			level = 1;
-		} else {
-			/* dump attr/uniform/sampler/varying/const summary: */
-			for (j = 0; j < state->hdr->num_varyings; j++) {
-				dump_varying(state->varyings[j]);
-			}
-			for (j = 0; j < state->hdr->num_attribs; j++) {
-				dump_attribute(state->attribs[j]);
-			}
-			for (j = 0; j < state->hdr->num_uniforms; j++) {
-				dump_uniform(state->uniforms[j]);
-			}
-			for (j = 0; j < state->hdr->num_samplers; j++) {
-				dump_sampler(state->samplers[j]);
-			}
-			for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
-				// seems unknown2==1 means compiler internal const..
-				// seems to start counting again from C0, but I guess
-				// the number should be added to the last non-internal
-				// const??  Well, that is a theory..
-				if (constants[j]->unknown2 == 0) {
-					dump_constant(constants[j]);
-				}
-			}
-			printf("\n");
-		}
-		disasm((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_FRAGMENT);
-		free(ptr);
-
-		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
-			free(constants[j]);
-		}
-
-		free(fs_hdr);
+	if (gpu_id >= 300) {
+		dump_shaders_a3xx(state);
+	} else {
+		dump_shaders_a2xx(state);
 	}
 
 	if (!full_dump)
@@ -606,7 +734,7 @@ int main(int argc, char **argv)
 			shader = SHADER_FRAGMENT;
 		buf = calloc(1, 100 * 1024);
 		read(fd, buf, 100 * 1024);
-		return disasm(buf, 100 * 1024, 0, shader);
+		return disasm_a2xx(buf, 100 * 1024, 0, shader);
 	}
 
 	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {

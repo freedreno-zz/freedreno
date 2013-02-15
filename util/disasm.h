@@ -34,7 +34,8 @@ enum debug_t {
 	PRINT_RAW      = 0x1,    /* dump raw hexdump */
 };
 
-int disasm(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
+int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
+int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
 void disasm_set_debug(enum debug_t debug);
 
 #endif /* DISASM_H_ */

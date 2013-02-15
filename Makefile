@@ -96,9 +96,9 @@ test-%: test-%.o $(UTILS)
 redump: redump.c
 	gcc -g $^ -o $@
 
-cffdump: cffdump.c disasm.c
+cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c
 	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. $^ -o $@
 
-pgmdump: pgmdump.c disasm.c
+pgmdump: pgmdump.c disasm-a2xx.c disasm-a3xx.c
 	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -o $@
 
