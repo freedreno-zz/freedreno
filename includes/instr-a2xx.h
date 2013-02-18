@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#ifndef INSTR_H_
-#define INSTR_H_
+#ifndef INSTR_A2XX_H_
+#define INSTR_A2XX_H_
 
 #define PACKED __attribute__((__packed__))
 

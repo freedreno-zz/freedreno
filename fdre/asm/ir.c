@@ -29,7 +29,7 @@
 #include <assert.h>
 
 #include "util.h"
-#include "instr.h"
+#include "instr-a2xx.h"
 
 #define REG_MASK 0x3f	/* not really sure how many regs yet */
 

@@ -24,15 +24,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <string.h>
 
 #include "disasm.h"
 #include "a2xx_reg.h"
-#include "fdre/asm/instr.h"
+#include "instr-a2xx.h"
 
 static const char *levels[] = {
 		"\t",
