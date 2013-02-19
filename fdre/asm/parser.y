@@ -33,7 +33,9 @@ static struct ir_shader      *shader;  /* current shader program */
 static struct ir_cf          *cf;      /* current CF block */
 static struct ir_instruction *instr;   /* current ALU/FETCH instruction */
 
-extern int yydebug;
+#ifdef YYDEBUG
+int yydebug;
+#endif
 
 extern int yylex(void);
 typedef void *YY_BUFFER_STATE;
