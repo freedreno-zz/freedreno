@@ -27,11 +27,13 @@
 enum shader_t {
 	SHADER_VERTEX,
 	SHADER_FRAGMENT,
+	SHADER_COMPUTE,
 };
 
 /* bitmask of debug flags */
 enum debug_t {
 	PRINT_RAW      = 0x1,    /* dump raw hexdump */
+	PRINT_VERBOSE  = 0x2,
 };
 
 int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type);

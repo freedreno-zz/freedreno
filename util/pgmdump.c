@@ -128,7 +128,9 @@ struct state {
 	struct varying *varyings[32];
 };
 
+const char *infile;
 static int full_dump = 1;
+static int dump_shaders = 0;
 static int gpu_id;
 
 char *find_sect_end(char *buf, int sz)
@@ -344,6 +346,19 @@ static void dump_short_summary(struct state *state, int nconsts,
 	printf("\n");
 }
 
+static void dump_raw_shader(uint32_t *dwords, uint32_t sizedwords, int n, char *ext)
+{
+	static char filename[256];
+	int fd;
+
+	if (!dump_shaders)
+		return;
+
+	sprintf(filename, "%.*s-%d.%s", strlen(infile)-3, infile, n, ext);
+	fd = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+	write(fd, dwords, sizedwords * 4);
+}
+
 static void dump_shaders_a2xx(struct state *state)
 {
 	int i, sect_size;
@@ -380,7 +395,8 @@ static void dump_shaders_a2xx(struct state *state)
 		} else {
 			dump_short_summary(state, vs_hdr->unknown1 - 1, constants);
 		}
-		disasm_a2xx((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_VERTEX);
+		disasm_a2xx((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level+1, SHADER_VERTEX);
+		dump_raw_shader((uint32_t *)(ptr + 32), (sect_size - 32) / 4, i, "vo");
 		free(ptr);
 
 		for (j = 0; j < vs_hdr->unknown9; j++) {
@@ -430,7 +446,8 @@ static void dump_shaders_a2xx(struct state *state)
 		} else {
 			dump_short_summary(state, fs_hdr->unknown1 - 1, constants);
 		}
-		disasm_a2xx((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level, SHADER_FRAGMENT);
+		disasm_a2xx((uint32_t *)(ptr + 32), (sect_size - 32) / 4, level+1, SHADER_FRAGMENT);
+		dump_raw_shader((uint32_t *)(ptr + 32), (sect_size - 32) / 4, i, "fo");
 		free(ptr);
 
 		for (j = 0; j < fs_hdr->unknown1 - 1; j++) {
@@ -505,8 +522,8 @@ static void dump_shaders_a3xx(struct state *state)
 			instrs += 32;
 			instrs_size -= 32;
 		}
-		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level, SHADER_VERTEX);
-
+		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level+1, SHADER_VERTEX);
+		dump_raw_shader((uint32_t *)instrs, instrs_size / 4, i, "vo3");
 		free(vs_hdr);
 	}
 
@@ -564,8 +581,8 @@ static void dump_shaders_a3xx(struct state *state)
 			instrs += 32;
 			instrs_size -= 32;
 		}
-		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level, SHADER_FRAGMENT);
-
+		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level+1, SHADER_FRAGMENT);
+		dump_raw_shader((uint32_t *)instrs, instrs_size / 4, i, "fo3");
 		free(fs_hdr);
 	}
 }
@@ -690,51 +707,80 @@ void dump_program(struct state *state)
 	}
 }
 
+static int check_extension(const char *path, const char *ext)
+{
+	return strcmp(path + strlen(path) - strlen(ext), ext) == 0;
+}
+
 int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
-	const char *infile;
-	int fd, sz, i, raw = 0;
+	int fd, sz, i;
 
 	/* lame argument parsing: */
 	if ((argc > 1) && !strcmp(argv[1], "--verbose")) {
-		disasm_set_debug(PRINT_RAW);
+		disasm_set_debug(PRINT_RAW | PRINT_VERBOSE);
 		argv++;
 		argc--;
 	}
-	if ((argc > 1) && !strcmp(argv[1], "--raw")) {
-		raw = 1;
-		argv++;
-		argc--;
-	}
-	if ((argc == 3) && !strcmp(argv[1], "--short")) {
+	if ((argc > 1) && !strcmp(argv[1], "--short")) {
 		/* only short dump, original shader, symbol table, and disassembly */
 		full_dump = 0;
 		argv++;
 		argc--;
 	}
+	if ((argc > 1) && !strcmp(argv[1], "--dump-shaders")) {
+		dump_shaders = 1;
+		argv++;
+		argc--;
+	}
 
 	if (argc != 2) {
-		fprintf(stderr, "usage: pgmdump [--verbose] [--raw] [--short] testlog.rd\n");
+		fprintf(stderr, "usage: pgmdump [--verbose] [--short] [--dump-shaders] testlog.rd\n");
 		return -1;
 	}
 
 	infile = argv[1];
 
 	fd = open(infile, O_RDONLY);
-	if (fd < 0)
-		fprintf(stderr, "could not open: %s\n", argv[1]);
+	if (fd < 0) {
+		fprintf(stderr, "could not open: %s\n", infile);
+		return -1;
+	}
 
-	if (raw) {
+	/* figure out what sort of input we are dealing with: */
+	if (!check_extension(infile, ".rd")) {
+		int (*disasm)(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
 		enum shader_t shader = 0;
-		if (!strcmp(infile + strlen(infile) - 3, ".vo"))
+		int ret;
+
+		if (check_extension(infile, ".vo")) {
+			disasm = disasm_a2xx;
 			shader = SHADER_VERTEX;
-		else if (!strcmp(infile + strlen(infile) - 3, ".fo"))
+		} else if (check_extension(infile, ".fo")) {
+			disasm = disasm_a2xx;
 			shader = SHADER_FRAGMENT;
+		} else if (check_extension(infile, ".vo3")) {
+			disasm = disasm_a3xx;
+			shader = SHADER_VERTEX;
+		} else if (check_extension(infile, ".fo3")) {
+			disasm = disasm_a3xx;
+			shader = SHADER_FRAGMENT;
+		} else if (check_extension(infile, ".co3")) {
+			disasm = disasm_a3xx;
+			shader = SHADER_COMPUTE;
+		} else {
+			fprintf(stderr, "invalid input file: %s\n", infile);
+			return -1;
+		}
 		buf = calloc(1, 100 * 1024);
-		read(fd, buf, 100 * 1024);
-		return disasm_a2xx(buf, 100 * 1024, 0, shader);
+		ret = read(fd, buf, 100 * 1024);
+		if (ret < 0) {
+			fprintf(stderr, "error: %m");
+			return -1;
+		}
+		return disasm(buf, ret/4, 0, shader);
 	}
 
 	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {

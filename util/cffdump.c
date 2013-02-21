@@ -1056,7 +1056,7 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 
 	printf("%s%s shader, start=%04x, size=%04x\n", levels[level], type, start, size);
-	disasm_a2xx(dwords + 2, sizedwords - 2, level+1, disasm_type);
+	disasm_a2xx(dwords + 2, sizedwords - 2, level+2, disasm_type);
 
 	/* dump raw shader: */
 	if (ext && dump_shaders) {
@@ -1088,7 +1088,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	case HLSQ_BLOCK_ID_SP_FS:
 		type = "fragment";
-		ext = "fo";
+		ext = "fo3";
 		disasm_type = SHADER_FRAGMENT;
 		break;
 	}
@@ -1097,7 +1097,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			"num_unit=%d, state_type=%d, ext_src_addr=%08x, size=%04x\n",
 			levels[level], type, dst_off, state_src, state_block_id,
 			num_unit, state_type, ext_src_addr, sizedwords-2);
-	disasm_a3xx(dwords + 2, sizedwords - 2, level+1, disasm_type);
+	disasm_a3xx(dwords + 2, sizedwords - 2, level+2, disasm_type);
 
 	/* dump raw shader: */
 	if (ext && dump_shaders) {

@@ -31,6 +31,7 @@
 #include "instr-a2xx.h"
 
 static const char *levels[] = {
+		"",
 		"\t",
 		"\t\t",
 		"\t\t\t",
@@ -48,7 +49,7 @@ static const char *levels[] = {
 		"x",
 };
 
-static enum debug_t debug;
+enum debug_t debug;
 
 /*
  * ALU instructions:
@@ -625,5 +626,5 @@ int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 
 void disasm_set_debug(enum debug_t d)
 {
-	debug= d;
+	debug = d;
 }
