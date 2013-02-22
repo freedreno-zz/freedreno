@@ -141,6 +141,7 @@ static void print_instr_cat1(instr_t *instr)
 			false, false, false, false, false);
 
 	printf(", ");
+
 	// XXX maybe we can handle this in print_reg instead of special casing?
 	// then we could use same for cat0..
 	if (cat1->src_im) {
@@ -248,14 +249,84 @@ static void print_instr_cat5(instr_t *instr)
 		printf("\t{5: %x,%x}", cat5->dummy1, cat5->dummy2);
 }
 
+static int32_t u2i(uint32_t val, int nbits)
+{
+	return ((val >> (nbits-1)) * ~((1 << nbits) - 1)) | val;
+}
+
 static void print_instr_cat6(instr_t *instr)
 {
 	instr_cat6_t *cat6 = &instr->cat6;
 
-	printf(".%s", type[cat6->type]);
+	printf(".%s ", type[cat6->type]);
 
-	if ((debug & PRINT_VERBOSE) && (cat6->dummy1|cat6->dummy2|cat6->dummy3))
-		printf("\t{6: %x,%x,%x}", cat6->dummy1, cat6->dummy2, cat6->dummy3);
+	switch (cat6->opc) {
+	case OPC_LDG:
+	case OPC_LDP:
+		/* load instructions: */
+		print_reg((reg_t)(cat6->a.dst), type_size(cat6->type) == 32,
+				false, false, false, false, false);
+		printf(",");
+		printf("%c[", (cat6->opc == OPC_LDG) ? 'g' : 'p');
+		print_reg((reg_t)(cat6->a.src), true,
+				false, false, false, false, false);
+		if (cat6->a.off)
+			printf("%+d", cat6->a.off);
+		printf("]");
+		break;
+	case OPC_STG:
+	case OPC_STP:
+		/* store instructions: */
+		printf("%c[", (cat6->opc == OPC_STG) ? 'g' : 'p');
+		print_reg((reg_t)(cat6->b.dst), true,
+				false, false, false, false, false);
+		if (cat6->b.off || cat6->b.off_hi)
+			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
+		printf("]");
+		printf(",");
+		print_reg((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
+				false, false, false, false, false);
+
+		break;
+	case OPC_STI:
+		/* sti has same encoding as other store instructions, but
+		 * slightly different syntax:
+		 */
+		print_reg((reg_t)(cat6->b.dst), false, // XXX is it always half?
+				false, false, false, false, false);
+		if (cat6->b.off || cat6->b.off_hi)
+			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
+		printf(",");
+		print_reg((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
+				false, false, false, false, false);
+		break;
+	}
+
+	printf(", %d", cat6->iim_val);
+
+	if (debug & PRINT_VERBOSE) {
+		switch (cat6->opc) {
+		case OPC_LDG:
+		case OPC_LDP:
+			/* load instructions: */
+			if (cat6->a.dummy1|cat6->a.dummy2|cat6->a.dummy3)
+				printf("\t{6: %x,%x,%x}", cat6->a.dummy1, cat6->a.dummy2, cat6->a.dummy3);
+			if ((cat6->a.must_be_one1 != 1) || (cat6->a.must_be_one2 != 1))
+				printf("{?? %d,%d ??}", cat6->a.must_be_one1, cat6->a.must_be_one2);
+			break;
+		case OPC_STG:
+		case OPC_STP:
+		case OPC_STI:
+			/* store instructions: */
+			if (cat6->b.dummy1|cat6->b.dummy2)
+				printf("\t{6: %x,%x}", cat6->b.dummy1, cat6->b.dummy2);
+			if ((cat6->b.must_be_one1 != 1) || (cat6->b.must_be_one2 != 1) ||
+					(cat6->b.must_be_zero1 != 0))
+				printf("{?? %d,%d,%d ??}", cat6->b.must_be_one1, cat6->b.must_be_one2,
+						cat6->b.must_be_zero1);
+			break;
+		}
+	}
 }
 
 /* size of largest OPC field of all the instruction categories: */

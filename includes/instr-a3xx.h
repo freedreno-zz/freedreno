@@ -311,18 +311,66 @@ typedef struct PACKED {
 	uint32_t opc_cat  : 3;
 } instr_cat5_t;
 
+/* used for load instructions: */
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t dummy1   : 32;
+	uint32_t must_be_one1 : 1;
+	int16_t  off      : 13;
+	uint32_t src      : 8;
+	uint32_t dummy1   : 1;
+	uint32_t must_be_one2 : 1;
+	int32_t  iim_val  : 8;
 
 	/* dword1: */
-	uint32_t dummy2   : 17;
+	uint32_t dst      : 8;
+	uint32_t dummy2   : 9;
 	uint32_t type     : 3;
-	uint32_t dummy3   : 2; // XXX maybe still part of 'type'?
+	uint32_t dummy3   : 2;
 	uint32_t opc      : 5;
 	uint32_t jmp_tgt  : 1;
 	uint32_t sync     : 1;
 	uint32_t opc_cat  : 3;
+} instr_cat6a_t;
+
+/* used for store instructions: */
+typedef struct PACKED {
+	/* dword0: */
+	uint32_t must_be_zero1 : 1;
+	uint32_t src      : 8;
+	uint32_t off_hi   : 5;   /* high bits of 'off'... ugly! */
+	uint32_t dummy1   : 9;
+	uint32_t must_be_one1 : 1;
+	int32_t  iim_val  : 8;
+
+	/* dword1: */
+	uint16_t off      : 8;
+	uint32_t must_be_one2 : 1;
+	uint32_t dst      : 8;
+	uint32_t type     : 3;
+	uint32_t dummy2   : 2;
+	uint32_t opc      : 5;
+	uint32_t jmp_tgt  : 1;
+	uint32_t sync     : 1;
+	uint32_t opc_cat  : 3;
+} instr_cat6b_t;
+
+typedef union PACKED {
+	instr_cat6a_t a;
+	instr_cat6b_t b;
+	struct PACKED {
+		/* dword0: */
+		uint32_t pad1     : 24;
+		int32_t  iim_val  : 8;
+
+		/* dword1: */
+		uint32_t pad2     : 17;
+		uint32_t type     : 3;
+		uint32_t pad3     : 2;
+		uint32_t opc      : 5;
+		uint32_t jmp_tgt  : 1;
+		uint32_t sync     : 1;
+		uint32_t opc_cat  : 3;
+	};
 } instr_cat6_t;
 
 typedef union PACKED {
