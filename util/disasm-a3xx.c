@@ -57,6 +57,17 @@ static const char *levels[] = {
 
 static const char *component = "xyzw";
 
+static const char *type[] = {
+		[TYPE_F16] = "f16",
+		[TYPE_F32] = "f32",
+		[TYPE_U16] = "u16",
+		[TYPE_U32] = "u32",
+		[TYPE_S16] = "s16",
+		[TYPE_S32] = "s32",
+		[TYPE_U8]  = "u8",
+		[TYPE_S8]  = "s8",
+};
+
 static void print_reg(reg_t reg, bool full, bool r, bool c, bool im, bool neg, bool abs)
 {
 	const char type = c ? 'c' : 'r';
@@ -74,7 +85,9 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im, bool neg, b
 		printf("(abs)");
 
 	if (im) {
-		printf("%d", reg.const_val);
+		printf("%d", reg.iim_val);
+	} else if ((reg.num == 61) && !c) {
+		printf("a0.%c", component[reg.comp]);
 	} else if ((reg.num == 62) && !c) {
 		printf("p0.%c", component[reg.comp]);
 	} else {
@@ -92,6 +105,7 @@ static void print_instr_cat0(instr_t *instr)
 				component[cat0->comp], cat0->immed);
 		break;
 	case OPC_JUMP:
+	case OPC_CALL:
 		printf(" #%d", cat0->immed);
 		break;
 	}
@@ -104,13 +118,46 @@ static void print_instr_cat1(instr_t *instr)
 {
 	instr_cat1_t *cat1 = &instr->cat1;
 
-	printf(" ");
-	print_reg((reg_t)(cat1->dst), true, false, false, false, false, false);
-	printf(", ");
-	print_reg((reg_t)(cat1->src1), true, false, false, false, false, false);
+	if (cat1->addr_rel)
+		printf("(ul)");
 
-	if ((debug & PRINT_VERBOSE) && (cat1->dummy1|cat1->dummy2|cat1->dummy3))
-		printf("\t{1: %x,%x,%x}", cat1->dummy1, cat1->dummy2, cat1->dummy3);
+	if (cat1->src_type == cat1->dst_type) {
+		if ((cat1->src_type == TYPE_S16) && (((reg_t)cat1->dst).num == 61)) {
+			/* special case (nmemonic?): */
+			printf("mova");
+		} else {
+			printf("mov.%s%s", type[cat1->src_type], type[cat1->dst_type]);
+		}
+	} else {
+		printf("cov.%s%s", type[cat1->src_type], type[cat1->dst_type]);
+	}
+
+	printf(" ");
+
+	if (cat1->even)
+		printf("(even)");
+
+	print_reg((reg_t)(cat1->dst), type_size(cat1->dst_type) == 32,
+			false, false, false, false, false);
+
+	printf(", ");
+	// XXX maybe we can handle this in print_reg instead of special casing?
+	// then we could use same for cat0..
+	if (cat1->src_im) {
+		if (type_float(cat1->src_type))
+			printf("(%f)", cat1->fim_val);
+		else
+			printf("%d", cat1->iim_val);
+	} else if (cat1->addr_rel) {
+		// TODO can there be r<a0.x + N>, etc?
+		printf("c<a0.x + %d>", cat1->off);
+	} else {
+		print_reg((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
+				cat1->src_r, cat1->src_c, cat1->src_im, false, false);
+	}
+
+	if ((debug & PRINT_VERBOSE) && (cat1->dummy1|cat1->dummy2))
+		printf("\t{1: %x,%x}", cat1->dummy1, cat1->dummy2);
 }
 
 static void print_instr_cat2(instr_t *instr)
@@ -158,18 +205,26 @@ static void print_instr_cat2(instr_t *instr)
 static void print_instr_cat3(instr_t *instr)
 {
 	instr_cat3_t *cat3 = &instr->cat3;
+	bool full = true;
+
+	// XXX is this based on opc or some other bit?
+	switch (cat3->opc) {
+	case OPC_SEL_B16:
+		full = false;
+		break;
+	}
 
 	printf(" ");
-	print_reg((reg_t)(cat3->dst), true, false, false, false, false, false);
+	print_reg((reg_t)(cat3->dst), full, false, false, false, false, false);
 	printf(", ");
-	print_reg((reg_t)(cat3->src1), true, false, false, false, false, false);
+	print_reg((reg_t)(cat3->src1), full, cat3->src1_r, cat3->src1_c, false, false, false);
 	printf(", ");
-	print_reg((reg_t)cat3->src2, true, false, false, false, false, false);
+	print_reg((reg_t)cat3->src2, full, false, false, false, false, false);
 	printf(", ");
-	print_reg((reg_t)(cat3->src3), true, false, false, false, false, false);
+	print_reg((reg_t)(cat3->src3), full, cat3->src3_r, cat3->src3_c, false, false, false);
 
-	if ((debug & PRINT_VERBOSE) && (cat3->dummy1|cat3->dummy2|cat3->dummy3|cat3->dummy4))
-		printf("\t{3: %x,%x,%x,%x}", cat3->dummy1, cat3->dummy2, cat3->dummy3, cat3->dummy4);
+	if ((debug & PRINT_VERBOSE) && (cat3->dummy1|cat3->dummy2|cat3->dummy3|cat3->dummy4|cat3->dummy5))
+		printf("\t{3: %x,%x,%x,%x,%x}", cat3->dummy1, cat3->dummy2, cat3->dummy3, cat3->dummy4, cat3->dummy5);
 }
 
 static void print_instr_cat4(instr_t *instr)
@@ -196,16 +251,6 @@ static void print_instr_cat5(instr_t *instr)
 static void print_instr_cat6(instr_t *instr)
 {
 	instr_cat6_t *cat6 = &instr->cat6;
-	static const char *type[] = {
-			"f16",
-			"f32",
-			"u16",
-			"u32",
-			"?s16?",
-			"s32",
-			"?u8?",
-			"s8",
-	};
 
 	printf(".%s", type[cat6->type]);
 
@@ -213,13 +258,16 @@ static void print_instr_cat6(instr_t *instr)
 		printf("\t{6: %x,%x,%x}", cat6->dummy1, cat6->dummy2, cat6->dummy3);
 }
 
+/* size of largest OPC field of all the instruction categories: */
+#define NOPC_BITS 6
+
 struct opc_info {
 	uint16_t cat;
 	uint16_t opc;
 	const char *name;
 	void (*print)(instr_t *instr);
-} opcs[0x1ff] = {
-#define OPC(cat, opc, name, fxn) [((cat) << 6) | (opc)] = { (cat), (opc), #name, print_instr_##fxn }
+} opcs[1 << (3+NOPC_BITS)] = {
+#define OPC(cat, opc, name, fxn) [((cat) << NOPC_BITS) | (opc)] = { (cat), (opc), #name, print_instr_##fxn }
 	/* category 0: */
 	OPC(0, OPC_NOP,          nop,           cat0),
 	OPC(0, OPC_BR,           br,            cat0),
@@ -229,10 +277,7 @@ struct opc_info {
 	OPC(0, OPC_END,          end,           cat0),
 
 	/* category 1: */
-	OPC(1, OPC_MOV_F32F32_2, mov.f32f32,    cat1), // XXX ???
-	OPC(1, OPC_MOV_F32F32,   mov.f32f32,    cat1),
-	OPC(1, OPC_MOV_S32S32,   mov.s32s32,    cat1),
-	OPC(1, OPC_COV_F32F16,   cov.f32f16,    cat1),
+	OPC(1, 0, , cat1),
 
 	/* category 2: */
 	OPC(2, OPC_ADD_F,        add.f,         cat2),
@@ -291,13 +336,13 @@ struct opc_info {
 #undef OPC
 };
 
-#define GETINFO(instr) (&(opcs[((instr)->opc_cat << 6) | getopc(instr)]))
+#define GETINFO(instr) (&(opcs[((instr)->opc_cat << NOPC_BITS) | getopc(instr)]))
 
 static uint32_t getopc(instr_t *instr)
 {
 	switch (instr->opc_cat) {
 	case 0:  return instr->cat0.opc;
-	case 1:  return instr->cat1.opc;
+	case 1:  return 0;
 	case 2:  return instr->cat2.opc;
 	case 3:  return instr->cat3.opc;
 	case 4:  return instr->cat4.opc;

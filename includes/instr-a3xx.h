@@ -36,12 +36,7 @@ typedef enum {
 	OPC_END = 6,
 
 	/* category 1: */
-	// XXX cov.* also intersects w/ this.. so opc is probably different
-	// range of bits for category 1??
-	OPC_MOV_F32F32_2 = 0, // XXX maybe we have one less bit for opc in category 1 ??
-	OPC_MOV_F32F32 = 1,
-	OPC_MOV_S32S32 = 2,
-	OPC_COV_F32F16 = 4,
+	/* no opc.. all category 1 are variants of mov */
 
 	/* category 2: */
 	OPC_ADD_F = 0,
@@ -105,12 +100,50 @@ typedef enum {
 
 } opc_t;
 
+typedef enum {
+	TYPE_F16 = 0,
+	TYPE_F32 = 1,
+	TYPE_U16 = 2,
+	TYPE_U32 = 3,
+	TYPE_S16 = 4,
+	TYPE_S32 = 5,
+	TYPE_U8  = 6,
+	TYPE_S8  = 7,  // XXX I assume?
+} type_t;
+
+static inline uint32_t type_size(type_t type)
+{
+	switch (type) {
+	case TYPE_F32:
+	case TYPE_U32:
+	case TYPE_S32:
+		return 32;
+	case TYPE_F16:
+	case TYPE_U16:
+	case TYPE_S16:
+		return 16;
+	case TYPE_U8:
+	case TYPE_S8:
+		return 8;
+	default:
+		assert(0); /* invalid type */
+		return 0;
+	}
+}
+
+static inline int type_float(type_t type)
+{
+	return (type == TYPE_F32) || (type == TYPE_F16);
+}
+
 typedef union PACKED {
+	/* normal gpr or const src register: */
 	struct PACKED {
 		uint32_t comp  : 2;
 		uint32_t num   : 9;
 	};
-	int32_t  const_val : 11;
+	/* for immediate val: */
+	int32_t  iim_val : 11;
 	/* to make compiler happy: */
 	uint32_t dummy12   : 11;
 	uint32_t dummy8    : 8;
@@ -155,19 +188,41 @@ typedef struct PACKED {
 
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t src1     : 8;
-	uint32_t dummy1   : 24;
+	union PACKED {
+		/* for normal src register: */
+		struct PACKED {
+			uint32_t src : 11;
+			uint32_t pad : 21;
+		};
+		/* for address relative: */
+		struct PACKED {
+			// XXX need to find some more examples.. everything I find has
+			// bits 10 & 11 set.. unsure if bit 9 is part of the offset or
+			// not..
+			uint32_t off : 10;
+			uint32_t unknown : 22;
+		};
+		/* for immediate: */
+		int32_t iim_val;
+		float   fim_val;
+	};
 
 	/* dword1: */
-	uint32_t dst      : 8;
-	uint32_t repeat   : 3;
-	uint32_t dummy2   : 1;
-	uint32_t ss       : 1;
-	uint32_t dummy3   : 8;
-	uint32_t opc      : 6;
-	uint32_t jmp_tgt  : 1;
-	uint32_t sync     : 1;
-	uint32_t opc_cat  : 3;
+	uint32_t dst        : 8;
+	uint32_t repeat     : 3;
+	uint32_t src_r      : 1;
+	uint32_t ss         : 1;
+	uint32_t addr_rel   : 1;
+	uint32_t dst_type   : 3;
+	uint32_t dummy1     : 1;
+	uint32_t src_type   : 3;
+	uint32_t src_c      : 1;
+	uint32_t src_im     : 1;
+	uint32_t even       : 1;
+	uint32_t dummy2     : 3;
+	uint32_t jmp_tgt    : 1;
+	uint32_t sync       : 1;
+	uint32_t opc_cat    : 3;
 } instr_cat1_t;
 
 typedef struct PACKED {
@@ -204,18 +259,23 @@ typedef struct PACKED {
 
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t src1     : 8;
-	uint32_t dummy1   : 8;
-	uint32_t src3     : 8;
-	uint32_t dummy2   : 8;
+	uint32_t src1     : 11;
+	uint32_t dummy1   : 1;
+	uint32_t src1_c   : 1;
+	uint32_t dummy2   : 3;  // XXX im, neg, abs
+	uint32_t src3     : 11;
+	uint32_t dummy3   : 1;
+	uint32_t src3_c   : 1;
+	uint32_t src3_r   : 1;
+	uint32_t dummy4   : 2;  // XXX im, neg, abs?
 
 	/* dword1: */
 	uint32_t dst      : 8;
 	uint32_t repeat   : 3;
-	uint32_t dummy3   : 1;
+	uint32_t src1_r   : 1;
 	uint32_t ss       : 1;
-	uint32_t dummy4   : 2;
-	uint32_t src2     : 8;  /* can't use reg_t directly, because not aligned! */
+	uint32_t dummy5   : 2;
+	uint32_t src2     : 8;
 	uint32_t opc      : 4;
 	uint32_t jmp_tgt  : 1;
 	uint32_t sync     : 1;
