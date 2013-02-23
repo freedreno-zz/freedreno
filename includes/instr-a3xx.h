@@ -33,7 +33,13 @@ typedef enum {
 	OPC_JUMP = 2,
 	OPC_CALL = 3,
 	OPC_RET = 4,
+	OPC_KILL = 5,
 	OPC_END = 6,
+	OPC_EMIT = 7,
+	OPC_CUT = 8,
+	OPC_CHMASK = 9,
+	OPC_CHSH = 10,
+	OPC_FLOW_REV = 11,
 
 	/* category 1: */
 	/* no opc.. all category 1 are variants of mov */
@@ -43,32 +49,71 @@ typedef enum {
 	OPC_MIN_F = 1,
 	OPC_MAX_F = 2,
 	OPC_MUL_F = 3,
+	OPC_SIGN_F = 4,
 	OPC_CMPS_F = 5,
 	OPC_ABSNEG_F = 6,
+	OPC_CMPV_F = 7,
+	/* 8 - invalid */
+	OPC_FLOOR_F = 9,
+	OPC_CEIL_F = 10,
+	OPC_RNDNE_F = 11,
+	OPC_RNDAZ_F = 12,
+	OPC_TRUNC_F = 13,
+	/* 14-15 - invalid */
+	OPC_ADD_U = 16,
 	OPC_ADD_S = 17,
+	OPC_SUB_U = 18,
 	OPC_SUB_S = 19,
 	OPC_CMPS_U = 20,
 	OPC_CMPS_S = 21,
+	OPC_MIN_U = 22,
 	OPC_MIN_S = 23,
+	OPC_MAX_U = 24,
 	OPC_MAX_S = 25,
 	OPC_ABSNEG_S = 26,
+	/* 27 - invalid */
 	OPC_AND_B = 28,
 	OPC_OR_B = 29,
+	OPC_NOT_B = 30,
 	OPC_XOR_B = 31,
+	/* 32 - invalid */
+	OPC_CMPV_U = 33,
+	OPC_CMPV_S = 34,
+	/* 35-47 - invalid */
+	OPC_MUL_U = 48,
 	OPC_MUL_S = 49,
 	OPC_MULL_U = 50,
+	OPC_BFREV_B = 51,
+	OPC_CLZ_S = 52,
 	OPC_CLZ_B = 53,
 	OPC_SHL_B = 54,
 	OPC_SHR_B = 55,
 	OPC_ASHR_B = 56,
 	OPC_BARY_F = 57,
+	OPC_MGEN_B = 58,
+	OPC_GETBIT_B = 59,
+	OPC_SETRM = 60,
+	OPC_CBITS_B = 61,
+	OPC_SHB = 62,
+	OPC_MSAD = 63,
 
 	/* category 3: */
-	OPC_MADSH_M16 = 3,
+	OPC_MAD_U16 = 0,
+	OPC_MADSH_U16 = 1,
+	OPC_MAD_S16 = 2,
+	OPC_MADSH_M16 = 3,   /* should this be .s16? */
+	OPC_MAD_U24 = 4,
+	OPC_MAD_S24 = 5,
+	OPC_MAD_F16 = 6,
 	OPC_MAD_F32 = 7,
 	OPC_SEL_B16 = 8,
 	OPC_SEL_B32 = 9,
+	OPC_SEL_S16 = 10,
+	OPC_SEL_S32 = 11,
+	OPC_SEL_F16 = 12,
 	OPC_SEL_F32 = 13,
+	OPC_SAD_S16 = 14,
+	OPC_SAD_S32 = 15,
 
 	/* category 4: */
 	OPC_RCP = 0,
@@ -78,25 +123,69 @@ typedef enum {
 	OPC_SIN = 4,
 	OPC_COS = 5,
 	OPC_SQRT = 6,
+	// 7-63 - invalid
 
 	/* category 5: */
 	OPC_ISAM = 0,
+	OPC_ISAML = 1,
+	OPC_ISAMM = 2,
 	OPC_SAM = 3,
+	OPC_SAMB = 4,
+	OPC_SAML = 5,
+	OPC_SAMGQ = 6,
+	OPC_GETLOD = 7,
+	OPC_CONV = 8,
+	OPC_CONVM = 9,
 	OPC_GETSIZE = 10,
+	OPC_GETBUF = 11,
+	OPC_GETPOS = 12,
 	OPC_GETINFO = 13,
+	OPC_DSX = 14,
+	OPC_DSY = 15,
+	OPC_GATHER4R = 16,
+	OPC_GATHER4G = 17,
+	OPC_GATHER4B = 18,
+	OPC_GATHER4A = 19,
+	OPC_SAMGP0 = 20,
+	OPC_SAMGP1 = 21,
+	OPC_SAMGP2 = 22,
+	OPC_SAMGP3 = 23,
+	OPC_DSXPP_1 = 24,
+	OPC_DSYPP_1 = 25,
+	OPC_RGETPOS = 26,
+	OPC_RGETINFO = 27,
 
 	/* category 6: */
-	// XXX these don't quite fit.. possibly the F32/U32/etc is not
-	// part of the opc, but another field..
-	//    ldg.u32 -> c006....
-	//    ldg.f32 -> c002....
-	//    stg.u32 -> c0c6....
-	//    stg.f32 -> c0c2....
 	OPC_LDG = 0,        /* load-global */
+	OPC_LDL = 1,
 	OPC_LDP = 2,
 	OPC_STG = 3,        /* store-global */
+	OPC_STL = 4,
 	OPC_STP = 5,
 	OPC_STI = 6,
+	OPC_G2L = 7,
+	OPC_L2G = 8,
+	OPC_PREFETCH = 9,
+	OPC_LDLW = 10,
+	OPC_STLW = 11,
+	OPC_RESFMT = 14,
+	OPC_RESINFO = 15,
+	OPC_ATOMIC_ADD_L = 16,
+	OPC_ATOMIC_SUB_L = 17,
+	OPC_ATOMIC_XCHG_L = 18,
+	OPC_ATOMIC_INC_L = 19,
+	OPC_ATOMIC_DEC_L = 20,
+	OPC_ATOMIC_CMPXCHG_L = 21,
+	OPC_ATOMIC_MIN_L = 22,
+	OPC_ATOMIC_MAX_L = 23,
+	OPC_ATOMIC_AND_L = 24,
+	OPC_ATOMIC_OR_L = 25,
+	OPC_ATOMIC_XOR_L = 26,
+	OPC_LDGB_TYPED_4D = 27,
+	OPC_STGB_4D_4 = 28,
+	OPC_STIB = 29,
+	OPC_LDC_4 = 30,
+	OPC_LDLV = 31,
 
 } opc_t;
 
@@ -149,26 +238,6 @@ typedef union PACKED {
 	uint32_t dummy8    : 8;
 } reg_t;
 
-// XXX remove this:
-typedef struct PACKED {
-	/* dword0: */
-	uint32_t src1     : 8;
-	uint32_t dummy1   : 8;
-	uint32_t src2     : 8;
-	uint32_t dummy2   : 8;
-
-	/* dword1: */
-	uint32_t dst      : 8;
-	uint32_t repeat   : 3;
-	uint32_t dummy3   : 1;
-	uint32_t ss       : 1;
-	uint32_t dummy4   : 8;
-	uint32_t opc      : 6;
-	uint32_t jmp_tgt  : 1;
-	uint32_t sync     : 1;
-	uint32_t opc_cat  : 3;
-} instr_generic_t;
-
 typedef struct PACKED {
 	/* dword0: */
 	int16_t  immed    : 16;
@@ -196,11 +265,9 @@ typedef struct PACKED {
 		};
 		/* for address relative: */
 		struct PACKED {
-			// XXX need to find some more examples.. everything I find has
-			// bits 10 & 11 set.. unsure if bit 9 is part of the offset or
-			// not..
-			uint32_t off : 10;
-			uint32_t unknown : 22;
+			int32_t  off : 10;
+			uint32_t must_be_3 : 2;
+			uint32_t unknown : 20;
 		};
 		/* for immediate: */
 		int32_t iim_val;
@@ -212,14 +279,15 @@ typedef struct PACKED {
 	uint32_t repeat     : 3;
 	uint32_t src_r      : 1;
 	uint32_t ss         : 1;
-	uint32_t addr_rel   : 1;
+	uint32_t src_rel    : 1;
 	uint32_t dst_type   : 3;
-	uint32_t dummy1     : 1;
+	uint32_t dst_rel    : 1;
 	uint32_t src_type   : 3;
 	uint32_t src_c      : 1;
 	uint32_t src_im     : 1;
 	uint32_t even       : 1;
-	uint32_t dummy2     : 3;
+	uint32_t pos_inf    : 1;
+	uint32_t must_be_0  : 2;
 	uint32_t jmp_tgt    : 1;
 	uint32_t sync       : 1;
 	uint32_t opc_cat    : 3;
@@ -228,26 +296,27 @@ typedef struct PACKED {
 typedef struct PACKED {
 	/* dword0: */
 	uint32_t src1     : 11;
-	uint32_t dummy1   : 1;
-	uint32_t src1_c   : 1;
-	uint32_t dummy2   : 2;  // XXX im, neg
-	uint32_t src1_abs : 1;
+	uint32_t src1_rel : 1;   /* relative address */
+	uint32_t src1_c   : 1;   /* const */
+	uint32_t src1_im  : 1;   /* immediate */
+	uint32_t src1_neg : 1;   /* negate */
+	uint32_t src1_abs : 1;   /* absolute value */
+
 	uint32_t src2     : 11;
-	uint32_t dummy3   : 1;
-	// XXX if these are in same order everwhere, combine into one flags field..
+	uint32_t src2_rel : 1;   /* relative address */
 	uint32_t src2_c   : 1;   /* const */
 	uint32_t src2_im  : 1;   /* immediate */
 	uint32_t src2_neg : 1;   /* negate */
-	uint32_t dummy4   : 1;  // XXX abs
+	uint32_t src2_abs : 1;   /* absolute value */
 
 	/* dword1: */
 	uint32_t dst      : 8;
 	uint32_t repeat   : 3;
 	uint32_t src1_r   : 1;
 	uint32_t ss       : 1;
-	uint32_t dummy5   : 1;
-	uint32_t dst_half : 1;   /* or widen/narrow? */
-	uint32_t dummy6   : 1;
+	uint32_t ul       : 1;   /* dunno */
+	uint32_t dst_half : 1;   /* or widen/narrow.. ie. dst hrN <-> rN */
+	uint32_t shr      : 1;
 	uint32_t cond     : 3;
 	uint32_t src2_r   : 1;
 	uint32_t full     : 1;   /* not half */
@@ -260,21 +329,24 @@ typedef struct PACKED {
 typedef struct PACKED {
 	/* dword0: */
 	uint32_t src1     : 11;
-	uint32_t dummy1   : 1;
+	uint32_t src1_rel : 1;
 	uint32_t src1_c   : 1;
-	uint32_t dummy2   : 3;  // XXX im, neg, abs
+	uint32_t src2_c   : 1;
+	uint32_t dummy1   : 1;  // XXX ignored?
+	uint32_t src2_r   : 1;
 	uint32_t src3     : 11;
-	uint32_t dummy3   : 1;
+	uint32_t src3_rel : 1;
 	uint32_t src3_c   : 1;
 	uint32_t src3_r   : 1;
-	uint32_t dummy4   : 2;  // XXX im, neg, abs?
+	uint32_t dummy2   : 2;  // XXX im, neg, abs?
 
 	/* dword1: */
 	uint32_t dst      : 8;
 	uint32_t repeat   : 3;
 	uint32_t src1_r   : 1;
 	uint32_t ss       : 1;
-	uint32_t dummy5   : 2;
+	uint32_t ul       : 1;
+	uint32_t dst_half : 1;   /* or widen/narrow.. ie. dst hrN <-> rN */
 	uint32_t src2     : 8;
 	uint32_t opc      : 4;
 	uint32_t jmp_tgt  : 1;
@@ -284,15 +356,23 @@ typedef struct PACKED {
 
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t src1     : 8;
-	uint32_t dummy1   : 24;
+	uint32_t src      : 11;
+	uint32_t src_rel  : 1;
+	uint32_t src_c    : 1;
+	uint32_t src_im   : 1;
+	uint32_t src_neg  : 1;
+	uint32_t src_abs  : 1;
+	uint32_t dummy1   : 16;  /* seem to be ignored */
 
 	/* dword1: */
 	uint32_t dst      : 8;
 	uint32_t repeat   : 3;
-	uint32_t dummy2   : 1;
+	uint32_t src_r    : 1;
 	uint32_t ss       : 1;
-	uint32_t dummy3   : 8;
+	uint32_t ul       : 1;
+	uint32_t dst_half : 1;   /* or widen/narrow.. ie. dst hrN <-> rN */
+	uint32_t dummy2   : 5;   /* seem to be ignored */
+	uint32_t full     : 1;   /* not half */
 	uint32_t opc      : 6;
 	uint32_t jmp_tgt  : 1;
 	uint32_t sync     : 1;
@@ -301,20 +381,25 @@ typedef struct PACKED {
 
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t must_be_one1 : 1;
+	// XXX note: different meanings if is_o or is_s2en
+	uint32_t full     : 1;   /* not half */
 	uint32_t src      : 8;
-
-	uint32_t dummy1   : 12;
-	uint32_t samp     : 4;  // XXX check # of bits
-	uint32_t tex      : 7;  // XXX confirm and check # of bits
+	uint32_t dummy1   : 12;  /* seem to be ignored */
+	uint32_t samp     : 4;
+	uint32_t tex      : 7;
 
 	/* dword1: */
 	uint32_t dst      : 8;
-	uint32_t dummy2   : 4; // XXX probably write-mask
+	uint32_t wrmask   : 4;   /* write-mask */
 	uint32_t type     : 3;
-	uint32_t dummy3   : 1;
+	uint32_t dummy2   : 1;   /* seems to be ignored */
 	uint32_t is_3d    : 1;
-	uint32_t dummy4   : 5;
+
+	uint32_t is_a     : 1;
+	uint32_t is_s     : 1;
+	uint32_t is_s2en  : 1;
+	uint32_t is_o     : 1;
+	uint32_t is_p     : 1;
 
 	uint32_t opc      : 5;
 	uint32_t jmp_tgt  : 1;
@@ -385,7 +470,6 @@ typedef union PACKED {
 } instr_cat6_t;
 
 typedef union PACKED {
-	instr_generic_t generic;
 	instr_cat0_t cat0;
 	instr_cat1_t cat1;
 	instr_cat2_t cat2;
@@ -394,10 +478,17 @@ typedef union PACKED {
 	instr_cat5_t cat5;
 	instr_cat6_t cat6;
 	struct PACKED {
-		uint64_t dummy    : 59;
-		uint32_t jmp_tgt  : 1;  /* jump target? */
-		uint32_t sync     : 1;  /* shown as "(sy)" in kernel comments.. I think this is sync bit */
+		/* dword0: */
+		uint64_t pad1     : 40;
+		uint32_t repeat   : 3;  /* cat0-cat4 */
+		uint32_t pad2     : 1;
+		uint32_t ss       : 1;  /* cat1-cat4 (cat0??) */
+		uint32_t ul       : 1;  /* cat2-cat4 (and cat1 in blob.. which may be bug??) */
+		uint32_t pad3     : 13;
+		uint32_t jmp_tgt  : 1;
+		uint32_t sync     : 1;
 		uint32_t opc_cat  : 3;
+
 	};
 } instr_t;
 

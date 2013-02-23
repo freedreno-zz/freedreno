@@ -75,14 +75,15 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im, bool neg, b
 	// XXX I prefer - and || for neg/abs, but preserving format used
 	// by libllvm-a3xx for easy diffing..
 
-	if (neg)
+	if (abs && neg)
+		printf("(absneg)");
+	else if (neg)
 		printf("(neg)");
+	else if (abs)
+		printf("(abs)");
 
 	if (r)
 		printf("(r)");
-
-	if (abs)
-		printf("(abs)");
 
 	if (im) {
 		printf("%d", reg.iim_val);
@@ -100,6 +101,10 @@ static void print_instr_cat0(instr_t *instr)
 	instr_cat0_t *cat0 = &instr->cat0;
 
 	switch (cat0->opc) {
+	case OPC_KILL:
+		printf(" %sp0.%c", cat0->inv ? "!" : "",
+				component[cat0->comp]);
+		break;
 	case OPC_BR:
 		printf(" %sp0.%c, #%d", cat0->inv ? "!" : "",
 				component[cat0->comp], cat0->immed);
@@ -118,7 +123,8 @@ static void print_instr_cat1(instr_t *instr)
 {
 	instr_cat1_t *cat1 = &instr->cat1;
 
-	if (cat1->addr_rel)
+	// XXX maybe a bug in libllvm disassembler?
+	if (cat1->src_rel)
 		printf("(ul)");
 
 	if (cat1->src_type == cat1->dst_type) {
@@ -137,6 +143,9 @@ static void print_instr_cat1(instr_t *instr)
 	if (cat1->even)
 		printf("(even)");
 
+	if (cat1->pos_inf)
+		printf("(pos_infinity)");
+
 	print_reg((reg_t)(cat1->dst), type_size(cat1->dst_type) == 32,
 			false, false, false, false, false);
 
@@ -149,16 +158,15 @@ static void print_instr_cat1(instr_t *instr)
 			printf("(%f)", cat1->fim_val);
 		else
 			printf("%d", cat1->iim_val);
-	} else if (cat1->addr_rel) {
-		// TODO can there be r<a0.x + N>, etc?
+	} else if (cat1->src_rel && !cat1->src_c) {
 		printf("c<a0.x + %d>", cat1->off);
 	} else {
 		print_reg((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
 				cat1->src_r, cat1->src_c, cat1->src_im, false, false);
 	}
 
-	if ((debug & PRINT_VERBOSE) && (cat1->dummy1|cat1->dummy2))
-		printf("\t{1: %x,%x}", cat1->dummy1, cat1->dummy2);
+	if ((debug & PRINT_VERBOSE) && (cat1->must_be_0))
+		printf("\t{1: %x}", cat1->must_be_0);
 }
 
 static void print_instr_cat2(instr_t *instr)
@@ -178,30 +186,46 @@ static void print_instr_cat2(instr_t *instr)
 	case OPC_CMPS_F:
 	case OPC_CMPS_U:
 	case OPC_CMPS_S:
+	case OPC_CMPV_F:
+	case OPC_CMPV_U:
+	case OPC_CMPV_S:
 		printf(".%s", cond[cat2->cond]);
 		break;
 	}
 
 	printf(" ");
+	if (cat2->shr)
+		printf("(shr)");
 	print_reg((reg_t)(cat2->dst), cat2->full ^ cat2->dst_half,
 			false, false, false, false, false);
 	printf(", ");
+// XXX src1_rel
 	print_reg((reg_t)(cat2->src1), cat2->full, cat2->src1_r,
-			cat2->src1_c, false, false, cat2->src1_abs);
+			cat2->src1_c, cat2->src1_im, cat2->src1_neg, cat2->src1_abs);
 	switch (cat2->opc) {
 	case OPC_ABSNEG_F:
 	case OPC_ABSNEG_S:
 	case OPC_CLZ_B:
+	case OPC_CLZ_S:
+	case OPC_SIGN_F:
+	case OPC_FLOOR_F:
+	case OPC_CEIL_F:
+	case OPC_RNDNE_F:
+	case OPC_RNDAZ_F:
+	case OPC_TRUNC_F:
+	case OPC_NOT_B:
+	case OPC_BFREV_B:
+	case OPC_SETRM:
+	case OPC_CBITS_B:
 		/* these only have one src reg */
 		break;
 	default:
 		printf(", ");
+// XXX src2_rel
 		print_reg((reg_t)(cat2->src2), cat2->full, cat2->src2_r,
-				cat2->src2_c, cat2->src2_im, cat2->src2_neg, false);
+				cat2->src2_c, cat2->src2_im, cat2->src2_neg, cat2->src2_abs);
 		break;
 	}
-	if ((debug & PRINT_VERBOSE) && (cat2->dummy1|cat2->dummy2|cat2->dummy3|cat2->dummy4|cat2->dummy5|cat2->dummy6))
-		printf("\t{2: %x,%x,%x,%x,%x,%x}", cat2->dummy1, cat2->dummy2, cat2->dummy3, cat2->dummy4, cat2->dummy5, cat2->dummy6);
 }
 
 static void print_instr_cat3(instr_t *instr)
@@ -211,22 +235,32 @@ static void print_instr_cat3(instr_t *instr)
 
 	// XXX is this based on opc or some other bit?
 	switch (cat3->opc) {
+	case OPC_MAD_U16:
+	case OPC_MAD_S16:
 	case OPC_SEL_B16:
+	case OPC_SEL_S16:
+	case OPC_SEL_F16:
+	case OPC_SAD_S16:
+	case OPC_SAD_S32:  // really??
 		full = false;
 		break;
 	}
 
 	printf(" ");
-	print_reg((reg_t)(cat3->dst), full, false, false, false, false, false);
+	print_reg((reg_t)(cat3->dst), full ^ cat3->dst_half,
+			false, false, false, false, false);
 	printf(", ");
-	print_reg((reg_t)(cat3->src1), full, cat3->src1_r, cat3->src1_c, false, false, false);
+	print_reg((reg_t)(cat3->src1), full,
+			cat3->src1_r, cat3->src1_c, false, false, false);
 	printf(", ");
-	print_reg((reg_t)cat3->src2, full, false, false, false, false, false);
+	print_reg((reg_t)cat3->src2, full,
+			cat3->src2_r, cat3->src2_c, false, false, false);
 	printf(", ");
-	print_reg((reg_t)(cat3->src3), full, cat3->src3_r, cat3->src3_c, false, false, false);
+	print_reg((reg_t)(cat3->src3), full,
+			cat3->src3_r, cat3->src3_c, false, false, false);
 
-	if ((debug & PRINT_VERBOSE) && (cat3->dummy1|cat3->dummy2|cat3->dummy3|cat3->dummy4|cat3->dummy5))
-		printf("\t{3: %x,%x,%x,%x,%x}", cat3->dummy1, cat3->dummy2, cat3->dummy3, cat3->dummy4, cat3->dummy5);
+	if ((debug & PRINT_VERBOSE) && (cat3->dummy1|cat3->dummy2))
+		printf("\t{3: %x,%x}", cat3->dummy1, cat3->dummy2);
 }
 
 static void print_instr_cat4(instr_t *instr)
@@ -234,39 +268,103 @@ static void print_instr_cat4(instr_t *instr)
 	instr_cat4_t *cat4 = &instr->cat4;
 
 	printf(" ");
-	print_reg((reg_t)(cat4->dst), true, false, false, false, false, false);
+	print_reg((reg_t)(cat4->dst), cat4->full ^ cat4->dst_half,
+			false, false, false, false, false);
 	printf(", ");
-	print_reg((reg_t)(cat4->src1), true, false, false, false, false, false);
+	print_reg((reg_t)(cat4->src), cat4->full,
+			cat4->src_r, cat4->src_c, cat4->src_im,
+			cat4->src_neg, cat4->src_abs);
 
-	if ((debug & PRINT_VERBOSE) && (cat4->dummy1|cat4->dummy2|cat4->dummy3))
-		printf("\t{4: %x,%x,%x}", cat4->dummy1, cat4->dummy2, cat4->dummy3);
+	if ((debug & PRINT_VERBOSE) && (cat4->dummy1|cat4->dummy2))
+		printf("\t{4: %x,%x}", cat4->dummy1, cat4->dummy2);
 }
 
 static void print_instr_cat5(instr_t *instr)
 {
 	instr_cat5_t *cat5 = &instr->cat5;
+	int i;
 
-	if (cat5->is_3d)
-		printf(".3d");
+	if (cat5->is_3d)   printf(".3d");
+	if (cat5->is_a)    printf(".a");
+	if (cat5->is_o)    printf(".o");
+	if (cat5->is_p)    printf(".p");
+	if (cat5->is_s)    printf(".s");
+	if (cat5->is_s2en) printf(".s2en");
 
-	printf(" (%s)", type[cat5->type]);
-	printf("(xyzw)");  // XXX can we play with swizzle (writemask), or load less than 4 components?
+	printf(" ");
+
+	switch (cat5->opc) {
+	case OPC_DSXPP_1:
+	case OPC_DSYPP_1:
+		break;
+	default:
+		printf("(%s)", type[cat5->type]);
+		break;
+	}
+
+	printf("(");
+	// XXX double check swizzle order, this might be backwards:
+	if (cat5->wrmask & (1 << 3))
+		printf("x");
+	if (cat5->wrmask & (1 << 2))
+		printf("y");
+	if (cat5->wrmask & (1 << 1))
+		printf("z");
+	if (cat5->wrmask & (1 << 0))
+		printf("w");
+	printf(")");
+
 	print_reg((reg_t)(cat5->dst), type_size(cat5->type) == 32,
 			false, false, false, false, false);
 
-	if ((cat5->opc != OPC_GETINFO)) {
+	switch (cat5->opc) {
+	case OPC_GETINFO:
+		break;
+	default:
 		printf(", ");
 		print_reg((reg_t)(cat5->src), true, false, false, false, false, false);
+		break;
 	}
 
-	if ((cat5->opc == OPC_ISAM) || (cat5->opc == OPC_SAM)) {
+	switch (cat5->opc) {
+	case OPC_ISAM:
+	case OPC_SAM:
+	case OPC_ISAML:
+	case OPC_ISAMM:
+	case OPC_SAMB:
+	case OPC_SAML:
+	case OPC_SAMGQ:
+	case OPC_GETLOD:
+	case OPC_CONV:
+	case OPC_CONVM:
+	case OPC_GATHER4R:
+	case OPC_GATHER4G:
+	case OPC_GATHER4B:
+	case OPC_GATHER4A:
+	case OPC_SAMGP0:
+	case OPC_SAMGP1:
+	case OPC_SAMGP2:
+	case OPC_SAMGP3:
+		// XXX invert this probably..
 		printf(", s#%d", cat5->samp);
+		break;
 	}
 
-	printf(", t#%d", cat5->tex);
+	switch (cat5->opc) {
+	case OPC_DSX:
+	case OPC_DSY:
+	case OPC_DSXPP_1:
+	case OPC_DSYPP_1:
+	case OPC_RGETPOS:
+	case OPC_RGETINFO:
+		break;
+	default:
+		printf(", t#%d", cat5->tex);
+		break;
+	}
 
-	if ((debug & PRINT_VERBOSE) && (cat5->dummy1|cat5->dummy2|cat5->dummy3|cat5->dummy4))
-		printf("\t{5: %x,%x,%x,%x}", cat5->dummy1, cat5->dummy2, cat5->dummy3, cat5->dummy4);
+	if ((debug & PRINT_VERBOSE) && (cat5->dummy1|cat5->dummy2))
+		printf("\t{5: %x,%x}", cat5->dummy1, cat5->dummy2);
 }
 
 static int32_t u2i(uint32_t val, int nbits)
@@ -358,71 +456,162 @@ struct opc_info {
 	const char *name;
 	void (*print)(instr_t *instr);
 } opcs[1 << (3+NOPC_BITS)] = {
-#define OPC(cat, opc, name, fxn) [((cat) << NOPC_BITS) | (opc)] = { (cat), (opc), #name, print_instr_##fxn }
+#define OPC(cat, opc, name) [((cat) << NOPC_BITS) | (opc)] = { (cat), (opc), #name, print_instr_cat##cat }
 	/* category 0: */
-	OPC(0, OPC_NOP,          nop,           cat0),
-	OPC(0, OPC_BR,           br,            cat0),
-	OPC(0, OPC_JUMP,         jump,          cat0),
-	OPC(0, OPC_CALL,         call,          cat0),
-	OPC(0, OPC_RET,          ret,           cat0),
-	OPC(0, OPC_END,          end,           cat0),
+	OPC(0, OPC_NOP,          nop),
+	OPC(0, OPC_BR,           br),
+	OPC(0, OPC_JUMP,         jump),
+	OPC(0, OPC_CALL,         call),
+	OPC(0, OPC_RET,          ret),
+	OPC(0, OPC_KILL,         kill),
+	OPC(0, OPC_END,          end),
+	OPC(0, OPC_EMIT,         emit),
+	OPC(0, OPC_CUT,          cut),
+	OPC(0, OPC_CHMASK,       chmask),
+	OPC(0, OPC_CHSH,         chsh),
+	OPC(0, OPC_FLOW_REV,     flow_rev),
 
 	/* category 1: */
-	OPC(1, 0, , cat1),
+	OPC(1, 0, ),
 
 	/* category 2: */
-	OPC(2, OPC_ADD_F,        add.f,         cat2),
-	OPC(2, OPC_MIN_F,        min.f,         cat2),
-	OPC(2, OPC_MAX_F,        max.f,         cat2),
-	OPC(2, OPC_MUL_F,        mul.f,         cat2),
-	OPC(2, OPC_CMPS_F,       cmps.f,        cat2),
-	OPC(2, OPC_ABSNEG_F,     absneg.f,      cat2),
-	OPC(2, OPC_ADD_S,        add.s,         cat2),
-	OPC(2, OPC_SUB_S,        sub.s,         cat2),
-	OPC(2, OPC_CMPS_U,       cmps.u,        cat2),
-	OPC(2, OPC_CMPS_S,       cmps.s,        cat2),
-	OPC(2, OPC_MIN_S,        min.s,         cat2),
-	OPC(2, OPC_MAX_S,        max.s,         cat2),
-	OPC(2, OPC_ABSNEG_S,     absneg.s,      cat2),
-	OPC(2, OPC_AND_B,        and.b,         cat2),
-	OPC(2, OPC_OR_B,         or.b,          cat2),
-	OPC(2, OPC_XOR_B,        xor.b,         cat2),
-	OPC(2, OPC_MUL_S,        mul.s,         cat2),
-	OPC(2, OPC_MULL_U,       mull.u,        cat2),
-	OPC(2, OPC_CLZ_B,        clz.b,         cat2),
-	OPC(2, OPC_SHL_B,        shl.b,         cat2),
-	OPC(2, OPC_SHR_B,        shr.b,         cat2),
-	OPC(2, OPC_ASHR_B,       ashr.b,        cat2),
-	OPC(2, OPC_BARY_F,       bary.f,        cat2),
+	OPC(2, OPC_ADD_F,        add.f),
+	OPC(2, OPC_MIN_F,        min.f),
+	OPC(2, OPC_MAX_F,        max.f),
+	OPC(2, OPC_MUL_F,        mul.f),
+	OPC(2, OPC_SIGN_F,       sign.f),
+	OPC(2, OPC_CMPS_F,       cmps.f),
+	OPC(2, OPC_ABSNEG_F,     absneg.f),
+	OPC(2, OPC_CMPV_F,       cmpv.f),
+	OPC(2, OPC_FLOOR_F,      floor.f),
+	OPC(2, OPC_CEIL_F,       ceil.f),
+	OPC(2, OPC_RNDNE_F,      rndne.f),
+	OPC(2, OPC_RNDAZ_F,      rndaz.f),
+	OPC(2, OPC_TRUNC_F,      trunc.f),
+	OPC(2, OPC_ADD_U,        add.u),
+	OPC(2, OPC_ADD_S,        add.s),
+	OPC(2, OPC_SUB_U,        sub.u),
+	OPC(2, OPC_SUB_S,        sub.s),
+	OPC(2, OPC_CMPS_U,       cmps.u),
+	OPC(2, OPC_CMPS_S,       cmps.s),
+	OPC(2, OPC_MIN_U,        min.u),
+	OPC(2, OPC_MIN_S,        min.s),
+	OPC(2, OPC_MAX_U,        max.u),
+	OPC(2, OPC_MAX_S,        max.s),
+	OPC(2, OPC_ABSNEG_S,     absneg.s),
+	OPC(2, OPC_AND_B,        and.b),
+	OPC(2, OPC_OR_B,         or.b),
+	OPC(2, OPC_NOT_B,        not.b),
+	OPC(2, OPC_XOR_B,        xor.b),
+	OPC(2, OPC_CMPV_U,       cmpv.u),
+	OPC(2, OPC_CMPV_S,       cmpv.s),
+	OPC(2, OPC_MUL_U,        mul.u),
+	OPC(2, OPC_MUL_S,        mul.s),
+	OPC(2, OPC_MULL_U,       mull.u),
+	OPC(2, OPC_BFREV_B,      bfrev.b),
+	OPC(2, OPC_CLZ_S,        clz.s),
+	OPC(2, OPC_CLZ_B,        clz.b),
+	OPC(2, OPC_SHL_B,        shl.b),
+	OPC(2, OPC_SHR_B,        shr.b),
+	OPC(2, OPC_ASHR_B,       ashr.b),
+	OPC(2, OPC_BARY_F,       bary.f),
+	OPC(2, OPC_MGEN_B,       mgen.b),
+	OPC(2, OPC_GETBIT_B,     getbit.b),
+	OPC(2, OPC_SETRM,        setrm),
+	OPC(2, OPC_CBITS_B,      cbits.b),
+	OPC(2, OPC_SHB,          shb),
+	OPC(2, OPC_MSAD,         msad),
 
 	/* category 3: */
-	OPC(3, OPC_MADSH_M16,    madsh.m16,     cat3),
-	OPC(3, OPC_MAD_F32,      mad.f32,       cat3),
-	OPC(3, OPC_SEL_B16,      sel.b16,       cat3),
-	OPC(3, OPC_SEL_B32,      sel.b32,       cat3),
-	OPC(3, OPC_SEL_F32,      sel.f32,       cat3),
+	OPC(3, OPC_MAD_U16,      mad.u16),
+	OPC(3, OPC_MADSH_U16,    madsh.u16),
+	OPC(3, OPC_MAD_S16,      mad.s16),
+	OPC(3, OPC_MADSH_M16,    madsh.m16),
+	OPC(3, OPC_MAD_U24,      mad.u24),
+	OPC(3, OPC_MAD_S24,      mad.s24),
+	OPC(3, OPC_MAD_F16,      mad.f16),
+	OPC(3, OPC_MAD_F32,      mad.f32),
+	OPC(3, OPC_SEL_B16,      sel.b16),
+	OPC(3, OPC_SEL_B32,      sel.b32),
+	OPC(3, OPC_SEL_S16,      sel.s16),
+	OPC(3, OPC_SEL_S32,      sel.s32),
+	OPC(3, OPC_SEL_F16,      sel.f16),
+	OPC(3, OPC_SEL_F32,      sel.f32),
+	OPC(3, OPC_SAD_S16,      sad.s16),
+	OPC(3, OPC_SAD_S32,      sad.s32),
 
 	/* category 4: */
-	OPC(4, OPC_RCP,          rcp,           cat4),
-	OPC(4, OPC_RSQ,          rsq,           cat4),
-	OPC(4, OPC_LOG2,         log2,          cat4),
-	OPC(4, OPC_EXP2,         exp2,          cat4),
-	OPC(4, OPC_SIN,          sin,           cat4),
-	OPC(4, OPC_COS,          cos,           cat4),
-	OPC(4, OPC_SQRT,         sqrt,          cat4),
+	OPC(4, OPC_RCP,          rcp),
+	OPC(4, OPC_RSQ,          rsq),
+	OPC(4, OPC_LOG2,         log2),
+	OPC(4, OPC_EXP2,         exp2),
+	OPC(4, OPC_SIN,          sin),
+	OPC(4, OPC_COS,          cos),
+	OPC(4, OPC_SQRT,         sqrt),
 
 	/* category 5: */
-	OPC(5, OPC_ISAM,         isam,          cat5),
-	OPC(5, OPC_SAM,          sam,           cat5),
-	OPC(5, OPC_GETSIZE,      getsize,       cat5),
-	OPC(5, OPC_GETINFO,      getinfo,       cat5),
+	OPC(5, OPC_ISAM,         isam),
+	OPC(5, OPC_ISAML,        isaml),
+	OPC(5, OPC_ISAMM,        isamm),
+	OPC(5, OPC_SAM,          sam),
+	OPC(5, OPC_SAMB,         samb),
+	OPC(5, OPC_SAML,         saml),
+	OPC(5, OPC_SAMGQ,        samgq),
+	OPC(5, OPC_GETLOD,       getlod),
+	OPC(5, OPC_CONV,         conv),
+	OPC(5, OPC_CONVM,        convm),
+	OPC(5, OPC_GETSIZE,      getsize),
+	OPC(5, OPC_GETBUF,       getbuf),
+	OPC(5, OPC_GETPOS,       getpos),
+	OPC(5, OPC_GETINFO,      getinfo),
+	OPC(5, OPC_DSX,          dsx),
+	OPC(5, OPC_DSY,          dsy),
+	OPC(5, OPC_GATHER4R,     gather4r),
+	OPC(5, OPC_GATHER4G,     gather4g),
+	OPC(5, OPC_GATHER4B,     gather4b),
+	OPC(5, OPC_GATHER4A,     gather4a),
+	OPC(5, OPC_SAMGP0,       samgp0),
+	OPC(5, OPC_SAMGP1,       samgp1),
+	OPC(5, OPC_SAMGP2,       samgp2),
+	OPC(5, OPC_SAMGP3,       samgp3),
+	OPC(5, OPC_DSXPP_1,      dsxpp.1),
+	OPC(5, OPC_DSYPP_1,      dsypp.1),
+	OPC(5, OPC_RGETPOS,      rgetpos),
+	OPC(5, OPC_RGETINFO,     rgetinfo),
+
 
 	/* category 6: */
-	OPC(6, OPC_LDG,          ldg,           cat6),
-	OPC(6, OPC_LDP,          ldp,           cat6),
-	OPC(6, OPC_STG,          stg,           cat6),
-	OPC(6, OPC_STP,          stp,           cat6),
-	OPC(6, OPC_STI,          sti,           cat6),
+	OPC(6, OPC_LDG,          ldg),
+	OPC(6, OPC_LDL,          ldl),
+	OPC(6, OPC_LDP,          ldp),
+	OPC(6, OPC_STG,          stg),
+	OPC(6, OPC_STL,          stl),
+	OPC(6, OPC_STP,          stp),
+	OPC(6, OPC_STI,          sti),
+	OPC(6, OPC_G2L,          g2l),
+	OPC(6, OPC_L2G,          l2g),
+	OPC(6, OPC_PREFETCH,     prefetch),
+	OPC(6, OPC_LDLW,         ldlw),
+	OPC(6, OPC_STLW,         stlw),
+	OPC(6, OPC_RESFMT,       resfmt),
+	OPC(6, OPC_RESINFO,      resinf),
+	OPC(6, OPC_ATOMIC_ADD_L,     atomic.add.l),
+	OPC(6, OPC_ATOMIC_SUB_L,     atomic.sub.l),
+	OPC(6, OPC_ATOMIC_XCHG_L,    atomic.xchg.l),
+	OPC(6, OPC_ATOMIC_INC_L,     atomic.inc.l),
+	OPC(6, OPC_ATOMIC_DEC_L,     atomic.dec.l),
+	OPC(6, OPC_ATOMIC_CMPXCHG_L, atomic.cmpxchg.l),
+	OPC(6, OPC_ATOMIC_MIN_L,     atomic.min.l),
+	OPC(6, OPC_ATOMIC_MAX_L,     atomic.max.l),
+	OPC(6, OPC_ATOMIC_AND_L,     atomic.and.l),
+	OPC(6, OPC_ATOMIC_OR_L,      atomic.or.l),
+	OPC(6, OPC_ATOMIC_XOR_L,     atomic.xor.l),
+	OPC(6, OPC_LDGB_TYPED_4D,    ldgb.typed.4d),
+	OPC(6, OPC_STGB_4D_4,    stgb.4d.4),
+	OPC(6, OPC_STIB,         stib),
+	OPC(6, OPC_LDC_4,        ldc.4),
+	OPC(6, OPC_LDLV,         ldlv),
+
 
 #undef OPC
 };
@@ -467,14 +656,14 @@ static void print_instr(uint32_t *dwords, int level, int n)
 
 	if (instr->sync)
 		printf("(sy)");
-	// XXX this at least doesn't apply to category 6, maybe only applies to category 0:
-	if ((instr->opc_cat < 5) && instr->generic.ss)
+	if (instr->ss && ((1 <= instr->opc_cat) && (instr->opc_cat <= 4)))
 		printf("(ss)");
 	if (instr->jmp_tgt)
 		printf("(jp)");
-	// XXX this at least doesn't apply to category 6:
-	if ((instr->opc_cat < 5) && instr->generic.repeat)
-		printf("(rpt%d)", instr->generic.repeat);
+	if (instr->repeat && (instr->opc_cat <= 4))
+		printf("(rpt%d)", instr->repeat);
+	if (instr->ul && ((2 <= instr->opc_cat) && (instr->opc_cat <= 4)))
+		printf("(ul)");
 
 	name = GETINFO(instr)->name;
 
