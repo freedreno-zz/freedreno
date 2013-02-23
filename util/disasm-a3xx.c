@@ -183,7 +183,8 @@ static void print_instr_cat2(instr_t *instr)
 	}
 
 	printf(" ");
-	print_reg((reg_t)(cat2->dst), cat2->full ^ cat2->dst_half, false, false, false, false, false);
+	print_reg((reg_t)(cat2->dst), cat2->full ^ cat2->dst_half,
+			false, false, false, false, false);
 	printf(", ");
 	print_reg((reg_t)(cat2->src1), cat2->full, cat2->src1_r,
 			cat2->src1_c, false, false, cat2->src1_abs);
@@ -245,8 +246,27 @@ static void print_instr_cat5(instr_t *instr)
 {
 	instr_cat5_t *cat5 = &instr->cat5;
 
-	if ((debug & PRINT_VERBOSE) && (cat5->dummy1|cat5->dummy2))
-		printf("\t{5: %x,%x}", cat5->dummy1, cat5->dummy2);
+	if (cat5->is_3d)
+		printf(".3d");
+
+	printf(" (%s)", type[cat5->type]);
+	printf("(xyzw)");  // XXX can we play with swizzle (writemask), or load less than 4 components?
+	print_reg((reg_t)(cat5->dst), type_size(cat5->type) == 32,
+			false, false, false, false, false);
+
+	if ((cat5->opc != OPC_GETINFO)) {
+		printf(", ");
+		print_reg((reg_t)(cat5->src), true, false, false, false, false, false);
+	}
+
+	if ((cat5->opc == OPC_ISAM) || (cat5->opc == OPC_SAM)) {
+		printf(", s#%d", cat5->samp);
+	}
+
+	printf(", t#%d", cat5->tex);
+
+	if ((debug & PRINT_VERBOSE) && (cat5->dummy1|cat5->dummy2|cat5->dummy3|cat5->dummy4))
+		printf("\t{5: %x,%x,%x,%x}", cat5->dummy1, cat5->dummy2, cat5->dummy3, cat5->dummy4);
 }
 
 static int32_t u2i(uint32_t val, int nbits)

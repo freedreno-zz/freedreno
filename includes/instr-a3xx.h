@@ -301,10 +301,21 @@ typedef struct PACKED {
 
 typedef struct PACKED {
 	/* dword0: */
-	uint32_t dummy1   : 32;
+	uint32_t must_be_one1 : 1;
+	uint32_t src      : 8;
+
+	uint32_t dummy1   : 12;
+	uint32_t samp     : 4;  // XXX check # of bits
+	uint32_t tex      : 7;  // XXX confirm and check # of bits
 
 	/* dword1: */
-	uint32_t dummy2   : 22;
+	uint32_t dst      : 8;
+	uint32_t dummy2   : 4; // XXX probably write-mask
+	uint32_t type     : 3;
+	uint32_t dummy3   : 1;
+	uint32_t is_3d    : 1;
+	uint32_t dummy4   : 5;
+
 	uint32_t opc      : 5;
 	uint32_t jmp_tgt  : 1;
 	uint32_t sync     : 1;
