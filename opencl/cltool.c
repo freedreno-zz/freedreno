@@ -21,11 +21,17 @@
  * SOFTWARE.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 
+/* note: we have to do this, instead of use stdio.h, because glibc
+ * stdio.h plays some games with redirecting sscanf which doesn't
+ * work with bionic libc
+ */
+int sscanf(const char *str, const char *format, ...);
+int printf(const char *format, ...);
+int sprintf(char *str, const char *format, ...);
 /* *********** */
 struct cl_compiler {
 	uint32_t unknown[32];
@@ -60,10 +66,28 @@ int cl_get_assembly_from_linked_program(struct cl_program *program,
 		char **str, int *count);
 /* *********** */
 
-char * readfile(const char *path)
+static char * readline(int fd)
+{
+	static char buf[256];
+	char *line = buf;
+	while(1) {
+		int ret = read(fd, line, 1);
+		if (ret != 1)
+			return 0;
+		if (*line == '\n')
+			break;
+		line++;
+	}
+	*(++line) = '\0';
+	return buf;
+}
+
+static char * readfile(const char *path)
 {
 	static char src[64 * 1024];
 	int fd, ret;
+
+	memset(src, 0, sizeof(src));
 
 	fd = open(path, 0);
 	if (fd < 0)
@@ -76,6 +100,80 @@ char * readfile(const char *path)
 	return src;
 }
 
+/* note: we know what we are searching for is dword aligned,
+ * so we get to simplify a bit based on that..
+ */
+static uint32_t * scan_memory(uint32_t *start, uint32_t *end,
+		uint32_t *buf, int sizedwords)
+{
+	int i;
+	while (start < end) {
+		if (&start[sizedwords-1] >= end)
+			return NULL;
+		for (i = 0; (i < sizedwords) && (start[i] == buf[i]); i++) {}
+		if (i == sizedwords)
+			return start;
+		start++;
+	}
+	return NULL;
+}
+
+/* Feed in some pre-compiled shader to disassemble, rather than
+ * what was compiled from the ocl src.  This way we can more
+ * easily disassemble shaders from the glsl compiler (for ex,
+ * extracted from cmdstream).
+ *
+ * But this is less straightforward than you'd expect.  There
+ * are two copies of the raw shader in memory.  But the one at
+ * program->binary->dwords is not the one the disassembler uses
+ * and I haven't found yet the pointer to the other copy.  So
+ * instead we have to search the heap for the 2nd copy, and
+ * overwrite it.  This probably isn't quite perfect.. you probably
+ * want to make sure the program you feed in is smaller than the
+ * ocl program that would otherwise you will be truncated to avoid
+ * possible buffer overruns..  If the program is smaller, it will
+ * be padded with nop's.
+ */
+static void poke_disasm(const char *disasm, struct cl_program *program)
+{
+	int fd;
+	char *line;
+	uint32_t *dwords;
+	uint32_t heap_start = 0, heap_end = 0;
+
+	/* first we need to find the bounds of the heap: */
+	fd = open("/proc/self/maps", 0);
+	if (fd < 0)
+		return;
+	while ((line = readline(fd))) {
+		/* looking for something like:
+		 * 00011000-002a8000 rw-p 00000000 00:00 0          [heap]
+		 */
+		if (strstr(line, "[heap]")) {
+			sscanf(line, "%08x-%08x", &heap_start, &heap_end);
+			break;
+		}
+	}
+
+	if (!(heap_start && heap_end))
+		return;
+
+	/* now search for 2nd copy of shader: */
+	dwords = scan_memory((uint32_t *)heap_start, (uint32_t *)heap_end,
+			program->binary->dwords, program->binary->size_bytes/4);
+
+	/* if we found our own copy, keep looking: */
+	if (dwords == program->binary->dwords)
+		dwords = scan_memory(&dwords[1], (uint32_t *)heap_end,
+				program->binary->dwords, program->binary->size_bytes/4);
+
+	if (!dwords)
+		return;
+
+	printf("found original shader in memory, overwriting with our own!");
+
+	memcpy(dwords, readfile(disasm), program->binary->size_bytes);
+}
 
 int main(int argc, char **argv)
 {
@@ -84,7 +182,7 @@ int main(int argc, char **argv)
 	struct cl_ddl *ddl;
 	int dump_shaders = 0, count = 0, opts_len = 0;
 	struct cl_object *object;
-	char *src, *infile, *opts = NULL;
+	char *src, *infile, *opts = NULL, *disasm;
 	char *assembly[20];
 
 	/* lame argument parsing: */
@@ -101,8 +199,14 @@ int main(int argc, char **argv)
 		argc -= 2;
 	}
 
+	if ((argc > 2) && !strcmp(argv[1], "--disasm")) {
+		disasm = argv[2];
+		argv += 2;
+		argc -= 2;
+	}
+
 	if (argc != 2) {
-		printf("usage: cltool [--dump-shaders] [--opts options-string] testkernel.cl\n");
+		printf("usage: cltool [--dump-shaders] [--opts options-string] [--disasm rawfile.co3] testkernel.cl\n");
 		return -1;
 	}
 
@@ -112,11 +216,20 @@ int main(int argc, char **argv)
 	if (!src)
 		return -1;
 
-	printf("== Compiling Kernel: ==\n%s\n", src);
+	/* don't bother showing the dummy ocl program we are compiling
+	 * if we are going to overwrite it with our own shader to
+	 * disassemble..
+	 */
+	if (!disasm)
+		printf("== Compiling Kernel: ==\n%s\n", src);
 
 	compiler = cl_create_compiler();
 	program = cl_linked_program_from_source(compiler, src, strlen(src)+1, 1,
 			opts, opts_len);
+
+	if (disasm)
+		poke_disasm(disasm, program);
+
 	cl_get_assembly_from_linked_program(program, assembly, &count);
 	printf("%s\n", assembly[0]);
 
