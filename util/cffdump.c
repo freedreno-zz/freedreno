@@ -1071,6 +1071,10 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
+	const char *state_type_names[] = {
+			"shader", "constants",
+			"?", "?", "?", "?", "?",
+	};
 	uint32_t dst_off = dwords[0] & 0xffff;
 	uint32_t state_src = (dwords[0] >> 16) & 0x7;
 	uint32_t state_block_id = (dwords[0] >> 19) & 0x7;
@@ -1093,21 +1097,42 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	}
 
-	printf("%s%s shader, dst_off=%04x, state_src=%04x, state_block_id=%d, "
+	printf("%s%s %s, dst_off=%04x, state_src=%04x, state_block_id=%d, "
 			"num_unit=%d, state_type=%d, ext_src_addr=%08x, size=%04x\n",
-			levels[level], type, dst_off, state_src, state_block_id,
+			levels[level], type, state_type_names[state_type],
+			dst_off, state_src, state_block_id,
 			num_unit, state_type, ext_src_addr, sizedwords-2);
-	disasm_a3xx(dwords + 2, sizedwords - 2, level+2, disasm_type);
 
-	/* dump raw shader: */
-	if (ext && dump_shaders) {
-		static int n = 0;
-		char filename[8];
-		int fd;
-		sprintf(filename, "%04d.%s", n++, ext);
-		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
-		write(fd, dwords + 2, (sizedwords - 2) * 4);
+	if (state_type == 0) {
+		/* shaders:
+		 *
+		 * note: num_unit seems to be # of instruction groups, where
+		 * an instruction group has 4 64bit instructions.
+		 */
+
+		disasm_a3xx(dwords + 2, sizedwords - 2, level+2, disasm_type);
+
+		/* dump raw shader: */
+		if (ext && dump_shaders) {
+			static int n = 0;
+			char filename[8];
+			int fd;
+			sprintf(filename, "%04d.%s", n++, ext);
+			fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+			write(fd, dwords + 2, (sizedwords - 2) * 4);
+		}
+	} else if (state_type == 1) {
+		/* uniforms/consts:
+		 *
+		 * note: num_unit seems to be # of pairs of dwords??
+		 */
+		void *extsrc = hostptr(dwords[1] & 0xfffffffc);
+		if (extsrc) {
+			dump_float(extsrc, num_unit*2, level+1);
+			dump_hex(extsrc, num_unit*2, level+1);
+		}
 	}
+
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
