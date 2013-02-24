@@ -601,6 +601,55 @@ static void reg_bin_size(const char *name, uint32_t dword, int level)
 	printf("%s%s: %dx%d (%08x)\n", levels[level], name, x, y, dword);
 }
 
+/*
+ * A3xx registers:
+ */
+
+typedef struct {
+	uint32_t fetchsize  : 7;
+	uint32_t bufstride  : 10;
+	uint32_t switchnext : 1;
+	uint32_t indexcode  : 6;
+	uint32_t steprate   : 8;
+} vfd_fetch_state_t;
+static vfd_fetch_state_t vfd_fetch_state[0xf];
+
+static void reg_vfd_fetch_instr_0_x(const char *name, uint32_t dword, int level)
+{
+	int idx;
+
+	/* this is a bit ugly way, but oh well.. */
+	sscanf(name, "VFD_FETCH_INSTR_0_%x", &idx);
+
+	vfd_fetch_state[idx] = *(vfd_fetch_state_t *)&dword;
+
+	printf("%s%s: %08x (fetchsize=%d, bufstride=%d, switchnext=%d, indexcode=%d, steprate=%d)\n",
+			levels[level], name, dword, vfd_fetch_state[idx].fetchsize,
+			vfd_fetch_state[idx].bufstride, vfd_fetch_state[idx].switchnext,
+			vfd_fetch_state[idx].indexcode, vfd_fetch_state[idx].steprate);
+}
+
+static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
+{
+	int idx;
+	void *buf;
+
+	/* this is a bit ugly way, but oh well.. */
+	sscanf(name, "VFD_FETCH_INSTR_1_%x", &idx);
+
+	reg_hex(name, dword, level);
+
+	buf = hostptr(dword);
+
+	if (buf) {
+		// XXX we probably need to know min/max vtx to know the
+		// right values to dump..
+		uint32_t sizedwords = vfd_fetch_state[idx].fetchsize + 1;
+		dump_float(buf, sizedwords, level+1);
+		dump_hex(buf, sizedwords, level+1);
+	}
+}
+
 static uint32_t type0_reg_vals[0x7fff];
 
 static const const struct {
@@ -983,8 +1032,38 @@ static const const struct {
 		REG(HLSQ_CL_WG_OFFSET_REG, reg_hex),
 		REG(VFD_CONTROL_0, reg_hex),
 		REG(VFD_INDEX_MIN, reg_hex),
-		REG(VFD_FETCH_INSTR_0_0, reg_hex),
-		REG(VFD_FETCH_INSTR_0_4, reg_hex),
+		REG(VFD_FETCH_INSTR_0_0, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_0, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_1, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_1, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_2, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_2, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_3, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_3, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_4, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_4, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_5, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_5, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_6, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_6, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_7, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_7, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_8, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_8, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_9, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_9, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_A, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_A, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_B, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_B, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_C, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_C, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_D, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_D, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_E, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_E, reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0_F, reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1_F, reg_vfd_fetch_instr_1_x),
 		REG(VFD_DECODE_INSTR_0, reg_hex),
 		REG(VFD_VS_THREADING_THRESHOLD, reg_hex),
 		REG(VPC_ATTR, reg_hex),
