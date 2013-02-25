@@ -232,7 +232,7 @@ typedef union PACKED {
 		uint32_t num   : 9;
 	};
 	/* for immediate val: */
-	int32_t  iim_val : 11;
+	int32_t  iim_val   : 11;
 	/* to make compiler happy: */
 	uint32_t dummy12   : 11;
 	uint32_t dummy8    : 8;
@@ -246,7 +246,9 @@ typedef struct PACKED {
 	/* dword1: */
 	uint32_t dummy2   : 8;
 	uint32_t repeat   : 3;
-	uint32_t dummy3   : 9;
+	uint32_t dummy3   : 1;
+	uint32_t ss       : 1;
+	uint32_t dummy4   : 7;
 	uint32_t inv      : 1;
 	uint32_t comp     : 2;
 	uint32_t opc      : 4;
@@ -316,7 +318,7 @@ typedef struct PACKED {
 	uint32_t ss       : 1;
 	uint32_t ul       : 1;   /* dunno */
 	uint32_t dst_half : 1;   /* or widen/narrow.. ie. dst hrN <-> rN */
-	uint32_t shr      : 1;
+	uint32_t ei       : 1;
 	uint32_t cond     : 3;
 	uint32_t src2_r   : 1;
 	uint32_t full     : 1;   /* not half */
@@ -332,13 +334,14 @@ typedef struct PACKED {
 	uint32_t src1_rel : 1;
 	uint32_t src1_c   : 1;
 	uint32_t src2_c   : 1;
-	uint32_t dummy1   : 1;  // XXX ignored?
+	uint32_t src1_neg : 1;
 	uint32_t src2_r   : 1;
 	uint32_t src3     : 11;
 	uint32_t src3_rel : 1;
 	uint32_t src3_c   : 1;
 	uint32_t src3_r   : 1;
-	uint32_t dummy2   : 2;  // XXX im, neg, abs?
+	uint32_t src2_neg : 1;
+	uint32_t src3_neg : 1;
 
 	/* dword1: */
 	uint32_t dst      : 8;

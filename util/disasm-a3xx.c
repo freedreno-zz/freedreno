@@ -68,7 +68,8 @@ static const char *type[] = {
 		[TYPE_S8]  = "s8",
 };
 
-static void print_reg(reg_t reg, bool full, bool r, bool c, bool im, bool neg, bool abs)
+static void print_reg(reg_t reg, bool full, bool r, bool c, bool im,
+		bool neg, bool abs, bool addr_rel)
 {
 	const char type = c ? 'c' : 'r';
 
@@ -87,6 +88,16 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im, bool neg, b
 
 	if (im) {
 		printf("%d", reg.iim_val);
+	} else if (addr_rel) {
+		/* I would just use %+d but trying to make it diff'able with
+		 * libllvm-a3xx...
+		 */
+		if (reg.iim_val < 0)
+			printf("%s%c<a0.x - %d>", full ? "" : "h", type, -reg.iim_val);
+		else if (reg.iim_val > 0)
+			printf("%s%c<a0.x + %d>", full ? "" : "h", type, reg.iim_val);
+		else
+			printf("%s%c<a0.x>", full ? "" : "h", type);
 	} else if ((reg.num == 61) && !c) {
 		printf("a0.%c", component[reg.comp]);
 	} else if ((reg.num == 62) && !c) {
@@ -115,8 +126,8 @@ static void print_instr_cat0(instr_t *instr)
 		break;
 	}
 
-	if ((debug & PRINT_VERBOSE) && (cat0->dummy1|cat0->dummy2|cat0->dummy3))
-		printf("\t{0: %x,%x,%x}", cat0->dummy1, cat0->dummy2, cat0->dummy3);
+	if ((debug & PRINT_VERBOSE) && (cat0->dummy1|cat0->dummy2|cat0->dummy3|cat0->dummy4))
+		printf("\t{0: %x,%x,%x,%x}", cat0->dummy1, cat0->dummy2, cat0->dummy3, cat0->dummy4);
 }
 
 static void print_instr_cat1(instr_t *instr)
@@ -147,22 +158,29 @@ static void print_instr_cat1(instr_t *instr)
 		printf("(pos_infinity)");
 
 	print_reg((reg_t)(cat1->dst), type_size(cat1->dst_type) == 32,
-			false, false, false, false, false);
+			false, false, false, false, false, cat1->dst_rel);
 
 	printf(", ");
 
-	// XXX maybe we can handle this in print_reg instead of special casing?
-	// then we could use same for cat0..
+	/* ugg, have to special case this.. vs print_reg().. */
 	if (cat1->src_im) {
 		if (type_float(cat1->src_type))
 			printf("(%f)", cat1->fim_val);
 		else
 			printf("%d", cat1->iim_val);
 	} else if (cat1->src_rel && !cat1->src_c) {
-		printf("c<a0.x + %d>", cat1->off);
+		/* I would just use %+d but trying to make it diff'able with
+		 * libllvm-a3xx...
+		 */
+		if (cat1->off < 0)
+			printf("c<a0.x - %d>", -cat1->off);
+		else if (cat1->off > 0)
+			printf("c<a0.x + %d>", cat1->off);
+		else
+			printf("c<a0.x>");
 	} else {
 		print_reg((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
-				cat1->src_r, cat1->src_c, cat1->src_im, false, false);
+				cat1->src_r, cat1->src_c, cat1->src_im, false, false, false);
 	}
 
 	if ((debug & PRINT_VERBOSE) && (cat1->must_be_0))
@@ -194,14 +212,14 @@ static void print_instr_cat2(instr_t *instr)
 	}
 
 	printf(" ");
-	if (cat2->shr)
-		printf("(shr)");
+	if (cat2->ei)
+		printf("(ei)");
 	print_reg((reg_t)(cat2->dst), cat2->full ^ cat2->dst_half,
-			false, false, false, false, false);
+			false, false, false, false, false, false);
 	printf(", ");
-// XXX src1_rel
 	print_reg((reg_t)(cat2->src1), cat2->full, cat2->src1_r,
-			cat2->src1_c, cat2->src1_im, cat2->src1_neg, cat2->src1_abs);
+			cat2->src1_c, cat2->src1_im, cat2->src1_neg,
+			cat2->src1_abs, cat2->src1_rel);
 	switch (cat2->opc) {
 	case OPC_ABSNEG_F:
 	case OPC_ABSNEG_S:
@@ -221,9 +239,9 @@ static void print_instr_cat2(instr_t *instr)
 		break;
 	default:
 		printf(", ");
-// XXX src2_rel
 		print_reg((reg_t)(cat2->src2), cat2->full, cat2->src2_r,
-				cat2->src2_c, cat2->src2_im, cat2->src2_neg, cat2->src2_abs);
+				cat2->src2_c, cat2->src2_im, cat2->src2_neg,
+				cat2->src2_abs, cat2->src2_rel);
 		break;
 	}
 }
@@ -235,6 +253,7 @@ static void print_instr_cat3(instr_t *instr)
 
 	// XXX is this based on opc or some other bit?
 	switch (cat3->opc) {
+	case OPC_MAD_F16:
 	case OPC_MAD_U16:
 	case OPC_MAD_S16:
 	case OPC_SEL_B16:
@@ -248,19 +267,19 @@ static void print_instr_cat3(instr_t *instr)
 
 	printf(" ");
 	print_reg((reg_t)(cat3->dst), full ^ cat3->dst_half,
-			false, false, false, false, false);
+			false, false, false, false, false, false);
 	printf(", ");
 	print_reg((reg_t)(cat3->src1), full,
-			cat3->src1_r, cat3->src1_c, false, false, false);
+			cat3->src1_r, cat3->src1_c, false, cat3->src1_neg,
+			false, cat3->src1_rel);
 	printf(", ");
 	print_reg((reg_t)cat3->src2, full,
-			cat3->src2_r, cat3->src2_c, false, false, false);
+			cat3->src2_r, cat3->src2_c, false, cat3->src2_neg,
+			false, false);
 	printf(", ");
 	print_reg((reg_t)(cat3->src3), full,
-			cat3->src3_r, cat3->src3_c, false, false, false);
-
-	if ((debug & PRINT_VERBOSE) && (cat3->dummy1|cat3->dummy2))
-		printf("\t{3: %x,%x}", cat3->dummy1, cat3->dummy2);
+			cat3->src3_r, cat3->src3_c, false, cat3->src3_neg,
+			false, cat3->src3_rel);
 }
 
 static void print_instr_cat4(instr_t *instr)
@@ -269,11 +288,11 @@ static void print_instr_cat4(instr_t *instr)
 
 	printf(" ");
 	print_reg((reg_t)(cat4->dst), cat4->full ^ cat4->dst_half,
-			false, false, false, false, false);
+			false, false, false, false, false, false);
 	printf(", ");
 	print_reg((reg_t)(cat4->src), cat4->full,
 			cat4->src_r, cat4->src_c, cat4->src_im,
-			cat4->src_neg, cat4->src_abs);
+			cat4->src_neg, cat4->src_abs, cat4->src_rel);
 
 	if ((debug & PRINT_VERBOSE) && (cat4->dummy1|cat4->dummy2))
 		printf("\t{4: %x,%x}", cat4->dummy1, cat4->dummy2);
@@ -303,26 +322,24 @@ static void print_instr_cat5(instr_t *instr)
 	}
 
 	printf("(");
-	// XXX double check swizzle order, this might be backwards:
-	if (cat5->wrmask & (1 << 3))
-		printf("x");
-	if (cat5->wrmask & (1 << 2))
-		printf("y");
-	if (cat5->wrmask & (1 << 1))
-		printf("z");
-	if (cat5->wrmask & (1 << 0))
-		printf("w");
+	for (i = 0; i < 4; i++)
+		if (cat5->wrmask & (1 << i))
+			printf("%c", "xyzw"[i]);
 	printf(")");
 
 	print_reg((reg_t)(cat5->dst), type_size(cat5->type) == 32,
-			false, false, false, false, false);
+			false, false, false, false, false, false);
 
 	switch (cat5->opc) {
 	case OPC_GETINFO:
+	case OPC_GETBUF:
+	case OPC_RGETPOS:
+	case OPC_RGETINFO:
 		break;
 	default:
 		printf(", ");
-		print_reg((reg_t)(cat5->src), true, false, false, false, false, false);
+		print_reg((reg_t)(cat5->src), cat5->full, false, false, false,
+				false, false, false);
 		break;
 	}
 
@@ -383,11 +400,20 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_LDP:
 		/* load instructions: */
 		print_reg((reg_t)(cat6->a.dst), type_size(cat6->type) == 32,
-				false, false, false, false, false);
+				false, false, false, false, false, false);
 		printf(",");
 		printf("%c[", (cat6->opc == OPC_LDG) ? 'g' : 'p');
 		print_reg((reg_t)(cat6->a.src), true,
-				false, false, false, false, false);
+				false, false, false, false, false, false);
+		if (cat6->a.off)
+			printf("%+d", cat6->a.off);
+		printf("]");
+		break;
+	case OPC_PREFETCH:
+		/* similar to load instructions: */
+		printf("g[");
+		print_reg((reg_t)(cat6->a.src), true,
+				false, false, false, false, false, false);
 		if (cat6->a.off)
 			printf("%+d", cat6->a.off);
 		printf("]");
@@ -397,13 +423,13 @@ static void print_instr_cat6(instr_t *instr)
 		/* store instructions: */
 		printf("%c[", (cat6->opc == OPC_STG) ? 'g' : 'p');
 		print_reg((reg_t)(cat6->b.dst), true,
-				false, false, false, false, false);
+				false, false, false, false, false, false);
 		if (cat6->b.off || cat6->b.off_hi)
 			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
 		printf("]");
 		printf(",");
 		print_reg((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
-				false, false, false, false, false);
+				false, false, false, false, false, false);
 
 		break;
 	case OPC_STI:
@@ -411,12 +437,12 @@ static void print_instr_cat6(instr_t *instr)
 		 * slightly different syntax:
 		 */
 		print_reg((reg_t)(cat6->b.dst), false, // XXX is it always half?
-				false, false, false, false, false);
+				false, false, false, false, false, false);
 		if (cat6->b.off || cat6->b.off_hi)
 			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
 		printf(",");
 		print_reg((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
-				false, false, false, false, false);
+				false, false, false, false, false, false);
 		break;
 	}
 
@@ -656,7 +682,7 @@ static void print_instr(uint32_t *dwords, int level, int n)
 
 	if (instr->sync)
 		printf("(sy)");
-	if (instr->ss && ((1 <= instr->opc_cat) && (instr->opc_cat <= 4)))
+	if (instr->ss && (instr->opc_cat <= 4))
 		printf("(ss)");
 	if (instr->jmp_tgt)
 		printf("(jp)");
