@@ -300,6 +300,38 @@ static void print_instr_cat4(instr_t *instr)
 
 static void print_instr_cat5(instr_t *instr)
 {
+	static const struct {
+		bool src1, src2, samp, tex;
+	} info[0x1f] = {
+			[OPC_ISAM]     = { true,  false, true,  true,  },
+			[OPC_ISAML]    = { true,  true,  true,  true,  },
+			[OPC_ISAMM]    = { true,  false, true,  true,  },
+			[OPC_SAM]      = { true,  false, true,  true,  },
+			[OPC_SAMB]     = { true,  true,  true,  true,  },
+			[OPC_SAML]     = { true,  true,  true,  true,  },
+			[OPC_SAMGQ]    = { true,  false, true,  true,  },
+			[OPC_GETLOD]   = { true,  false, true,  true,  },
+			[OPC_CONV]     = { true,  true,  true,  true,  },
+			[OPC_CONVM]    = { true,  true,  true,  true,  },
+			[OPC_GETSIZE]  = { true,  false, false, true,  },
+			[OPC_GETBUF]   = { false, false, false, true,  },
+			[OPC_GETPOS]   = { true,  false, false, true,  },
+			[OPC_GETINFO]  = { false, false, false, true,  },
+			[OPC_DSX]      = { true,  false, false, false, },
+			[OPC_DSY]      = { true,  false, false, false, },
+			[OPC_GATHER4R] = { true,  false, true,  true,  },
+			[OPC_GATHER4G] = { true,  false, true,  true,  },
+			[OPC_GATHER4B] = { true,  false, true,  true,  },
+			[OPC_GATHER4A] = { true,  false, true,  true,  },
+			[OPC_SAMGP0]   = { true,  false, true,  true,  },
+			[OPC_SAMGP1]   = { true,  false, true,  true,  },
+			[OPC_SAMGP2]   = { true,  false, true,  true,  },
+			[OPC_SAMGP3]   = { true,  false, true,  true,  },
+			[OPC_DSXPP_1]  = { true,  false, false, false, },
+			[OPC_DSYPP_1]  = { true,  false, false, false, },
+			[OPC_RGETPOS]  = { false, false, false, false, },
+			[OPC_RGETINFO] = { false, false, false, false, },
+	};
 	instr_cat5_t *cat5 = &instr->cat5;
 	int i;
 
@@ -330,58 +362,40 @@ static void print_instr_cat5(instr_t *instr)
 	print_reg((reg_t)(cat5->dst), type_size(cat5->type) == 32,
 			false, false, false, false, false, false);
 
-	switch (cat5->opc) {
-	case OPC_GETINFO:
-	case OPC_GETBUF:
-	case OPC_RGETPOS:
-	case OPC_RGETINFO:
-		break;
-	default:
+	if (info[cat5->opc].src1) {
 		printf(", ");
-		print_reg((reg_t)(cat5->src), cat5->full, false, false, false,
+		print_reg((reg_t)(cat5->src1), cat5->full, false, false, false,
 				false, false, false);
-		break;
 	}
 
-	switch (cat5->opc) {
-	case OPC_ISAM:
-	case OPC_SAM:
-	case OPC_ISAML:
-	case OPC_ISAMM:
-	case OPC_SAMB:
-	case OPC_SAML:
-	case OPC_SAMGQ:
-	case OPC_GETLOD:
-	case OPC_CONV:
-	case OPC_CONVM:
-	case OPC_GATHER4R:
-	case OPC_GATHER4G:
-	case OPC_GATHER4B:
-	case OPC_GATHER4A:
-	case OPC_SAMGP0:
-	case OPC_SAMGP1:
-	case OPC_SAMGP2:
-	case OPC_SAMGP3:
-		// XXX invert this probably..
-		printf(", s#%d", cat5->samp);
-		break;
+	if (cat5->is_s2en) {
+		printf(", ");
+		print_reg((reg_t)(cat5->s2en.src2), cat5->full, false, false, false,
+				false, false, false);
+		printf(", ");
+		print_reg((reg_t)(cat5->s2en.src3), false, false, false, false,
+				false, false, false);
+	} else {
+		if (cat5->is_o || info[cat5->opc].src2) {
+			printf(", ");
+			print_reg((reg_t)(cat5->norm.src2), cat5->full,
+					false, false, false, false, false, false);
+		}
+		if (info[cat5->opc].samp)
+			printf(", s#%d", cat5->norm.samp);
+		if (info[cat5->opc].tex)
+			printf(", t#%d", cat5->norm.tex);
 	}
 
-	switch (cat5->opc) {
-	case OPC_DSX:
-	case OPC_DSY:
-	case OPC_DSXPP_1:
-	case OPC_DSYPP_1:
-	case OPC_RGETPOS:
-	case OPC_RGETINFO:
-		break;
-	default:
-		printf(", t#%d", cat5->tex);
-		break;
+	if (debug & PRINT_VERBOSE) {
+		if (cat5->is_s2en) {
+			if ((debug & PRINT_VERBOSE) && (cat5->s2en.dummy1|cat5->s2en.dummy2|cat5->dummy2))
+				printf("\t{5: %x,%x,%x}", cat5->s2en.dummy1, cat5->s2en.dummy2, cat5->dummy2);
+		} else {
+			if ((debug & PRINT_VERBOSE) && (cat5->norm.dummy1|cat5->dummy2))
+				printf("\t{5: %x,%x}", cat5->norm.dummy1, cat5->dummy2);
+		}
 	}
-
-	if ((debug & PRINT_VERBOSE) && (cat5->dummy1|cat5->dummy2))
-		printf("\t{5: %x,%x}", cat5->dummy1, cat5->dummy2);
 }
 
 static int32_t u2i(uint32_t val, int nbits)

@@ -234,7 +234,7 @@ typedef union PACKED {
 	/* for immediate val: */
 	int32_t  iim_val   : 11;
 	/* to make compiler happy: */
-	uint32_t dummy12   : 11;
+	uint32_t dummy11   : 11;
 	uint32_t dummy8    : 8;
 } reg_t;
 
@@ -384,12 +384,33 @@ typedef struct PACKED {
 
 typedef struct PACKED {
 	/* dword0: */
-	// XXX note: different meanings if is_o or is_s2en
-	uint32_t full     : 1;   /* not half */
-	uint32_t src      : 8;
-	uint32_t dummy1   : 12;  /* seem to be ignored */
-	uint32_t samp     : 4;
-	uint32_t tex      : 7;
+	union PACKED {
+		/* normal case: */
+		struct PACKED {
+			uint32_t full     : 1;   /* not half */
+			uint32_t src1     : 8;
+			uint32_t src2     : 8;
+			uint32_t dummy1   : 4;   /* seem to be ignored */
+			uint32_t samp     : 4;
+			uint32_t tex      : 7;
+		} norm;
+		/* s2en case: */
+		struct PACKED {
+			uint32_t full     : 1;   /* not half */
+			uint32_t src1     : 8;
+			uint32_t src2     : 11;
+			uint32_t dummy1   : 1;
+			uint32_t src3     : 8;
+			uint32_t dummy2   : 3;
+		} s2en;
+		/* same in either case: */
+		// XXX I think, confirm this
+		struct PACKED {
+			uint32_t full     : 1;   /* not half */
+			uint32_t src1     : 8;
+			uint32_t pad      : 23;
+		};
+	};
 
 	/* dword1: */
 	uint32_t dst      : 8;
