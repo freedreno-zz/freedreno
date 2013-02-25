@@ -1152,44 +1152,55 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	const char *state_type_names[] = {
 			"shader", "constants",
-			"?", "?", "?", "?", "?",
+			"?2?", "?3?", "?4?", "?5?", "?6?",
+	};
+	const char *state_block_names[] = {
+			"?0?", "?1?", "texture", "mipmap", "vertex", "?5?", "fragment",
 	};
 	uint32_t dst_off = dwords[0] & 0xffff;
 	uint32_t state_src = (dwords[0] >> 16) & 0x7;
 	uint32_t state_block_id = (dwords[0] >> 19) & 0x7;
 	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
 	uint32_t state_type = dwords[1] & 0x3;
-	uint32_t ext_src_addr = (dwords[1] >> 2) & 0x3fffffff;
-	const char *type = NULL, *ext = NULL;
-	enum shader_t disasm_type;
-
-	switch (state_block_id) {
-	case HLSQ_BLOCK_ID_SP_VS:
-		type = "vertex";
-		ext = "vo3";
-		disasm_type = SHADER_VERTEX;
-		break;
-	case HLSQ_BLOCK_ID_SP_FS:
-		type = "fragment";
-		ext = "fo3";
-		disasm_type = SHADER_FRAGMENT;
-		break;
-	}
+	uint32_t ext_src_addr = dwords[1] & 0xfffffffc;
+	void *contents;
 
 	printf("%s%s %s, dst_off=%04x, state_src=%04x, state_block_id=%d, "
 			"num_unit=%d, state_type=%d, ext_src_addr=%08x, size=%04x\n",
-			levels[level], type, state_type_names[state_type],
-			dst_off, state_src, state_block_id,
-			num_unit, state_type, ext_src_addr, sizedwords-2);
+			levels[level], state_block_names[state_block_id],
+			state_type_names[state_type], dst_off, state_src,
+			state_block_id, num_unit, state_type, ext_src_addr,
+			sizedwords-2);
 
-	if (state_type == 0) {
+	/* we could either have a ptr to other gpu buffer, or directly have
+	 * contents inline:
+	 */
+	contents = hostptr(ext_src_addr);
+	if (!contents)
+		contents = dwords + 2;
+
+	if ((state_type == 0) && ((state_block_id == HLSQ_BLOCK_ID_SP_VS) ||
+			(state_block_id == HLSQ_BLOCK_ID_SP_FS))) {
+		enum shader_t disasm_type;
+		const char *ext = NULL;
+
 		/* shaders:
 		 *
 		 * note: num_unit seems to be # of instruction groups, where
 		 * an instruction group has 4 64bit instructions.
 		 */
+		switch (state_block_id) {
+		case HLSQ_BLOCK_ID_SP_VS:
+			ext = "vo3";
+			disasm_type = SHADER_VERTEX;
+			break;
+		case HLSQ_BLOCK_ID_SP_FS:
+			ext = "fo3";
+			disasm_type = SHADER_FRAGMENT;
+			break;
+		}
 
-		disasm_a3xx(dwords + 2, sizedwords - 2, level+2, disasm_type);
+		disasm_a3xx(contents, num_unit * 4 * 2, level+2, disasm_type);
 
 		/* dump raw shader: */
 		if (ext && dump_shaders) {
@@ -1200,16 +1211,13 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 			write(fd, dwords + 2, (sizedwords - 2) * 4);
 		}
-	} else if (state_type == 1) {
+	} else {
 		/* uniforms/consts:
 		 *
 		 * note: num_unit seems to be # of pairs of dwords??
 		 */
-		void *extsrc = hostptr(dwords[1] & 0xfffffffc);
-		if (extsrc) {
-			dump_float(extsrc, num_unit*2, level+1);
-			dump_hex(extsrc, num_unit*2, level+1);
-		}
+		dump_float(contents, num_unit*2, level+1);
+		dump_hex(contents, num_unit*2, level+1);
 	}
 
 }
