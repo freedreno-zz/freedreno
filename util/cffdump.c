@@ -582,6 +582,46 @@ static void reg_vgt_current_bin_id_min_max(const char *name, uint32_t dword, int
 			name, dword, col, row, gb);
 }
 
+static struct {
+	uint32_t config;
+	uint32_t address;
+	uint32_t length;
+} vsc_pipe_data[7];
+
+static void reg_vsc_pipe_config(const char *name, uint32_t dword, int level)
+{
+	int idx;
+	sscanf(name, "VSC_PIPE_CONFIG_%x", &idx);
+	vsc_pipe_data[idx].config = dword;
+	reg_hex(name, dword, level);
+}
+
+static void reg_vsc_pipe_data_address(const char *name, uint32_t dword, int level)
+{
+	int idx;
+	sscanf(name, "VSC_PIPE_DATA_ADDRESS_%x", &idx);
+	vsc_pipe_data[idx].address = dword;
+	reg_hex(name, dword, level);
+}
+
+static void reg_vsc_pipe_data_length(const char *name, uint32_t dword, int level)
+{
+	int idx;
+	void *buf;
+	sscanf(name, "VSC_PIPE_DATA_LENGTH_%x", &idx);
+	vsc_pipe_data[idx].length = dword;
+	reg_hex(name, dword, level);
+
+	/* as this is the last register in the triplet written, we dump
+	 * the pipe data here..
+	 */
+	buf = hostptr(vsc_pipe_data[idx].address);
+	if (buf) {
+		/* not sure how much of this is useful: */
+		dump_hex(buf, min(vsc_pipe_data[idx].length/4, 16), level+1);
+	}
+}
+
 static void reg_xy(const char *name, uint32_t dword, int level)
 {
 	/* note: window_offset is 14 bits, scissors are 13 bits (at least in
@@ -831,7 +871,30 @@ static const const struct {
 		REG(A220_RB_LRZ_VSC_CONTROL, reg_hex),
 		REG(A220_GRAS_CONTROL, reg_hex),
 		REG(A220_VSC_BIN_SIZE, reg_bin_size),
-		REG(A220_VSC_PIPE_DATA_LENGTH_7, reg_hex),
+		REG(VSC_PIPE_CONFIG_0, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_0, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_0, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_1, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_1, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_1, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_2, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_2, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_2, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_3, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_3, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_3, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_4, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_4, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_4, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_5, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_5, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_5, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_6, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_6, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_6, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_7, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_7, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_7, reg_hex),
 
 		/*registers added in adreno225*/
 		REG(A225_RB_COLOR_INFO3, reg_hex),
@@ -932,30 +995,30 @@ static const const struct {
 		REG(CP_SCRATCH_REG3, reg_hex),
 		REG(VSC_BIN_SIZE, reg_hex),
 		REG(VSC_SIZE_ADDRESS, reg_hex),
-		REG(VSC_PIPE_CONFIG_0, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_0, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_0, reg_hex),
-		REG(VSC_PIPE_CONFIG_1, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_1, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_1, reg_hex),
-		REG(VSC_PIPE_CONFIG_2, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_2, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_2, reg_hex),
-		REG(VSC_PIPE_CONFIG_3, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_3, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_3, reg_hex),
-		REG(VSC_PIPE_CONFIG_4, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_4, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_4, reg_hex),
-		REG(VSC_PIPE_CONFIG_5, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_5, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_5, reg_hex),
-		REG(VSC_PIPE_CONFIG_6, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_6, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_6, reg_hex),
-		REG(VSC_PIPE_CONFIG_7, reg_hex),
-		REG(VSC_PIPE_DATA_ADDRESS_7, reg_hex),
-		REG(VSC_PIPE_DATA_LENGTH_7, reg_hex),
+		REG(VSC_PIPE_CONFIG_0, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_0, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_0, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_1, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_1, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_1, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_2, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_2, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_2, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_3, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_3, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_3, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_4, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_4, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_4, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_5, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_5, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_5, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_6, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_6, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_6, reg_vsc_pipe_data_length),
+		REG(VSC_PIPE_CONFIG_7, reg_vsc_pipe_config),
+		REG(VSC_PIPE_DATA_ADDRESS_7, reg_vsc_pipe_data_address),
+		REG(VSC_PIPE_DATA_LENGTH_7, reg_vsc_pipe_data_length),
 		REG(GRAS_CL_USER_PLANE_X0, reg_hex),
 		REG(GRAS_CL_USER_PLANE_Y0, reg_hex),
 		REG(GRAS_CL_USER_PLANE_Z0, reg_hex),

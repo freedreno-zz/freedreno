@@ -86,6 +86,31 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 #define REG_VGT_CURRENT_BIN_ID_MAX	0x2203
 #define REG_VGT_CURRENT_BIN_ID_MIN	0x2207
 
+/* added in a220: */
+#define REG_VSC_PIPE_CONFIG_0       0x0c06
+#define REG_VSC_PIPE_DATA_ADDRESS_0 0x0c07
+#define REG_VSC_PIPE_DATA_LENGTH_0  0x0c08
+#define REG_VSC_PIPE_CONFIG_1       0x0c09
+#define REG_VSC_PIPE_DATA_ADDRESS_1 0x0c0a
+#define REG_VSC_PIPE_DATA_LENGTH_1  0x0c0b
+#define REG_VSC_PIPE_CONFIG_2       0x0c0c
+#define REG_VSC_PIPE_DATA_ADDRESS_2 0x0c0d
+#define REG_VSC_PIPE_DATA_LENGTH_2  0x0c0e
+#define REG_VSC_PIPE_CONFIG_3       0x0c0f
+#define REG_VSC_PIPE_DATA_ADDRESS_3 0x0c10
+#define REG_VSC_PIPE_DATA_LENGTH_3  0x0c11
+#define REG_VSC_PIPE_CONFIG_4       0x0c12
+#define REG_VSC_PIPE_DATA_ADDRESS_4 0x0c13
+#define REG_VSC_PIPE_DATA_LENGTH_4  0x0c14
+#define REG_VSC_PIPE_CONFIG_5       0x0c15
+#define REG_VSC_PIPE_DATA_ADDRESS_5 0x0c16
+#define REG_VSC_PIPE_DATA_LENGTH_5  0x0c17
+#define REG_VSC_PIPE_CONFIG_6       0x0c18
+#define REG_VSC_PIPE_DATA_ADDRESS_6 0x0c19
+#define REG_VSC_PIPE_DATA_LENGTH_6  0x0c1a
+#define REG_VSC_PIPE_CONFIG_7       0x0c1b
+#define REG_VSC_PIPE_DATA_ADDRESS_7 0x0c1c
+#define REG_VSC_PIPE_DATA_LENGTH_7  0x0c1d
 
 /* unnamed registers: */
 #define REG_0c02		0x0c02
