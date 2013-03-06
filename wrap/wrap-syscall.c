@@ -86,30 +86,26 @@ static struct device_info kgsl_2d_info = {
 		},
 };
 
-static struct device_info pmem_info = {
-		.name = "pmem-gpu",
-		.ioctl_info = {
-				IOCTL_INFO(PMEM_GET_PHYS),
-				IOCTL_INFO(PMEM_MAP),
-				IOCTL_INFO(PMEM_GET_SIZE),
-				IOCTL_INFO(PMEM_UNMAP),
-				IOCTL_INFO(PMEM_ALLOCATE),
-				IOCTL_INFO(PMEM_CONNECT),
-				IOCTL_INFO(PMEM_GET_TOTAL_SIZE),
-				IOCTL_INFO(HW3D_REVOKE_GPU),
-				IOCTL_INFO(HW3D_GRANT_GPU),
-				IOCTL_INFO(HW3D_WAIT_FOR_INTERRUPT),
-				IOCTL_INFO(PMEM_CLEAN_INV_CACHES),
-				IOCTL_INFO(PMEM_CLEAN_CACHES),
-				IOCTL_INFO(PMEM_INV_CACHES),
-				IOCTL_INFO(PMEM_GET_FREE_SPACE),
-				IOCTL_INFO(PMEM_ALLOCATE_ALIGNED),
-		},
-};
-
 static struct device_info drm_info = {
 		.name = "drm",
 		.ioctl_info = {
+				IOCTL_INFO(DRM_IOCTL_VERSION),
+				IOCTL_INFO(DRM_IOCTL_GET_UNIQUE),
+				IOCTL_INFO(DRM_IOCTL_GET_MAGIC),
+				IOCTL_INFO(DRM_IOCTL_IRQ_BUSID),
+				IOCTL_INFO(DRM_IOCTL_GET_MAP),
+				IOCTL_INFO(DRM_IOCTL_GET_CLIENT),
+				IOCTL_INFO(DRM_IOCTL_GET_STATS),
+				IOCTL_INFO(DRM_IOCTL_SET_VERSION),
+				IOCTL_INFO(DRM_IOCTL_MODESET_CTL),
+				IOCTL_INFO(DRM_IOCTL_GEM_CLOSE),
+				IOCTL_INFO(DRM_IOCTL_GEM_FLINK),
+				IOCTL_INFO(DRM_IOCTL_GEM_OPEN),
+				IOCTL_INFO(DRM_IOCTL_GET_CAP),
+				IOCTL_INFO(DRM_IOCTL_SET_UNIQUE),
+				IOCTL_INFO(DRM_IOCTL_AUTH_MAGIC),
+				IOCTL_INFO(DRM_IOCTL_SET_MASTER),
+				IOCTL_INFO(DRM_IOCTL_DROP_MASTER),
 				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_CREATE),
 				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_PREP),
 				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_SETMEMTYPE),
@@ -128,7 +124,7 @@ static struct device_info drm_info = {
 		},
 };
 
-static int kgsl_3d0 = -1, kgsl_2d0 = -1, kgsl_2d1 = -1, pmem_gpu0 = -1, pmem_gpu1 = -1, drm = -1;
+static int kgsl_3d0 = -1, kgsl_2d0 = -1, kgsl_2d1 = -1, drm = -1;
 
 
 static struct device_info * get_kgsl_info(int fd)
@@ -347,12 +343,6 @@ int open(const char* path, int flags, ...)
 		} else if (!strcmp(path, "/dev/kgsl-2d1")) {
 			kgsl_2d1 = ret;
 			printf("found kgsl_2d1: %d\n", kgsl_2d1);
-		} else if (!strcmp(path, "/dev/pmem_gpu0")) {
-			pmem_gpu0 = ret;
-			printf("found pmem_gpu0: %d\n", pmem_gpu0);
-		} else if (!strcmp(path, "/dev/pmem_gpu1")) {
-			pmem_gpu1 = ret;
-			printf("found pmem_gpu1: %d\n", pmem_gpu1);
 		} else if (!strcmp(path, "/dev/dri/card0")) {
 			drm = ret;
 			printf("found drm: %d\n", drm);
@@ -362,6 +352,22 @@ int open(const char* path, int flags, ...)
 	}
 
 	return ret;
+}
+
+int close(int fd)
+{
+	PROLOG(close);
+
+	if (fd == kgsl_3d0)
+		kgsl_3d0 = -1;
+	else if (fd == kgsl_2d0)
+		kgsl_2d0 = -1;
+	else if (fd == kgsl_2d1)
+		kgsl_2d1 = -1;
+	else if (fd == drm)
+		drm = -1;
+
+	return orig_close(fd);
 }
 
 int drmOpen(const char *name, const char *busid)
@@ -788,16 +794,6 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 	}
 }
 
-static void pmem_ioctl_pre(int fd, unsigned long int request, void *ptr)
-{
-	dump_ioctl(&pmem_info, _IOC_WRITE, fd, request, ptr, 0);
-}
-
-static void pmem_ioctl_post(int fd, unsigned long int request, void *ptr, int ret)
-{
-	dump_ioctl(&pmem_info, _IOC_READ, fd, request, ptr, ret);
-}
-
 static void drm_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
 	dump_ioctl(&drm_info, _IOC_WRITE, fd, request, ptr, 0);
@@ -883,8 +879,6 @@ int ioctl(int fd, unsigned long int request, ...)
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_pre(fd, request, ptr);
-	else if ((fd == pmem_gpu0) || (fd == pmem_gpu1))
-		pmem_ioctl_pre(fd, request, ptr);
 	else if (fd == drm)
 		drm_ioctl_pre(fd, request, ptr);
 	else
@@ -908,8 +902,6 @@ int ioctl(int fd, unsigned long int request, ...)
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_post(fd, request, ptr, ret);
-	else if ((fd == pmem_gpu0) || (fd == pmem_gpu1))
-		pmem_ioctl_post(fd, request, ptr, ret);
 	else if (fd == drm)
 		drm_ioctl_post(fd, request, ptr, ret);
 	else
