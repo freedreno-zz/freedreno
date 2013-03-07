@@ -1443,7 +1443,7 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 					printf(" %u", idx[i]);
 			}
 			printf("\n");
-			dump_hex(ptr, dwords[4], level+1);
+			dump_hex(ptr, dwords[4]/4, level+1);
 		}
 	}
 
