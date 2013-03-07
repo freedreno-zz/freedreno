@@ -59,13 +59,15 @@ static const struct format_mode format_modes[] = {
 
 void test_composite(const char *name, const struct blend_mode *blend,
 		const struct format_mode *dst_format,
-		const struct format_mode *src_format, uint32_t src_repeat,
-		const struct format_mode *mask_format, uint32_t mask_repeat)
+		uint32_t bw, uint32_t bh,
+		const struct format_mode *src_format,
+		uint32_t src_repeat, uint32_t sw, uint32_t sh,
+		const struct format_mode *mask_format,
+		uint32_t mask_repeat, uint32_t mw, uint32_t mh)
 {
 	PixmapPtr src, dest, mask = NULL;
 	C2D_OBJECT blit = {};
 	c2d_ts_handle curTimestamp;
-	uint32_t sw = 17, sh = 19;
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("%s: op:%s src:%s (repeat:%d) mask=%s (repeat:%d) dst:%s",
@@ -108,7 +110,7 @@ void test_composite(const char *name, const struct blend_mode *blend,
 			mask = create_pixmap(1, 1, mask_format->format);
 			blit.config_mask |= C2D_MASK_TILE_BIT;
 		} else {
-			mask = create_pixmap(sw, sh, mask_format->format);
+			mask = create_pixmap(mw, mh, mask_format->format);
 		}
 
 		blit.config_mask |= C2D_MASK_SURFACE_BIT;
@@ -122,8 +124,8 @@ void test_composite(const char *name, const struct blend_mode *blend,
 
 	blit.source_rect.x = FIXED(1);
 	blit.source_rect.y = FIXED(2);
-	blit.source_rect.width = FIXED(sw - blit.source_rect.x - 1);
-	blit.source_rect.height = FIXED(sh - blit.source_rect.y - 2);
+	blit.source_rect.width = FIXED(bw - blit.source_rect.x - 1);
+	blit.source_rect.height = FIXED(bh - blit.source_rect.y - 2);
 
 	blit.target_rect.x = FIXED((dest->width - sw) / 2);
 	blit.target_rect.y = FIXED((dest->height - sh) / 2);
@@ -145,7 +147,7 @@ void test_composite(const char *name, const struct blend_mode *blend,
 
 int main(int argc, char **argv)
 {
-	uint32_t i, j;
+	uint32_t i, j, k, l;
 
 	/* create dummy pixmap to get initialization out of the way */
 	c2d_ts_handle curTimestamp;
@@ -162,9 +164,9 @@ int main(int argc, char **argv)
 	/* test composite ops: */
 	for (i = 0; i < ARRAY_SIZE(blend_modes); i++) {
 		test_composite("composite-op", &blend_modes[i],
-				&format_modes[2],
-				&format_modes[0], FALSE,
-				NULL, FALSE);
+				&format_modes[2], 17, 19,
+				&format_modes[0], FALSE, 17, 19,
+				NULL, FALSE, 17, 19);
 	}
 
 	/* test formats, by dst: */
@@ -174,9 +176,9 @@ int main(int argc, char **argv)
 		for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 			// TODO add mask:
 			test_composite(name, &blend_modes[4],
-					&format_modes[i],
-					&format_modes[j], FALSE,
-					NULL, FALSE);
+					&format_modes[i], 17, 19,
+					&format_modes[j], FALSE, 17, 19,
+					NULL, FALSE, 17, 19);
 		}
 	}
 
@@ -187,34 +189,63 @@ int main(int argc, char **argv)
 		for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 			// TODO add mask:
 			test_composite(name, &blend_modes[4],
-					&format_modes[j],
-					&format_modes[i], FALSE,
-					NULL, FALSE);
+					&format_modes[j], 17, 19,
+					&format_modes[i], FALSE, 17, 19,
+					NULL, FALSE, 17, 19);
+		}
+	}
+
+	/* test all combinations of src/dst/mask/op: */
+	for (l = 0; l < ARRAY_SIZE(blend_modes); l++) {
+		for (i = 0; i < ARRAY_SIZE(format_modes); i++) {
+			for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
+				for (k = 0; k < ARRAY_SIZE(format_modes); k++) {
+					test_composite("composite-all", &blend_modes[l],
+							&format_modes[i], 17, 19,
+							&format_modes[j], FALSE, 17, 19,
+							&format_modes[k], FALSE, 17, 19);
+				}
+				test_composite("composite-all", &blend_modes[l],
+						&format_modes[i], 17, 19,
+						&format_modes[j], FALSE, 17, 19,
+						NULL, FALSE, 17, 19);
+			}
 		}
 	}
 
 	/* test with/without mask: */
 	test_composite("composite-mask", &blend_modes[3],
-			&format_modes[0],
-			&format_modes[0], FALSE,
-			NULL, FALSE);
+			&format_modes[0], 17, 19,
+			&format_modes[0], FALSE, 17, 19,
+			NULL, FALSE, 17, 19);
 	for (i = 0; i < ARRAY_SIZE(format_modes); i++) {
 		test_composite("composite-mask", &blend_modes[3],
-				&format_modes[0],
-				&format_modes[0], FALSE,
-				&format_modes[i], FALSE);
+				&format_modes[0], 17, 19,
+				&format_modes[0], FALSE, 17, 19,
+				&format_modes[i], FALSE, 17, 19);
 	}
 
 	/* test repeat: */
-	// TODO add mask:
 	test_composite("composite-repeat", &blend_modes[4],
-			&format_modes[0],
-			&format_modes[0], FALSE,
-			NULL, FALSE);
+			&format_modes[0], 17, 19,
+			&format_modes[0], FALSE, 17, 19,
+			NULL, FALSE, 17, 19);
 	test_composite("composite-repeat", &blend_modes[4],
-			&format_modes[0],
-			&format_modes[0], TRUE,
-			NULL, FALSE);
+			&format_modes[0], 17, 19,
+			&format_modes[0], TRUE, 5, 5,
+			NULL, FALSE, 0, 0);
+	test_composite("composite-repeat", &blend_modes[4],
+			&format_modes[0], 17, 19,
+			&format_modes[0], TRUE, 6, 6,
+			NULL, FALSE, 0, 0);
+	test_composite("composite-repeat", &blend_modes[4],
+			&format_modes[0], 17, 19,
+			&format_modes[0], TRUE, 7, 7,
+			&format_modes[2], TRUE, 5, 5);
+	test_composite("composite-repeat", &blend_modes[4],
+			&format_modes[0], 17, 19,
+			&format_modes[0], TRUE, 8, 8,
+			&format_modes[2], TRUE, 1, 1);
 
 	return 0;
 }

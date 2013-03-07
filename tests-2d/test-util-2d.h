@@ -42,10 +42,13 @@
 		DEBUG_MSG("<<< %s: succeeded", #x); \
 	} while (0)
 
-typedef enum {
-	TRUE = 1,
-	FALSE = 0,
-} Bool;
+#ifndef TRUE
+#  define TRUE 1
+#endif
+#ifndef FALSE
+#  define FALSE 0
+#endif
+typedef int Bool;
 
 typedef struct {
 	C2D_RGB_SURFACE_DEF def;
