@@ -29,6 +29,7 @@ test-es2gears
 
 # misc:
 redump
+zdump
 cffdump
 pgmdump
 *.so

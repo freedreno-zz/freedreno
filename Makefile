@@ -75,7 +75,7 @@ LFLAGS = $(LFLAGS_2D) $(LFLAGS_3D) $(LDFLAGS_MISC) -ldl -lc
 
 all: tests-3d tests-2d
 
-utils: libwrap.so $(UTILS) redump cffdump pgmdump
+utils: libwrap.so $(UTILS) redump cffdump pgmdump zdump
 
 tests-2d: $(TESTS_2D) utils
 
@@ -102,4 +102,6 @@ cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c
 
 pgmdump: pgmdump.c disasm-a2xx.c disasm-a3xx.c
 	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -o $@
+zdump: zdump.c
+	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. $^ -o $@
 
