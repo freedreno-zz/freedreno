@@ -175,15 +175,11 @@ static const char *param_names[] = {
 		"",
 };
 
-int main(int argc, char **argv)
+static void dump_file(int fd)
 {
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
-	int fd, sz;
-
-	fd = open(argv[1], O_RDONLY);
-	if (fd < 0)
-		fprintf(stderr, "could not open: %s\n", argv[1]);
+	int sz;
 
 	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {
 		free(buf);
@@ -210,7 +206,20 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
+}
+
+int main(int argc, char **argv)
+{
+	int i;
+
+	for (i = 1; i < argc; i++) {
+		int fd = open(argv[i], O_RDONLY);
+		if (fd < 0) {
+			fprintf(stderr, "could not open: %s\n", argv[1]);
+			return -1;
+		}
+		dump_file(fd);
+	}
 
 	return 0;
 }
-
