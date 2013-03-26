@@ -97,8 +97,15 @@ test-%: test-%.o $(UTILS)
 redump: redump.c
 	gcc -g $^ -o $@
 
-cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c
-	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. $^ -o $@
+envytools/Makefile:
+	(cd envytools; cmake .)
+
+envytools/rnn/librnn.a:
+envytools/util/libenvyutil.a:
+	(cd envytools; make rnn)
+
+cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c envytools/rnn/librnn.a envytools/util/libenvyutil.a
+	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. -Ienvytools/include $^ -lxml2 -o $@
 
 pgmdump: pgmdump.c disasm-a2xx.c disasm-a3xx.c
 	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -o $@
