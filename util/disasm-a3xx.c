@@ -107,6 +107,172 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im,
 	}
 }
 
+/* Tracking for registers used, read-before-write (input), and
+ * write-after-read (output.. but not 100%)..
+ */
+
+#define MAX_REG 128
+
+typedef struct {
+	uint8_t full[MAX_REG/8];
+	uint8_t half[MAX_REG/8];
+} regmask_t;
+
+static void regmask_set(regmask_t *regmask, unsigned num, bool full, unsigned val)
+{
+	unsigned i = num / 8;
+	unsigned j = num % 8;
+	assert(num < MAX_REG);
+	if (full) {
+		regmask->full[i] = (regmask->full[i] & ~(1 << j)) | (val << j);
+	} else {
+		regmask->half[i] = (regmask->half[i] & ~(1 << j)) | (val << j);
+	}
+}
+
+static unsigned regmask_get(regmask_t *regmask, unsigned num, bool full)
+{
+	unsigned i = num / 8;
+	unsigned j = num % 8;
+	assert(num < MAX_REG);
+	if (full) {
+		return (regmask->full[i] >> j) & 0x1;
+	} else {
+		return (regmask->half[i] >> j) & 0x1;
+	}
+}
+
+static unsigned regidx(reg_t reg)
+{
+	return (4 * reg.num) + reg.comp;
+}
+
+static struct {
+	regmask_t used;
+	regmask_t rbw;      /* read before write */
+	regmask_t war;      /* write after read */
+} regs;
+
+static void print_regs(regmask_t *regmask, bool full)
+{
+	int num, max = 0, cnt = 0;
+	int first, last;
+
+	void print_sequence(void)
+	{
+		if (first != MAX_REG) {
+			if (first == last) {
+				printf(" %d", first);
+			} else {
+				printf(" %d-%d", first, last);
+			}
+		}
+	}
+
+	first = last = MAX_REG;
+
+	for (num = 0; num < MAX_REG; num++) {
+		if (regmask_get(regmask, num, full)) {
+			if (num != (last + 1)) {
+				print_sequence();
+				first = num;
+			}
+			last = num;
+			max = num;
+			cnt++;
+		}
+	}
+
+	print_sequence();
+
+	printf(" (cnt=%d, max=%d)", cnt, max);
+}
+
+static void print_reg_stats(int level)
+{
+	printf("%sRegister Stats:\n", levels[level]);
+	printf("%s- used (half):", levels[level]);
+	print_regs(&regs.used, false);
+	printf("\n");
+	printf("%s- used (full):", levels[level]);
+	print_regs(&regs.used, true);
+	printf("\n");
+	printf("%s- input (half):", levels[level]);
+	print_regs(&regs.rbw, false);
+	printf("\n");
+	printf("%s- input (full):", levels[level]);
+	print_regs(&regs.rbw, true);
+	printf("\n");
+	printf("%s- output (half):", levels[level]);
+	print_regs(&regs.war, false);
+	printf("  (estimated)\n");
+	printf("%s- output (full):", levels[level]);
+	print_regs(&regs.war, true);
+	printf("  (estimated)\n");
+}
+
+/* we have to process the dst register after src to avoid tripping up
+ * the read-before-write detection
+ */
+static unsigned last_dst;
+static bool last_dst_full;
+static bool last_dst_valid = false;
+
+/* current instruction repeat flag: */
+static unsigned repeat;
+
+static void process_reg_dst(void)
+{
+	int i;
+
+	if (!last_dst_valid)
+		return;
+
+	for (i = 0; i <= repeat; i++) {
+		unsigned dst = last_dst + i;
+
+		regmask_set(&regs.war, dst, last_dst_full, 1);
+		regmask_set(&regs.used, dst, last_dst_full, 1);
+	}
+
+	last_dst_valid = false;
+}
+
+static void print_reg_dst(reg_t reg, bool full, bool addr_rel)
+{
+	/* presumably the special registers a0.c and p0.c don't count.. */
+	if (!(addr_rel || (reg.num == 61) || (reg.num == 62))) {
+		last_dst = regidx(reg);
+		last_dst_full = full;
+		last_dst_valid = true;
+	}
+	print_reg(reg, full, false, false, false, false, false, addr_rel);
+}
+
+static void print_reg_src(reg_t reg, bool full, bool r, bool c, bool im,
+		bool neg, bool abs, bool addr_rel)
+{
+	/* presumably the special registers a0.c and p0.c don't count.. */
+	if (!(addr_rel || c || im || (reg.num == 61) || (reg.num == 62))) {
+		int i, num = regidx(reg);
+		for (i = 0; i <= repeat; i++) {
+			unsigned src = num + i;
+
+			if (!regmask_get(&regs.used, src, full))
+				regmask_set(&regs.rbw, src, full, 1);
+
+			regmask_set(&regs.war, src, full, 0);
+			regmask_set(&regs.used, src, full, 1);
+
+			if (!r)
+				break;
+		}
+	}
+
+	print_reg(reg, full, r, c, im, neg, abs, addr_rel);
+}
+
+
 static void print_instr_cat0(instr_t *instr)
 {
 	instr_cat0_t *cat0 = &instr->cat0;
@@ -157,8 +323,8 @@ static void print_instr_cat1(instr_t *instr)
 	if (cat1->pos_inf)
 		printf("(pos_infinity)");
 
-	print_reg((reg_t)(cat1->dst), type_size(cat1->dst_type) == 32,
-			false, false, false, false, false, cat1->dst_rel);
+	print_reg_dst((reg_t)(cat1->dst), type_size(cat1->dst_type) == 32,
+			cat1->dst_rel);
 
 	printf(", ");
 
@@ -179,7 +345,7 @@ static void print_instr_cat1(instr_t *instr)
 		else
 			printf("c<a0.x>");
 	} else {
-		print_reg((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
+		print_reg_src((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
 				cat1->src_r, cat1->src_c, cat1->src_im, false, false, false);
 	}
 
@@ -214,10 +380,9 @@ static void print_instr_cat2(instr_t *instr)
 	printf(" ");
 	if (cat2->ei)
 		printf("(ei)");
-	print_reg((reg_t)(cat2->dst), cat2->full ^ cat2->dst_half,
-			false, false, false, false, false, false);
+	print_reg_dst((reg_t)(cat2->dst), cat2->full ^ cat2->dst_half, false);
 	printf(", ");
-	print_reg((reg_t)(cat2->src1), cat2->full, cat2->src1_r,
+	print_reg_src((reg_t)(cat2->src1), cat2->full, cat2->src1_r,
 			cat2->src1_c, cat2->src1_im, cat2->src1_neg,
 			cat2->src1_abs, cat2->src1_rel);
 	switch (cat2->opc) {
@@ -239,7 +404,7 @@ static void print_instr_cat2(instr_t *instr)
 		break;
 	default:
 		printf(", ");
-		print_reg((reg_t)(cat2->src2), cat2->full, cat2->src2_r,
+		print_reg_src((reg_t)(cat2->src2), cat2->full, cat2->src2_r,
 				cat2->src2_c, cat2->src2_im, cat2->src2_neg,
 				cat2->src2_abs, cat2->src2_rel);
 		break;
@@ -266,18 +431,17 @@ static void print_instr_cat3(instr_t *instr)
 	}
 
 	printf(" ");
-	print_reg((reg_t)(cat3->dst), full ^ cat3->dst_half,
-			false, false, false, false, false, false);
+	print_reg_dst((reg_t)(cat3->dst), full ^ cat3->dst_half, false);
 	printf(", ");
-	print_reg((reg_t)(cat3->src1), full,
+	print_reg_src((reg_t)(cat3->src1), full,
 			cat3->src1_r, cat3->src1_c, false, cat3->src1_neg,
 			false, cat3->src1_rel);
 	printf(", ");
-	print_reg((reg_t)cat3->src2, full,
+	print_reg_src((reg_t)cat3->src2, full,
 			cat3->src2_r, cat3->src2_c, false, cat3->src2_neg,
 			false, false);
 	printf(", ");
-	print_reg((reg_t)(cat3->src3), full,
+	print_reg_src((reg_t)(cat3->src3), full,
 			cat3->src3_r, cat3->src3_c, false, cat3->src3_neg,
 			false, cat3->src3_rel);
 }
@@ -287,10 +451,9 @@ static void print_instr_cat4(instr_t *instr)
 	instr_cat4_t *cat4 = &instr->cat4;
 
 	printf(" ");
-	print_reg((reg_t)(cat4->dst), cat4->full ^ cat4->dst_half,
-			false, false, false, false, false, false);
+	print_reg_dst((reg_t)(cat4->dst), cat4->full ^ cat4->dst_half, false);
 	printf(", ");
-	print_reg((reg_t)(cat4->src), cat4->full,
+	print_reg_src((reg_t)(cat4->src), cat4->full,
 			cat4->src_r, cat4->src_c, cat4->src_im,
 			cat4->src_neg, cat4->src_abs, cat4->src_rel);
 
@@ -359,26 +522,25 @@ static void print_instr_cat5(instr_t *instr)
 			printf("%c", "xyzw"[i]);
 	printf(")");
 
-	print_reg((reg_t)(cat5->dst), type_size(cat5->type) == 32,
-			false, false, false, false, false, false);
+	print_reg_dst((reg_t)(cat5->dst), type_size(cat5->type) == 32, false);
 
 	if (info[cat5->opc].src1) {
 		printf(", ");
-		print_reg((reg_t)(cat5->src1), cat5->full, false, false, false,
+		print_reg_src((reg_t)(cat5->src1), cat5->full, false, false, false,
 				false, false, false);
 	}
 
 	if (cat5->is_s2en) {
 		printf(", ");
-		print_reg((reg_t)(cat5->s2en.src2), cat5->full, false, false, false,
+		print_reg_src((reg_t)(cat5->s2en.src2), cat5->full, false, false, false,
 				false, false, false);
 		printf(", ");
-		print_reg((reg_t)(cat5->s2en.src3), false, false, false, false,
+		print_reg_src((reg_t)(cat5->s2en.src3), false, false, false, false,
 				false, false, false);
 	} else {
 		if (cat5->is_o || info[cat5->opc].src2) {
 			printf(", ");
-			print_reg((reg_t)(cat5->norm.src2), cat5->full,
+			print_reg_src((reg_t)(cat5->norm.src2), cat5->full,
 					false, false, false, false, false, false);
 		}
 		if (info[cat5->opc].samp)
@@ -413,11 +575,10 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_LDG:
 	case OPC_LDP:
 		/* load instructions: */
-		print_reg((reg_t)(cat6->a.dst), type_size(cat6->type) == 32,
-				false, false, false, false, false, false);
+		print_reg_dst((reg_t)(cat6->a.dst), type_size(cat6->type) == 32, false);
 		printf(",");
 		printf("%c[", (cat6->opc == OPC_LDG) ? 'g' : 'p');
-		print_reg((reg_t)(cat6->a.src), true,
+		print_reg_src((reg_t)(cat6->a.src), true,
 				false, false, false, false, false, false);
 		if (cat6->a.off)
 			printf("%+d", cat6->a.off);
@@ -426,7 +587,7 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_PREFETCH:
 		/* similar to load instructions: */
 		printf("g[");
-		print_reg((reg_t)(cat6->a.src), true,
+		print_reg_src((reg_t)(cat6->a.src), true,
 				false, false, false, false, false, false);
 		if (cat6->a.off)
 			printf("%+d", cat6->a.off);
@@ -436,13 +597,12 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_STP:
 		/* store instructions: */
 		printf("%c[", (cat6->opc == OPC_STG) ? 'g' : 'p');
-		print_reg((reg_t)(cat6->b.dst), true,
-				false, false, false, false, false, false);
+		print_reg_dst((reg_t)(cat6->b.dst), true, false);
 		if (cat6->b.off || cat6->b.off_hi)
 			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
 		printf("]");
 		printf(",");
-		print_reg((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
+		print_reg_src((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
 				false, false, false, false, false, false);
 
 		break;
@@ -450,12 +610,11 @@ static void print_instr_cat6(instr_t *instr)
 		/* sti has same encoding as other store instructions, but
 		 * slightly different syntax:
 		 */
-		print_reg((reg_t)(cat6->b.dst), false, // XXX is it always half?
-				false, false, false, false, false, false);
+		print_reg_dst((reg_t)(cat6->b.dst), false /* XXX is it always half? */, false);
 		if (cat6->b.off || cat6->b.off_hi)
 			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
 		printf(",");
-		print_reg((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
+		print_reg_src((reg_t)(cat6->b.src), type_size(cat6->type) == 32,
 				false, false, false, false, false, false);
 		break;
 	}
@@ -700,8 +859,12 @@ static void print_instr(uint32_t *dwords, int level, int n)
 		printf("(ss)");
 	if (instr->jmp_tgt)
 		printf("(jp)");
-	if (instr->repeat && (instr->opc_cat <= 4))
+	if (instr->repeat && (instr->opc_cat <= 4)) {
 		printf("(rpt%d)", instr->repeat);
+		repeat = instr->repeat;
+	} else {
+		repeat = 0;
+	}
 	if (instr->ul && ((2 <= instr->opc_cat) && (instr->opc_cat <= 4)))
 		printf("(ul)");
 
@@ -715,6 +878,8 @@ static void print_instr(uint32_t *dwords, int level, int n)
 	}
 
 	printf("\n");
+
+	process_reg_dst();
 }
 
 int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
@@ -723,8 +888,12 @@ int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 
 	assert((sizedwords % 2) == 0);
 
+	memset(&regs, 0, sizeof(regs));
+
 	for (i = 0; i < sizedwords; i += 2)
 		print_instr(&dwords[i], level, i/2);
+
+	print_reg_stats(level);
 
 	return 0;
 }
