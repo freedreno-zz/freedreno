@@ -48,6 +48,7 @@ typedef enum {
 } bool;
 
 static bool dump_shaders = false;
+static bool no_color = false;
 
 static const char *levels[] = {
 		"\t",
@@ -463,10 +464,14 @@ static void init_rnn(char *file, char *domain)
 	db = rnn_newdb();
 	rnn_parsefile(db, file);
 	rnn_prepdb(db);
-	vc = rnndec_newcontext(db);
-	vc->colors = &envy_def_colors;
 	vc_nocolor = rnndec_newcontext(db);
 	vc_nocolor->colors = &envy_null_colors;
+	if (no_color) {
+		vc = vc_nocolor;
+	} else {
+		vc = rnndec_newcontext(db);
+		vc->colors = &envy_def_colors;
+	}
 	dom = rnn_finddomain(db, domain);
 	if (!dom) {
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
@@ -975,6 +980,11 @@ int main(int argc, char **argv)
 
 	if (!strcmp(argv[n], "--dump-shaders")) {
 		dump_shaders = true;
+		n++;
+	}
+
+	if (!strcmp(argv[n], "--no-color")) {
+		no_color = true;
 		n++;
 	}
 
