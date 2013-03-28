@@ -122,6 +122,26 @@ void test_vertex(GLint *sizes, GLenum *types)
 			0.0f, 0.0f, 1.0f, 1.0f};
 	EGLSurface surface;
 
+	void _glVertexAttribPointer (GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* ptr)
+	{
+		static const char *typename[] = {
+#define NAME(x) [x & 0xf] = #x
+				NAME(GL_BYTE),
+				NAME(GL_UNSIGNED_BYTE),
+				NAME(GL_SHORT),
+				NAME(GL_UNSIGNED_SHORT),
+				NAME(GL_INT),
+				NAME(GL_UNSIGNED_INT),
+				NAME(GL_FLOAT),
+				NAME(GL_FIXED),
+#undef NAME
+		};
+		DEBUG_MSG("indx=%d, size=%d, type=%s, normalized=%d, stride=%d, ptr=%p",
+				indx, size, typename[type&0xf], normalized, stride, ptr);
+		glVertexAttribPointer (indx, size, type, normalized, stride, ptr);
+		glEnableVertexAttribArray(indx);
+	}
+
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("vertex", "sizes: %d, %d, %d, %d, types: %04x, %04x, %04x, %04x",
 			sizes[0], sizes[1], sizes[2], sizes[3],
@@ -170,42 +190,26 @@ void test_vertex(GLint *sizes, GLenum *types)
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
 	GCHK(glFlush());
 
-	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vVertices));
-	GCHK(glEnableVertexAttribArray(0));
+	GCHK(_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vVertices));
 
-	GCHK(glVertexAttribPointer(1, sizes[0], types[0], GL_FALSE, 0, vColors1));
-	GCHK(glEnableVertexAttribArray(1));
-	GCHK(glVertexAttribPointer(2, sizes[1], types[1], GL_FALSE, 0, vColors2));
-	GCHK(glEnableVertexAttribArray(2));
-	GCHK(glVertexAttribPointer(3, sizes[2], types[2], GL_FALSE, 0, vColors3));
-	GCHK(glEnableVertexAttribArray(3));
-	GCHK(glVertexAttribPointer(4, sizes[3], types[3], GL_FALSE, 0, vColors4));
-	GCHK(glEnableVertexAttribArray(4));
+	GCHK(_glVertexAttribPointer(1, sizes[0], types[0], GL_FALSE, 0, vColors1));
+	GCHK(_glVertexAttribPointer(2, sizes[1], types[1], GL_FALSE, 0, vColors2));
+	GCHK(_glVertexAttribPointer(3, sizes[2], types[2], GL_FALSE, 0, vColors3));
+	GCHK(_glVertexAttribPointer(4, sizes[3], types[3], GL_FALSE, 0, vColors4));
 
-	GCHK(glVertexAttribPointer(5, sizes[0], types[0], GL_FALSE, 0, vColors1));
-	GCHK(glEnableVertexAttribArray(5));
-	GCHK(glVertexAttribPointer(6, sizes[1], types[1], GL_FALSE, 0, vColors2));
-	GCHK(glEnableVertexAttribArray(6));
-	GCHK(glVertexAttribPointer(7, sizes[2], types[2], GL_FALSE, 0, vColors3));
-	GCHK(glEnableVertexAttribArray(7));
-	GCHK(glVertexAttribPointer(8, sizes[3], types[3], GL_FALSE, 0, vColors4));
-	GCHK(glEnableVertexAttribArray(8));
+	GCHK(_glVertexAttribPointer(5, sizes[0], types[1], GL_TRUE, 0, vColors1));
+	GCHK(_glVertexAttribPointer(6, sizes[1], types[2], GL_TRUE, 0, vColors2));
+	GCHK(_glVertexAttribPointer(7, sizes[2], types[3], GL_TRUE, 0, vColors3));
+	GCHK(_glVertexAttribPointer(8, sizes[3], types[0], GL_TRUE, 0, vColors4));
 
-	GCHK(glVertexAttribPointer(9, sizes[0], types[0], GL_FALSE, 0, vColors1));
-	GCHK(glEnableVertexAttribArray(9));
-	GCHK(glVertexAttribPointer(10, sizes[1], types[1], GL_FALSE, 0, vColors2));
-	GCHK(glEnableVertexAttribArray(10));
-	GCHK(glVertexAttribPointer(11, sizes[2], types[2], GL_FALSE, 0, vColors3));
-	GCHK(glEnableVertexAttribArray(11));
-	GCHK(glVertexAttribPointer(12, sizes[3], types[3], GL_FALSE, 0, vColors4));
-	GCHK(glEnableVertexAttribArray(12));
+	GCHK(_glVertexAttribPointer(9, sizes[0], types[2], GL_FALSE, 0, vColors1));
+	GCHK(_glVertexAttribPointer(10, sizes[1], types[3], GL_FALSE, 0, vColors2));
+	GCHK(_glVertexAttribPointer(11, sizes[2], types[0], GL_FALSE, 0, vColors3));
+	GCHK(_glVertexAttribPointer(12, sizes[3], types[1], GL_FALSE, 0, vColors4));
 
-	GCHK(glVertexAttribPointer(13, sizes[0], types[0], GL_FALSE, 0, vColors1));
-	GCHK(glEnableVertexAttribArray(13));
-	GCHK(glVertexAttribPointer(14, sizes[1], types[1], GL_FALSE, 0, vColors2));
-	GCHK(glEnableVertexAttribArray(14));
-	GCHK(glVertexAttribPointer(15, sizes[2], types[2], GL_FALSE, 0, vColors3));
-	GCHK(glEnableVertexAttribArray(15));
+	GCHK(_glVertexAttribPointer(13, sizes[0], types[3], GL_FALSE, 0, vColors1));
+	GCHK(_glVertexAttribPointer(14, sizes[1], types[0], GL_FALSE, 0, vColors2));
+	GCHK(_glVertexAttribPointer(15, sizes[2], types[1], GL_FALSE, 0, vColors3));
 
 	GCHK(glDrawArrays(GL_TRIANGLES, 0, 3));
 	GCHK(glFlush());
@@ -236,10 +240,22 @@ int main(int argc, char *argv[])
 
 	test_vertex((GLint[]){ 4, 4, 4, 4 },
 			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT });
-	test_vertex((GLint[]){ 2, 2, 2, 2 },
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT });
-	test_vertex((GLint[]){ 4, 4, 4, 4 },
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_BYTE, GL_BYTE, GL_BYTE, GL_BYTE });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_SHORT, GL_SHORT, GL_SHORT, GL_SHORT });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_FIXED, GL_FIXED, GL_FIXED, GL_FIXED });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_BYTE, GL_UNSIGNED_BYTE, GL_SHORT, GL_UNSIGNED_SHORT });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FIXED });
 
 	ECHK(eglTerminate(display));
 }

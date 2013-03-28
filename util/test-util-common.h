@@ -32,6 +32,7 @@
 void exit(int status);
 int printf(const char *,...);
 int sprintf(char *str, const char *format, ...);
+int snprintf(char *str, size_t size, const char *format, ...);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
 void free(void *ptr);
@@ -53,8 +54,13 @@ void *memcpy(void *dest, const void *src, size_t n);
 /*****************************************************************************/
 
 #define DEBUG_MSG(fmt, ...) \
-		do { printf(fmt " (%s:%d)\n", \
-				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
+		do { \
+			char __rd_buf[256]; \
+			rd_write_section(RD_CMD, __rd_buf, snprintf(__rd_buf, sizeof(__rd_buf), "%s:%d: "fmt, \
+							__FUNCTION__, __LINE__, ##__VA_ARGS__)); \
+			printf(fmt " (%s:%d)\n", \
+					##__VA_ARGS__, __FUNCTION__, __LINE__); \
+		} while (0)
 #define ERROR_MSG(fmt, ...) \
 		do { printf("ERROR: " fmt " (%s:%d)\n", \
 				##__VA_ARGS__, __FUNCTION__, __LINE__); } while (0)
