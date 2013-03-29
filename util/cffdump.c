@@ -287,14 +287,18 @@ static struct {
 static void reg_vsc_pipe_config(const char *name, uint32_t dword, int level)
 {
 	int idx;
-	sscanf(name, "VSC_PIPE_CONFIG_%x", &idx);
+	sscanf(name, "VSC_PIPE_CONFIG_%x", &idx) ||
+		sscanf(name, "VSC_PIPE[0x%x].CONFIG", &idx) ||
+		sscanf(name, "VSC_PIPE[%d].CONFIG", &idx);
 	vsc_pipe_data[idx].config = dword;
 }
 
 static void reg_vsc_pipe_data_address(const char *name, uint32_t dword, int level)
 {
 	int idx;
-	sscanf(name, "VSC_PIPE_DATA_ADDRESS_%x", &idx);
+	sscanf(name, "VSC_PIPE_DATA_ADDRESS_%x", &idx) ||
+		sscanf(name, "VSC_PIPE[0x%x].DATA_ADDRESS", &idx) ||
+		sscanf(name, "VSC_PIPE[%d].DATA_ADDRESS", &idx);
 	vsc_pipe_data[idx].address = dword;
 }
 
@@ -302,7 +306,11 @@ static void reg_vsc_pipe_data_length(const char *name, uint32_t dword, int level
 {
 	int idx;
 	void *buf;
-	sscanf(name, "VSC_PIPE_DATA_LENGTH_%x", &idx);
+
+	sscanf(name, "VSC_PIPE_DATA_LENGTH_%x", &idx) ||
+		sscanf(name, "VSC_PIPE[0x%x].DATA_LENGTH", &idx) ||
+		sscanf(name, "VSC_PIPE[%d].DATA_LENGTH", &idx);
+
 	vsc_pipe_data[idx].length = dword;
 
 	/* as this is the last register in the triplet written, we dump
@@ -344,7 +352,9 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 	void *buf;
 
 	/* this is a bit ugly way, but oh well.. */
-	sscanf(name, "VFD_FETCH_INSTR_1_%x", &idx);
+	sscanf(name, "VFD_FETCH_INSTR_1_%x", &idx) ||
+		sscanf(name, "VFD_FETCH[0x%x].INSTR_1", &idx) ||
+		sscanf(name, "VFD_FETCH[%d].INSTR_1", &idx);
 
 	buf = hostptr(dword);
 
