@@ -73,11 +73,13 @@ const char *fragment_shader_source =
  * shader param), and vertices
  */
 static void
-test_clear(GLbitfield b)
+test_clear(GLbitfield b, GLfloat clearcolor[4], GLint clearstencil, GLfloat cleardepth)
 {
 	DEBUG_MSG("----------------------------------------------------------------");
 
-	RD_START("clear", "%08x", b);
+	RD_START("clear", "%08x: color={%f,%f,%f,%f}, stencil=0x%x, depth=%f",
+		b, clearcolor[0], clearcolor[1], clearcolor[2], clearcolor[3],
+		clearstencil, cleardepth);
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -105,9 +107,9 @@ test_clear(GLbitfield b)
 
 	GCHK(glViewport(0, 0, width, height));
 
-	GCHK(glClearColor(0.5, 0.5, 0.5, 0.5));
-	GCHK(glClearStencil(0x1));
-	GCHK(glClearDepthf(0.75));
+	GCHK(glClearColor(clearcolor[0], clearcolor[1], clearcolor[2], clearcolor[3]));
+	GCHK(glClearStencil(clearstencil));
+	GCHK(glClearDepthf(cleardepth));
 	GCHK(glClear(b));
 
 	GCHK(glFlush());
@@ -123,11 +125,13 @@ test_clear(GLbitfield b)
 
 int main(int argc, char *argv[])
 {
-	test_clear(GL_COLOR_BUFFER_BIT);
-	test_clear(GL_STENCIL_BUFFER_BIT);
-	test_clear(GL_DEPTH_BUFFER_BIT);
-	test_clear(GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-	test_clear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+	test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
+	test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
+	test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.6, 0.3, 0.4}, 0xf1, 0.5);
+	test_clear(GL_STENCIL_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
+	test_clear(GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
+	test_clear(GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
+	test_clear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
 }
 
 #ifdef BIONIC

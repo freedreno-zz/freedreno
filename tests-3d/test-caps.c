@@ -98,6 +98,7 @@ void test_caps(void)
 	printf("EGL Version %s\n", eglQueryString(display, EGL_VERSION));
 	printf("EGL Vendor %s\n", eglQueryString(display, EGL_VENDOR));
 	printf("EGL Extensions %s\n", eglQueryString(display, EGL_EXTENSIONS));
+	printf("GL Version %s\n", glGetString(GL_VERSION));
 	printf("GL extensions: %s\n", glGetString(GL_EXTENSIONS));
 
 	for (i = 0; i < ARRAY_SIZE(int_params); i++) {
