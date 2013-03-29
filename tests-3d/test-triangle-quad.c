@@ -28,23 +28,12 @@
 
 #include "test-util-3d.h"
 
-static EGLint const config_attribute_list[] = {
-	EGL_RED_SIZE, 8,
-	EGL_GREEN_SIZE, 8,
-	EGL_BLUE_SIZE, 8,
-	EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-	EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-	EGL_DEPTH_SIZE, 8,
-	EGL_SAMPLES, 4,
-	EGL_NONE
-};
-
 static const EGLint context_attribute_list[] = {
 	EGL_CONTEXT_CLIENT_VERSION, 2,
 	EGL_NONE
 };
 
-void test_triangle_quad(void)
+void test_triangle_quad(int samples, int depth, int stencil)
 {
 	EGLDisplay display;
 	EGLConfig config;
@@ -72,6 +61,18 @@ void test_triangle_quad(void)
 		"    gl_FragColor = uColor;   \n"
 		"}                            \n";
 
+	EGLint const config_attribute_list[] = {
+		EGL_RED_SIZE, 8,
+		EGL_GREEN_SIZE, 8,
+		EGL_BLUE_SIZE, 8,
+		EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+		EGL_STENCIL_SIZE, stencil,
+		EGL_DEPTH_SIZE, depth,
+		EGL_SAMPLES, samples,
+		EGL_NONE
+	};
+
 	GLfloat vertices[] = {
 		/* triangle */
 		-0.8,  0.50, 0.0,
@@ -87,7 +88,7 @@ void test_triangle_quad(void)
 
 
 	DEBUG_MSG("----------------------------------------------------------------");
-	RD_START("triangle-quad", "");
+	RD_START("triangle-quad", "samples=%d, depth=%d, stencil=%d", samples, depth, stencil);
 
 	display = get_display();
 
@@ -102,8 +103,12 @@ void test_triangle_quad(void)
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
+	ECHK(eglGetConfigAttrib(display, config, EGL_SAMPLES, &samples));
+	ECHK(eglGetConfigAttrib(display, config, EGL_DEPTH_SIZE, &depth));
+	ECHK(eglGetConfigAttrib(display, config, EGL_STENCIL_SIZE, &stencil));
 
-	DEBUG_MSG("Buffer: %dx%d", width, height);
+	DEBUG_MSG("Buffer: %dx%d (samples=%d, depth=%d, stencil=%d)", width, height,
+			samples, depth, stencil);
 
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
@@ -142,7 +147,15 @@ void test_triangle_quad(void)
 
 int main(int argc, char *argv[])
 {
-	test_triangle_quad();
+	static const int samples[] = { 0, 2, 4, };
+	int i;
+
+	for (i = 0;  i < ARRAY_SIZE(samples); i++) {
+		/* seems like, similar to a2xx, we only have z16 and z24s8: */
+		test_triangle_quad(samples[i], EGL_DONT_CARE, EGL_DONT_CARE);
+		test_triangle_quad(samples[i], 16, EGL_DONT_CARE);
+		test_triangle_quad(samples[i], 24, 8);
+	}
 }
 
 #ifdef BIONIC
