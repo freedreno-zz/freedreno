@@ -539,13 +539,16 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 		struct kgsl_device_getproperty *param)
 {
 	printf("\t\ttype:\t\t%08x (%s)\n", param->type, propnames[param->type]);
-	if ((param->type == KGSL_PROP_DEVICE_INFO) && wrap_gpu_id()) {
-		struct kgsl_devinfo *devinfo = param->value;
-		devinfo->gpu_id = wrap_gpu_id();
-		printf("\t\tEMULATING: %d !!!\n", devinfo->gpu_id);
-	}
 	if (param->type == KGSL_PROP_DEVICE_INFO) {
 		struct kgsl_devinfo *devinfo = param->value;
+		if (wrap_gpu_id()) {
+			devinfo->gpu_id = wrap_gpu_id();
+			printf("\t\tEMULATING gpu_id: %d !!!\n", devinfo->gpu_id);
+		}
+		if (wrap_gmem_size()) {
+			devinfo->gmem_sizebytes = wrap_gmem_size();
+			printf("\t\tEMULATING gmem_sizebytes: %d !!!\n", devinfo->gmem_sizebytes);
+		}
 		rd_write_section(RD_GPU_ID, &devinfo->gpu_id, sizeof(devinfo->gpu_id));
 		printf("\t\tgpu_id: %d\n", devinfo->gpu_id);
 		printf("\t\tgmem_sizebytes: 0x%x\n", devinfo->gmem_sizebytes);
@@ -891,7 +894,7 @@ int ioctl(int fd, unsigned long int request, ...)
 	}
 
 	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
-			get_kgsl_info(fd) && wrap_gpu_id()) {
+			get_kgsl_info(fd) && (wrap_gpu_id() || wrap_gmem_size())) {
 		/* don't actually submit cmds to hw.. because we are pretending to
 		 * be something different from the actual hw
 		 */

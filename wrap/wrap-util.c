@@ -117,6 +117,16 @@ unsigned int wrap_gpu_id(void)
 	return val;
 }
 
+unsigned int wrap_gmem_size(void)
+{
+	static unsigned int val = -1;
+	if (val == -1) {
+		const char *str = getenv("WRAP_GMEM_SIZE");
+		val = str ? strtol(str, NULL, 0) : 0;
+	}
+	return val;
+}
+
 void * _dlsym_helper(const char *name)
 {
 	static void *libc_dl;
