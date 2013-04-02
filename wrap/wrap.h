@@ -65,5 +65,6 @@ void * _dlsym_helper(const char *name);
 
 unsigned int wrap_safe(void);
 unsigned int wrap_gpu_id(void);
+unsigned int wrap_gmem_size(void);
 
 #endif /* WRAP_H_ */

@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <assert.h>
 
 #include "redump.h"
 #include "disasm.h"
@@ -192,7 +193,7 @@ struct buffer {
 	unsigned int gpuaddr, len;
 };
 
-static struct buffer buffers[128];
+static struct buffer buffers[512];
 static int nbuffers;
 
 static int buffer_contains_gpuaddr(struct buffer *buf, uint32_t gpuaddr, uint32_t len)
@@ -1032,6 +1033,7 @@ int main(int argc, char **argv)
 		case RD_BUFFER_CONTENTS:
 			buffers[nbuffers].hostptr = buf;
 			nbuffers++;
+			assert(nbuffers < ARRAY_SIZE(buffers));
 			buf = NULL;
 			break;
 		case RD_CMDSTREAM_ADDR:
