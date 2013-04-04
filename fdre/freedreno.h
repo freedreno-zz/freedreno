@@ -27,7 +27,6 @@
 #include <GLES2/gl2.h>
 
 #include "util.h"
-#include "a2xx_reg.h"
 #include "program.h"
 
 struct fd_state;
@@ -81,7 +80,7 @@ struct fd_surface * fd_surface_screen(struct fd_state *state,
 struct fd_surface * fd_surface_new(struct fd_state *state,
 		uint32_t width, uint32_t height);
 struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
-		uint32_t width, uint32_t height, enum COLORFORMATX color_format);
+		uint32_t width, uint32_t height, enum a2xx_colorformatx color_format);
 void fd_surface_del(struct fd_state *state, struct fd_surface *surface);
 void fd_surface_upload(struct fd_surface *surface, const void *data);
 

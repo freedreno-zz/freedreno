@@ -28,6 +28,7 @@
 #include "program.h"
 #include "ir.h"
 #include "ring.h"
+#include "util.h"
 
 
 struct fd_shader {
@@ -139,13 +140,13 @@ int fd_program_emit_sq_program_cntl(struct fd_program *program,
 	uint8_t fs_gprs = (fsi->max_reg < 0) ? 0x80 : fsi->max_reg;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_PROGRAM_CNTL));
-	OUT_RING(ring, SQ_PROGRAM_CNTL_PS_EXPORT_MODE(POSITION_2_VECTORS_SPRITE) |
-			SQ_PROGRAM_CNTL_VS_RESOURCE |
-			SQ_PROGRAM_CNTL_PS_RESOURCE |
-			SQ_PROGRAM_CNTL_VS_EXPORT_COUNT(fsi->max_input_reg) |
-			SQ_PROGRAM_CNTL_PS_REGS(fs_gprs) |
-			SQ_PROGRAM_CNTL_VS_REGS(vs_gprs));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_PROGRAM_CNTL));
+	OUT_RING(ring, A2XX_SQ_PROGRAM_CNTL_PS_EXPORT_MODE(POSITION_2_VECTORS_SPRITE) |
+			A2XX_SQ_PROGRAM_CNTL_VS_RESOURCE |
+			A2XX_SQ_PROGRAM_CNTL_PS_RESOURCE |
+			A2XX_SQ_PROGRAM_CNTL_VS_EXPORT_COUNT(fsi->max_input_reg) |
+			A2XX_SQ_PROGRAM_CNTL_PS_REGS(fs_gprs) |
+			A2XX_SQ_PROGRAM_CNTL_VS_REGS(vs_gprs));
 
 	return 0;
 }

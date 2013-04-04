@@ -29,9 +29,7 @@
 #include <freedreno_drmif.h>
 #include <freedreno_ringbuffer.h>
 
-#include "a2xx_reg.h"
-#include "freedreno_a2xx_reg.h"
-#include "adreno_pm4types.h"
+#include "adreno_pm4.xml.h"
 
 #include "util.h"
 

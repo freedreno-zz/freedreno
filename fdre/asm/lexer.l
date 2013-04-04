@@ -24,7 +24,7 @@
 %{
 #include <stdlib.h>
 #include "parser.h"
-#include "a2xx_reg.h"
+#include "util.h"
 
 #define TOKEN(t) (asm_yylval.tok = t)
 #define FORMAT(f) asm_yylval.fmt = f; return T_ ## f

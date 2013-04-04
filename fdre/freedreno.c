@@ -34,6 +34,7 @@
 #include "ws.h"
 #include "bmp.h"
 
+
 /* ************************************************************************* */
 
 struct fd_param {
@@ -157,7 +158,7 @@ struct fd_state {
 struct fd_shader_const {
 	uint32_t offset, sz;
 	struct fd_bo *bo;
-	enum COLORFORMATX format;
+	enum a2xx_colorformatx format;
 };
 
 /* ************************************************************************* */
@@ -168,7 +169,7 @@ static int color2cpp[] = {
 		[COLORX_32_32_32_32_FLOAT] = 16,
 };
 
-static enum SURFACEFORMAT color2fmt[] = {
+static enum a2xx_sq_surfaceformat color2fmt[] = {
 		[COLORX_4_4_4_4]           = FMT_4_4_4_4,
 		[COLORX_1_5_5_5]           = FMT_1_5_5_5,
 		[COLORX_5_6_5]             = FMT_5_6_5,
@@ -192,10 +193,10 @@ static enum SURFACEFORMAT color2fmt[] = {
 /* ************************************************************************* */
 
 static void emit_mem_write(struct fd_state *state, struct fd_bo *bo,
-		void *data, uint32_t sizedwords)
+		const void *data, uint32_t sizedwords)
 {
 	struct fd_ringbuffer *ring = state->ring;
-	uint32_t *dwords = data;
+	const uint32_t *dwords = data;
 	OUT_PKT3(ring, CP_MEM_WRITE, sizedwords+1);
 	OUT_RELOC(ring, bo, 0, 0);
 	while (sizedwords--)
@@ -208,76 +209,76 @@ static void emit_pa_state(struct fd_state *state)
 	struct fd_surface *surface = state->render_target.surface;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_AA_CONFIG));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_CONFIG));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_MASK));
 	OUT_RING(ring, 0x0000ffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_LINE_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_LINE_CNTL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_LINE_CNTL));
-	OUT_RING(ring, PA_SU_LINE_CNTL_WIDTH(1));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_LINE_CNTL));
+	OUT_RING(ring, A2XX_PA_SU_LINE_CNTL_WIDTH(1));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_POINT_SIZE));
-	OUT_RING(ring, PA_SU_POINT_SIZE_HEIGHT(1) |
-			PA_SU_POINT_SIZE_WIDTH(1));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_POINT_SIZE));
+	OUT_RING(ring, A2XX_PA_SU_POINT_SIZE_HEIGHT(1) |
+			A2XX_PA_SU_POINT_SIZE_WIDTH(1));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_OFFSET));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 7);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VPORT_XSCALE));
-	OUT_RING(ring, f2d(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
-	OUT_RING(ring, f2d(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
-	OUT_RING(ring, f2d(state->viewport.scale.z));	/* PA_CL_VPORT_ZSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.z));	/* PA_CL_VPORT_ZOFFSET */
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
+	OUT_RING(ring, fui(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
+	OUT_RING(ring, fui(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
+	OUT_RING(ring, fui(state->viewport.scale.z));	/* PA_CL_VPORT_ZSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.z));	/* PA_CL_VPORT_ZOFFSET */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
-			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VTE_CNTL));
+	OUT_RING(ring, A2XX_PA_CL_VTE_CNTL_VTX_W0_FMT |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_PA_CL_GB_VERT_CLIP_ADJ));
-	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_CLIP_ADJ */
-	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_VERT_DISC_ADJ */
-	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_CLIP_ADJ */
-	OUT_RING(ring, f2d(1.0));		/* PA_CL_GB_HORZ_DISC_ADJ */
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_GB_VERT_CLIP_ADJ));
+	OUT_RING(ring, fui(1.0));		/* PA_CL_GB_VERT_CLIP_ADJ */
+	OUT_RING(ring, fui(1.0));		/* PA_CL_GB_VERT_DISC_ADJ */
+	OUT_RING(ring, fui(1.0));		/* PA_CL_GB_HORZ_CLIP_ADJ */
+	OUT_RING(ring, fui(1.0));		/* PA_CL_GB_HORZ_DISC_ADJ */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_VTX_CNTL));
-	OUT_RING(ring, PA_SU_VTX_CNTL_PIX_CENTER(PIXCENTER_OGL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_VTX_CNTL));
+	OUT_RING(ring, A2XX_PA_SU_VTX_CNTL_PIX_CENTER(PIXCENTER_OGL));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_SC_MODE_CNTL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_SCISSOR_TL));
 	OUT_RING(ring, xy2d(0,0));			/* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_SCREEN_SCISSOR_TL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_SCREEN_SCISSOR_TL));
 	OUT_RING(ring, xy2d(0,0));			/* PA_SC_SCREEN_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_SCREEN_SCISSOR_BR */
 			surface->height));
@@ -380,23 +381,24 @@ struct fd_state * fd_init(void)
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
 
-	state->pa_su_sc_mode_cntl = PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
-			PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(DRAW_POINTS) |
-			PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(DRAW_POINTS);
+	state->pa_su_sc_mode_cntl =
+			A2XX_PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
+			A2XX_PA_SU_SC_MODE_CNTL_FRONT_PTYPE(PC_DRAW_POINTS) |
+			A2XX_PA_SU_SC_MODE_CNTL_BACK_PTYPE(PC_DRAW_POINTS);
 	state->rb_colorcontrol =
-			RB_COLORCONTROL_ROP_CODE(12) |
-			RB_COLORCONTROL_ALPHA_FUNC(g2a(GL_ALWAYS)) |
-			RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS) |
-			RB_COLORCONTROL_BLEND_DISABLE;
+			A2XX_RB_COLORCONTROL_ROP_CODE(12) |
+			A2XX_RB_COLORCONTROL_ALPHA_FUNC(g2a(GL_ALWAYS)) |
+			A2XX_RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS) |
+			A2XX_RB_COLORCONTROL_BLEND_DISABLE;
 	state->rb_depthcontrol =
-			RB_DEPTHCONTROL_Z_WRITE_ENABLE |
-			RB_DEPTHCONTROL_EARLY_Z_ENABLE |
-			RB_DEPTHCONTROL_ZFUNC(g2a(GL_LESS)) |
-			RB_DEPTHCONTROL_STENCILFUNC(g2a(GL_ALWAYS)) |
-			RB_DEPTHCONTROL_BACKFACE_ENABLE |
-			RB_DEPTHCONTROL_STENCILFUNC_BF(g2a(GL_ALWAYS));
+			A2XX_RB_DEPTHCONTROL_Z_WRITE_ENABLE |
+			A2XX_RB_DEPTHCONTROL_EARLY_Z_ENABLE |
+			A2XX_RB_DEPTHCONTROL_ZFUNC(g2a(GL_LESS)) |
+			A2XX_RB_DEPTHCONTROL_STENCILFUNC(g2a(GL_ALWAYS)) |
+			A2XX_RB_DEPTHCONTROL_BACKFACE_ENABLE |
+			A2XX_RB_DEPTHCONTROL_STENCILFUNC_BF(g2a(GL_ALWAYS));
 	state->rb_stencilrefmask = 0xff000000 |
-			RB_STENCILREFMASK_STENCILWRITEMASK(0xff);
+			A2XX_RB_STENCILREFMASK_STENCILWRITEMASK(0xff);
 
 	state->textures.clamp_x = SQ_TEX_WRAP;
 	state->textures.clamp_y = SQ_TEX_WRAP;
@@ -408,10 +410,10 @@ struct fd_state * fd_init(void)
 	state->clear.color = 0x00000000;
 
 	state->rb_blendcontrol =
-			RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE) |
-			RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE) |
-			RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ZERO) |
-			RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ZERO);
+			A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ONE) |
+			A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ONE) |
+			A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ZERO) |
+			A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ZERO);
 
 
 	return state;
@@ -550,7 +552,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000028f);
 
 	fd_program_emit_sq_program_cntl(state->solid_program, ring);
@@ -558,71 +560,71 @@ static void emit_gmem2mem(struct fd_state *state,
 	fd_program_emit_shader(state->solid_program, FD_SHADER_FRAGMENT, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_CONTEXT_MISC));
+	OUT_RING(ring, A2XX_SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_MASK));
 	OUT_RING(ring, 0x0000ffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
-	OUT_RING(ring, RB_DEPTHCONTROL_EARLY_Z_ENABLE);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_DEPTHCONTROL));
+	OUT_RING(ring, A2XX_RB_DEPTHCONTROL_EARLY_Z_ENABLE);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
-			PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(DRAW_TRIANGLES) |
-			PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(DRAW_TRIANGLES));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_SC_MODE_CNTL));
+	OUT_RING(ring, A2XX_PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
+			A2XX_PA_SU_SC_MODE_CNTL_FRONT_PTYPE(PC_DRAW_TRIANGLES) |
+			A2XX_PA_SU_SC_MODE_CNTL_BACK_PTYPE(PC_DRAW_TRIANGLES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_OFFSET));
 	OUT_RING(ring, 0x00000000);             /* PA_SC_WINDOW_OFFSET */
-	OUT_RING(ring, xy2d(0,0) | PA_SC_WINDOW_OFFSET_DISABLE); /* PA_SC_WINDOW_SCISSOR_TL */
+	OUT_RING(ring, xy2d(0,0) | A2XX_PA_SC_WINDOW_OFFSET_DISABLE); /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width,     /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VPORT_XSCALE));
-	OUT_RING(ring, f2d(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
-	OUT_RING(ring, f2d(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
+	OUT_RING(ring, fui(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
+	OUT_RING(ring, fui(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
-			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VTE_CNTL));
+	OUT_RING(ring, A2XX_PA_CL_VTE_CNTL_VTX_W0_FMT |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
-	OUT_RING(ring, RB_MODECONTROL_EDRAM_MODE(EDRAM_COPY));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
+	OUT_RING(ring, A2XX_RB_MODECONTROL_EDRAM_MODE(EDRAM_COPY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 6);
-	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
 	OUT_RELOC(ring, surface->bo, 0, 0);     /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, surface->pitch >> 5);    /* RB_COPY_DEST_PITCH */
-	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(surface->color) |
-			RB_COPY_DEST_INFO_LINEAR |      /* RB_COPY_DEST_INFO */
-			RB_COPY_DEST_INFO_SWAP(1) |
-			RB_COPY_DEST_INFO_WRITE_RED |
-			RB_COPY_DEST_INFO_WRITE_GREEN |
-			RB_COPY_DEST_INFO_WRITE_BLUE |
-			RB_COPY_DEST_INFO_WRITE_ALPHA);
-	OUT_RING(ring, RB_COPY_DEST_OFFSET_X(xoff) | /* RB_COPY_DEST_OFFSET */
-			RB_COPY_DEST_OFFSET_Y(yoff));
+	OUT_RING(ring, A2XX_RB_COPY_DEST_INFO_FORMAT(surface->color) |
+			A2XX_RB_COPY_DEST_INFO_LINEAR |      /* RB_COPY_DEST_INFO */
+			A2XX_RB_COPY_DEST_INFO_SWAP(1) |
+			A2XX_RB_COPY_DEST_INFO_WRITE_RED |
+			A2XX_RB_COPY_DEST_INFO_WRITE_GREEN |
+			A2XX_RB_COPY_DEST_INFO_WRITE_BLUE |
+			A2XX_RB_COPY_DEST_INFO_WRITE_ALPHA);
+	OUT_RING(ring, A2XX_RB_COPY_DEST_OFFSET_X(xoff) | /* RB_COPY_DEST_OFFSET */
+			A2XX_RB_COPY_DEST_OFFSET_Y(yoff));
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -634,8 +636,8 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
-	OUT_RING(ring, RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
+	OUT_RING(ring, A2XX_RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -670,7 +672,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	fd_program_emit_shader(state->solid_program, FD_SHADER_VERTEX, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000028f);
 
 	fd_program_emit_sq_program_cntl(state->solid_program, ring);
@@ -678,40 +680,40 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	fd_program_emit_shader(state->solid_program, FD_SHADER_FRAGMENT, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_CONTEXT_MISC));
+	OUT_RING(ring, A2XX_SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
-	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
-	OUT_RING(ring, TC_CNTL_STATUS_L2_INVALIDATE);
+	OUT_PKT0(ring, REG_A2XX_TC_CNTL_STATUS, 1);
+	OUT_RING(ring, A2XX_TC_CNTL_STATUS_L2_INVALIDATE);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_CLEAR_COLOR));
+	OUT_RING(ring, CP_REG(REG_A2XX_CLEAR_COLOR));
 	OUT_RING(ring, state->clear.color);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_RB_LRZ_VSC_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_A220_RB_LRZ_VSC_CONTROL));
 	OUT_RING(ring, 0x00000084);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_CONTROL));
 	reg = 0;
 	if (mask & GL_DEPTH_BUFFER_BIT) {
-		reg |= RB_COPY_CONTROL_CLEAR_MASK(0xf) |
-				RB_COPY_CONTROL_DEPTH_CLEAR_ENABLE;
+		reg |= A2XX_RB_COPY_CONTROL_CLEAR_MASK(0xf) |
+				A2XX_RB_COPY_CONTROL_DEPTH_CLEAR_ENABLE;
 	}
 	OUT_RING(ring, reg);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_DEPTH_CLEAR));
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_STENCIL_ENABLE) {
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_DEPTH_CLEAR));
+	if (state->rb_depthcontrol & A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE) {
 		/* DEPTHX_24_8 */
 		reg = (((uint32_t)(0xffffff * state->clear.depth)) << 8) |
 				(state->clear.stencil & 0xff);
-	} else if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
+	} else if (state->rb_depthcontrol & A2XX_RB_DEPTHCONTROL_Z_ENABLE) {
 		/* DEPTHX_16 */
 		reg = (uint32_t)(0xffffffff * state->clear.depth);
 	} else {
@@ -720,71 +722,71 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	OUT_RING(ring, reg);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_DEPTHCONTROL));
 	reg = 0;
 	if (mask & GL_DEPTH_BUFFER_BIT) {
-		reg |= RB_DEPTHCONTROL_ZFUNC(g2a(GL_ALWAYS)) |
-				RB_DEPTHCONTROL_Z_ENABLE |
-				RB_DEPTHCONTROL_Z_WRITE_ENABLE |
-				RB_DEPTHCONTROL_EARLY_Z_ENABLE;
+		reg |= A2XX_RB_DEPTHCONTROL_ZFUNC(g2a(GL_ALWAYS)) |
+				A2XX_RB_DEPTHCONTROL_Z_ENABLE |
+				A2XX_RB_DEPTHCONTROL_Z_WRITE_ENABLE |
+				A2XX_RB_DEPTHCONTROL_EARLY_Z_ENABLE;
 	}
 	if (mask & GL_STENCIL_BUFFER_BIT) {
-		reg |= RB_DEPTHCONTROL_STENCILFUNC(g2a(GL_ALWAYS)) |
-				RB_DEPTHCONTROL_STENCIL_ENABLE |
-				RB_DEPTHCONTROL_STENCILZPASS(STENCIL_REPLACE);
+		reg |= A2XX_RB_DEPTHCONTROL_STENCILFUNC(g2a(GL_ALWAYS)) |
+				A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE |
+				A2XX_RB_DEPTHCONTROL_STENCILZPASS(STENCIL_REPLACE);
 	}
 	OUT_RING(ring, reg);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
-	OUT_RING(ring, RB_COLOR_MASK_WRITE_RED |
-			RB_COLOR_MASK_WRITE_GREEN |
-			RB_COLOR_MASK_WRITE_BLUE |
-			RB_COLOR_MASK_WRITE_ALPHA);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_MASK));
+	OUT_RING(ring, A2XX_RB_COLOR_MASK_WRITE_RED |
+			A2XX_RB_COLOR_MASK_WRITE_GREEN |
+			A2XX_RB_COLOR_MASK_WRITE_BLUE |
+			A2XX_RB_COLOR_MASK_WRITE_ALPHA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
-			PA_SU_SC_MODE_CNTL_POLYMODE_FRONT_PTYPE(DRAW_TRIANGLES) |
-			PA_SU_SC_MODE_CNTL_POLYMODE_BACK_PTYPE(DRAW_TRIANGLES));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_SC_MODE_CNTL));
+	OUT_RING(ring, A2XX_PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST |
+			A2XX_PA_SU_SC_MODE_CNTL_FRONT_PTYPE(PC_DRAW_TRIANGLES) |
+			A2XX_PA_SU_SC_MODE_CNTL_BACK_PTYPE(PC_DRAW_TRIANGLES));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_MASK));
 	OUT_RING(ring, 0x0000ffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_SCISSOR_TL));
 	OUT_RING(ring, xy2d(0,0));	        /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VPORT_XSCALE));
-	OUT_RING(ring, f2d(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
-	OUT_RING(ring, f2d(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
+	OUT_RING(ring, fui(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
+	OUT_RING(ring, fui(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
-			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VTE_CNTL));
+	OUT_RING(ring, A2XX_PA_CL_VTE_CNTL_VTX_W0_FMT |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLOR_INFO));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_INFO));
 	OUT_RING(ring, 0x200 | surface->color);
 
 	OUT_PKT3(ring, CP_DRAW_INDX, 3);
@@ -794,41 +796,41 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	OUT_RING(ring, 3);					/* NumIndices */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_RB_LRZ_VSC_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_A220_RB_LRZ_VSC_CONTROL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COPY_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_DEPTHCONTROL));
 	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
-	OUT_RING(ring, PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_SC_MODE_CNTL));
+	OUT_RING(ring, A2XX_PA_SU_SC_MODE_CNTL_PROVOKING_VTX_LAST);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_MASK));
 	OUT_RING(ring, 0x0000ffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_SCISSOR_TL));
 	OUT_RING(ring, xy2d(0,0));          /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VPORT_XSCALE));
-	OUT_RING(ring, f2d(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
-	OUT_RING(ring, f2d(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
+	OUT_RING(ring, fui(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
+	OUT_RING(ring, fui(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
 
 	return 0;
 }
@@ -841,8 +843,8 @@ int fd_cull(struct fd_state *state, GLenum mode)
 
 int fd_depth_func(struct fd_state *state, GLenum depth_func)
 {
-	state->rb_depthcontrol &= ~RB_DEPTHCONTROL_ZFUNC_MASK;
-	state->rb_depthcontrol |= RB_DEPTHCONTROL_ZFUNC(g2a(depth_func));
+	state->rb_depthcontrol &= ~A2XX_RB_DEPTHCONTROL_ZFUNC__MASK;
+	state->rb_depthcontrol |= A2XX_RB_DEPTHCONTROL_ZFUNC(g2a(depth_func));
 	return 0;
 }
 
@@ -858,29 +860,29 @@ int fd_enable(struct fd_state *state, GLenum cap)
 	case GL_CULL_FACE:
 		if ((state->cull_mode == GL_FRONT) ||
 				(state->cull_mode == GL_FRONT_AND_BACK)) {
-			state->pa_su_sc_mode_cntl |= PA_SU_SC_MODE_CNTL_CULL_FRONT;
+			state->pa_su_sc_mode_cntl |= A2XX_PA_SU_SC_MODE_CNTL_CULL_FRONT;
 		}
 		if ((state->cull_mode == GL_BACK) ||
 				(state->cull_mode == GL_FRONT_AND_BACK)) {
-			state->pa_su_sc_mode_cntl |= PA_SU_SC_MODE_CNTL_CULL_BACK;
+			state->pa_su_sc_mode_cntl |= A2XX_PA_SU_SC_MODE_CNTL_CULL_BACK;
 		}
 		return 0;
 	case GL_POLYGON_OFFSET_FILL:
 		state->pa_su_sc_mode_cntl |=
-				(PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE |
-						PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE);
+				(A2XX_PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE |
+						A2XX_PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE);
 		return 0;
 	case GL_BLEND:
-		state->rb_colorcontrol &= ~RB_COLORCONTROL_BLEND_DISABLE;
+		state->rb_colorcontrol &= ~A2XX_RB_COLORCONTROL_BLEND_DISABLE;
 		return 0;
 	case GL_DEPTH_TEST:
-		state->rb_depthcontrol |= RB_DEPTHCONTROL_Z_ENABLE;
+		state->rb_depthcontrol |= A2XX_RB_DEPTHCONTROL_Z_ENABLE;
 		return 0;
 	case GL_STENCIL_TEST:
-		state->rb_depthcontrol |= RB_DEPTHCONTROL_STENCIL_ENABLE;
+		state->rb_depthcontrol |= A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE;
 		return 0;
 	case GL_DITHER:
-		state->rb_colorcontrol |= RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
+		state->rb_colorcontrol |= A2XX_RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
 		return 0;
 	default:
 		ERROR_MSG("unsupported cap: 0x%04x", cap);
@@ -893,24 +895,24 @@ int fd_disable(struct fd_state *state, GLenum cap)
 	switch (cap) {
 	case GL_CULL_FACE:
 		state->pa_su_sc_mode_cntl &=
-				~(PA_SU_SC_MODE_CNTL_CULL_FRONT | PA_SU_SC_MODE_CNTL_CULL_BACK);
+			~(A2XX_PA_SU_SC_MODE_CNTL_CULL_FRONT | A2XX_PA_SU_SC_MODE_CNTL_CULL_BACK);
 		return 0;
 	case GL_POLYGON_OFFSET_FILL:
 		state->pa_su_sc_mode_cntl &=
-				~(PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE |
-						PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE);
+			~(A2XX_PA_SU_SC_MODE_CNTL_POLY_OFFSET_FRONT_ENABLE |
+					A2XX_PA_SU_SC_MODE_CNTL_POLY_OFFSET_BACK_ENABLE);
 		return 0;
 	case GL_BLEND:
-		state->rb_colorcontrol |= RB_COLORCONTROL_BLEND_DISABLE;
+		state->rb_colorcontrol |= A2XX_RB_COLORCONTROL_BLEND_DISABLE;
 		return 0;
 	case GL_DEPTH_TEST:
-		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_Z_ENABLE;
+		state->rb_depthcontrol &= ~A2XX_RB_DEPTHCONTROL_Z_ENABLE;
 		return 0;
 	case GL_STENCIL_TEST:
-		state->rb_depthcontrol &= ~RB_DEPTHCONTROL_STENCIL_ENABLE;
+		state->rb_depthcontrol &= ~A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE;
 		return 0;
 	case GL_DITHER:
-		state->rb_colorcontrol &= ~RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
+		state->rb_colorcontrol &= ~A2XX_RB_COLORCONTROL_DITHER_MODE(DITHER_ALWAYS);
 		return 0;
 	default:
 		ERROR_MSG("unsupported cap: 0x%04x", cap);
@@ -938,44 +940,44 @@ int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor)
 
 	switch (sfactor) {
 	case GL_ZERO:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ZERO);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ZERO);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ZERO);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ZERO);
 		break;
 	case GL_ONE:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ONE);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ONE);
 		break;
 	case GL_SRC_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_SRC_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_SRC_COLOR);
 		break;
 	case GL_ONE_MINUS_SRC_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ONE_MINUS_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ONE_MINUS_SRC_COLOR);
 		break;
 	case GL_SRC_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_SRC_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_SRC_ALPHA);
 		break;
 	case GL_ONE_MINUS_SRC_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ONE_MINUS_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ONE_MINUS_SRC_ALPHA);
 		break;
 	case GL_DST_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_DST_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_DST_COLOR);
 		break;
 	case GL_ONE_MINUS_DST_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ONE_MINUS_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ONE_MINUS_DST_COLOR);
 		break;
 	case GL_DST_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_DST_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_DST_ALPHA);
 		break;
 	case GL_ONE_MINUS_DST_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_SRCBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_SRCBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(FACTOR_ONE_MINUS_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(FACTOR_ONE_MINUS_DST_ALPHA);
 		break;
 	default:
 		ERROR_MSG("invalid sfactor: 0x%04x", sfactor);
@@ -984,44 +986,44 @@ int fd_blend_func(struct fd_state *state, GLenum sfactor, GLenum dfactor)
 
 	switch (dfactor) {
 	case GL_ZERO:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ZERO);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ZERO);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ZERO);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ZERO);
 		break;
 	case GL_ONE:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ONE);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ONE);
 		break;
 	case GL_SRC_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_SRC_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_SRC_COLOR);
 		break;
 	case GL_ONE_MINUS_SRC_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ONE_MINUS_SRC_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ONE_MINUS_SRC_COLOR);
 		break;
 	case GL_SRC_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_SRC_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_SRC_ALPHA);
 		break;
 	case GL_ONE_MINUS_SRC_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ONE_MINUS_SRC_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ONE_MINUS_SRC_ALPHA);
 		break;
 	case GL_DST_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_DST_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_DST_COLOR);
 		break;
 	case GL_ONE_MINUS_DST_COLOR:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ONE_MINUS_DST_COLOR);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ONE_MINUS_DST_COLOR);
 		break;
 	case GL_DST_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_DST_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_DST_ALPHA);
 		break;
 	case GL_ONE_MINUS_DST_ALPHA:
-		bc |= RB_BLENDCONTROL_COLOR_DESTBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
-		bc |= RB_BLENDCONTROL_ALPHA_DESTBLEND(RB_BLEND_ONE_MINUS_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(FACTOR_ONE_MINUS_DST_ALPHA);
+		bc |= A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(FACTOR_ONE_MINUS_DST_ALPHA);
 		break;
 	default:
 		ERROR_MSG("invalid dfactor: 0x%04x", sfactor);
@@ -1037,21 +1039,21 @@ int fd_stencil_func(struct fd_state *state, GLenum func,
 		GLint ref, GLuint mask)
 {
 	state->rb_stencilrefmask &= ~(
-			RB_STENCILREFMASK_STENCILREF_MASK |
-			RB_STENCILREFMASK_STENCILMASK_MASK);
+			A2XX_RB_STENCILREFMASK_STENCILREF__MASK |
+			A2XX_RB_STENCILREFMASK_STENCILMASK__MASK);
 	state->rb_stencilrefmask |=
-			RB_STENCILREFMASK_STENCILREF(ref) |
-			RB_STENCILREFMASK_STENCILMASK(mask);
+			A2XX_RB_STENCILREFMASK_STENCILREF(ref) |
+			A2XX_RB_STENCILREFMASK_STENCILMASK(mask);
 	state->rb_depthcontrol &= ~(
-			RB_DEPTHCONTROL_STENCILFUNC_MASK |
-			RB_DEPTHCONTROL_STENCILFUNC_BF_MASK);
+			A2XX_RB_DEPTHCONTROL_STENCILFUNC__MASK |
+			A2XX_RB_DEPTHCONTROL_STENCILFUNC_BF__MASK);
 	state->rb_depthcontrol |=
-			RB_DEPTHCONTROL_STENCILFUNC(g2a(func)) |
-			RB_DEPTHCONTROL_STENCILFUNC_BF(g2a(func));
+			A2XX_RB_DEPTHCONTROL_STENCILFUNC(g2a(func)) |
+			A2XX_RB_DEPTHCONTROL_STENCILFUNC_BF(g2a(func));
 	return 0;
 }
 
-static int set_stencil_op(enum rb_stencil_op *rbop, GLenum glop)
+static int set_stencil_op(enum adreno_stencil_op *rbop, GLenum glop)
 {
 	switch (glop) {
 	case GL_KEEP:
@@ -1084,7 +1086,7 @@ static int set_stencil_op(enum rb_stencil_op *rbop, GLenum glop)
 int fd_stencil_op(struct fd_state *state, GLenum sfail,
 		GLenum zfail, GLenum zpass)
 {
-	enum rb_stencil_op rbsfail, rbzfail, rbzpass;
+	enum adreno_stencil_op rbsfail, rbzfail, rbzpass;
 
 	if (set_stencil_op(&rbsfail, sfail) ||
 			set_stencil_op(&rbzfail, zfail) ||
@@ -1092,28 +1094,28 @@ int fd_stencil_op(struct fd_state *state, GLenum sfail,
 		return -1;
 
 	state->rb_depthcontrol &= ~(
-			RB_DEPTHCONTROL_STENCILFAIL_MASK |
-			RB_DEPTHCONTROL_STENCILZPASS_MASK |
-			RB_DEPTHCONTROL_STENCILZFAIL_MASK |
-			RB_DEPTHCONTROL_STENCILFAIL_BF_MASK |
-			RB_DEPTHCONTROL_STENCILZPASS_BF_MASK |
-			RB_DEPTHCONTROL_STENCILZFAIL_BF_MASK);
+			A2XX_RB_DEPTHCONTROL_STENCILFAIL__MASK |
+			A2XX_RB_DEPTHCONTROL_STENCILZPASS__MASK |
+			A2XX_RB_DEPTHCONTROL_STENCILZFAIL__MASK |
+			A2XX_RB_DEPTHCONTROL_STENCILFAIL_BF__MASK |
+			A2XX_RB_DEPTHCONTROL_STENCILZPASS_BF__MASK |
+			A2XX_RB_DEPTHCONTROL_STENCILZFAIL_BF__MASK);
 
 	state->rb_depthcontrol |=
-			RB_DEPTHCONTROL_STENCILFAIL(rbsfail) |
-			RB_DEPTHCONTROL_STENCILZPASS(rbzpass) |
-			RB_DEPTHCONTROL_STENCILZFAIL(rbzfail) |
-			RB_DEPTHCONTROL_STENCILFAIL_BF(rbsfail) |
-			RB_DEPTHCONTROL_STENCILZPASS_BF(rbzpass) |
-			RB_DEPTHCONTROL_STENCILZFAIL_BF(rbzfail);
+			A2XX_RB_DEPTHCONTROL_STENCILFAIL(rbsfail) |
+			A2XX_RB_DEPTHCONTROL_STENCILZPASS(rbzpass) |
+			A2XX_RB_DEPTHCONTROL_STENCILZFAIL(rbzfail) |
+			A2XX_RB_DEPTHCONTROL_STENCILFAIL_BF(rbsfail) |
+			A2XX_RB_DEPTHCONTROL_STENCILZPASS_BF(rbzpass) |
+			A2XX_RB_DEPTHCONTROL_STENCILZFAIL_BF(rbzfail);
 
 	return 0;
 }
 
 int fd_stencil_mask(struct fd_state *state, GLuint mask)
 {
-	state->rb_stencilrefmask &= ~RB_STENCILREFMASK_STENCILWRITEMASK_MASK;
-	state->rb_stencilrefmask |= RB_STENCILREFMASK_STENCILWRITEMASK(mask);
+	state->rb_stencilrefmask &= ~A2XX_RB_STENCILREFMASK_STENCILWRITEMASK__MASK;
+	state->rb_stencilrefmask |= A2XX_RB_STENCILREFMASK_STENCILWRITEMASK(mask);
 	return 0;
 }
 
@@ -1322,25 +1324,27 @@ static void emit_textures(struct fd_state *state)
 		OUT_PKT3(ring, CP_SET_CONSTANT, 7);
 		OUT_RING(ring, 0x00010000 + (0x6 * n));
 
-		OUT_RING(ring, SQ_TEX0_PITCH(p->tex->pitch) |
-				SQ_TEX0_CLAMP_X(state->textures.clamp_x) |
-				SQ_TEX0_CLAMP_Y(state->textures.clamp_y));
+		OUT_RING(ring,
+				A2XX_SQ_TEX_0_PITCH(p->tex->pitch) |
+				A2XX_SQ_TEX_0_CLAMP_X(state->textures.clamp_x) |
+				A2XX_SQ_TEX_0_CLAMP_Y(state->textures.clamp_y));
 
 		OUT_RELOC(ring, p->tex->bo, 0, color2fmt[p->tex->color]);
 
-		OUT_RING(ring, SQ_TEX2_HEIGHT(p->tex->height) |
-				SQ_TEX2_WIDTH(p->tex->width));
+		OUT_RING(ring,
+				A2XX_SQ_TEX_2_HEIGHT(p->tex->height - 1) |
+				A2XX_SQ_TEX_2_WIDTH(p->tex->width - 1));
 
 		/* NumFormat=0:RF, DstSelXYZW=XYZW, ExpAdj=0, MagFilt=MinFilt=0:Point,
 		 * Mip=2:BaseMap
 		 */
 		OUT_RING(ring,
-				SQ_TEX3_SWIZ_X(SQ_TEX_X) |
-				SQ_TEX3_SWIZ_Y(SQ_TEX_Y) |
-				SQ_TEX3_SWIZ_Z(SQ_TEX_Z) |
-				SQ_TEX3_SWIZ_W(SQ_TEX_W) |
-				SQ_TEX3_XY_MAG_FILTER(state->textures.mag_filter) |
-				SQ_TEX3_XY_MIN_FILTER(state->textures.min_filter));
+				A2XX_SQ_TEX_3_SWIZ_X(SQ_TEX_X) |
+				A2XX_SQ_TEX_3_SWIZ_Y(SQ_TEX_Y) |
+				A2XX_SQ_TEX_3_SWIZ_Z(SQ_TEX_Z) |
+				A2XX_SQ_TEX_3_SWIZ_W(SQ_TEX_W) |
+				A2XX_SQ_TEX_3_XY_MAG_FILTER(state->textures.mag_filter) |
+				A2XX_SQ_TEX_3_XY_MIN_FILTER(state->textures.min_filter));
 
 		/* VolMag=VolMin=0:Point, MinMipLvl=0, MaxMipLvl=1, LodBiasH=V=0,
 		 * Dim3d=0
@@ -1408,47 +1412,47 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	state->dirty = true;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SC_AA_MASK));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_MASK));
 	OUT_RING(ring, 0x0000ffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_DEPTHCONTROL));
 	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_SC_MODE_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_SC_MODE_CNTL));
 	OUT_RING(ring, state->pa_su_sc_mode_cntl);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_SCISSOR_TL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_SCISSOR_TL));
 	OUT_RING(ring, xy2d(0,0));          /* PA_SC_WINDOW_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_WINDOW_SCISSOR_BR */
 			surface->height));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VPORT_XSCALE));
-	OUT_RING(ring, f2d(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
-	OUT_RING(ring, f2d(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
-	OUT_RING(ring, f2d(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
+	OUT_RING(ring, fui(state->viewport.scale.x));	/* PA_CL_VPORT_XSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.x));	/* PA_CL_VPORT_XOFFSET */
+	OUT_RING(ring, fui(state->viewport.scale.y));	/* PA_CL_VPORT_YSCALE */
+	OUT_RING(ring, fui(state->viewport.offset.y));	/* PA_CL_VPORT_YOFFSET */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_VTE_CNTL));
-	OUT_RING(ring, PA_CL_VTE_CNTL_VTX_W0_FMT |
-			PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
-			PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
-			PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VTE_CNTL));
+	OUT_RING(ring, A2XX_PA_CL_VTE_CNTL_VTX_W0_FMT |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_CL_CLIP_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
 
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_STENCIL_ENABLE) {
+	if (state->rb_depthcontrol & A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE) {
 		OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-		OUT_RING(ring, CP_REG(REG_RB_STENCILREFMASK_BF));
+		OUT_RING(ring, CP_REG(REG_A2XX_RB_STENCILREFMASK_BF));
 		OUT_RING(ring, state->rb_stencilrefmask);     /* RB_STENCILREFMASK_BF */
 		OUT_RING(ring, state->rb_stencilrefmask);     /* RB_STENCILREFMASK */
 	}
@@ -1461,7 +1465,7 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	fd_program_emit_shader(state->program, FD_SHADER_VERTEX, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000003b);
 
 	fd_program_emit_sq_program_cntl(state->program, ring);
@@ -1469,15 +1473,15 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	fd_program_emit_shader(state->program, FD_SHADER_FRAGMENT, ring);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_CONTEXT_MISC));
+	OUT_RING(ring, A2XX_SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_CONTROL));
 	OUT_RING(ring, state->rb_blendcontrol);
 
 	emit_uniforms(state, FD_SHADER_VERTEX);
@@ -1485,8 +1489,8 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 
 	emit_textures(state);
 
-	OUT_PKT0(ring, REG_TC_CNTL_STATUS, 1);
-	OUT_RING(ring, TC_CNTL_STATUS_L2_INVALIDATE);
+	OUT_PKT0(ring, REG_A2XX_TC_CNTL_STATUS, 1);
+	OUT_RING(ring, A2XX_TC_CNTL_STATUS_L2_INVALIDATE);
 
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x0000000);
@@ -1514,7 +1518,7 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_2010));
+	OUT_RING(ring, CP_REG(REG_A2XX_UNKNOWN_2010));
 	OUT_RING(ring, 0x00000000);
 
 	emit_cacheflush(state);
@@ -1584,15 +1588,15 @@ int fd_flush(struct fd_state *state)
 
 				/* setup scissor/offset for current tile: */
 				OUT_PKT3(ring, CP_SET_CONSTANT, 4);
-				OUT_RING(ring, CP_REG(REG_PA_SC_WINDOW_OFFSET));
-				OUT_RING(ring, PA_SC_WINDOW_OFFSET_X(-xoff) |
-						PA_SC_WINDOW_OFFSET_Y(-yoff));/* PA_SC_WINDOW_OFFSET */
+				OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_OFFSET));
+				OUT_RING(ring, A2XX_PA_SC_WINDOW_OFFSET_X(-xoff) |
+						A2XX_PA_SC_WINDOW_OFFSET_Y(-yoff));/* PA_SC_WINDOW_OFFSET */
 				OUT_RING(ring, xy2d(0,0));            /* PA_SC_WINDOW_SCISSOR_TL */
 				OUT_RING(ring, xy2d(surface->width,   /* PA_SC_WINDOW_SCISSOR_BR */
 						surface->height));
 
 				OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-				OUT_RING(ring, CP_REG(REG_PA_SC_SCREEN_SCISSOR_TL));
+				OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_SCREEN_SCISSOR_TL));
 				OUT_RING(ring, xy2d(0,0));            /* PA_SC_SCREEN_SCISSOR_TL */
 				OUT_RING(ring, xy2d(bin_w, bin_h));   /* PA_SC_SCREEN_SCISSOR_BR */
 
@@ -1624,7 +1628,7 @@ int fd_flush(struct fd_state *state)
 /* ************************************************************************* */
 
 struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
-		uint32_t width, uint32_t height, enum COLORFORMATX color_format)
+		uint32_t width, uint32_t height, enum a2xx_colorformatx color_format)
 {
 	struct fd_surface *surface;
 	int cpp = color2cpp[color_format];
@@ -1692,8 +1696,8 @@ static void attach_render_target(struct fd_state *state,
 	uint32_t gmem_size = state->gmemsize_bytes;
 	uint32_t max_width = 992;
 
-	if (state->rb_depthcontrol & (RB_DEPTHCONTROL_Z_ENABLE |
-			RB_DEPTHCONTROL_STENCIL_ENABLE)) {
+	if (state->rb_depthcontrol & (A2XX_RB_DEPTHCONTROL_Z_ENABLE |
+			A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE)) {
 		gmem_size /= 2;
 		max_width = 256;
 	}
@@ -1719,9 +1723,9 @@ static void attach_render_target(struct fd_state *state,
 	}
 
 	if ((nbins_x > 1) || (nbins_y > 1)) {
-		state->pa_su_sc_mode_cntl |= PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE;
+		state->pa_su_sc_mode_cntl |= A2XX_PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE;
 	} else {
-		state->pa_su_sc_mode_cntl &= ~PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE;
+		state->pa_su_sc_mode_cntl &= ~A2XX_PA_SU_SC_MODE_CNTL_VTX_WINDOW_OFFSET_ENABLE;
 	}
 
 	INFO_MSG("using %d bins of size %dx%d", nbins_x*nbins_y, bin_w, bin_h);
@@ -1756,7 +1760,7 @@ void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface)
 {
 	struct fd_ringbuffer *ring = state->ring;
-	uint32_t bin_w;
+	uint32_t base;
 
 	attach_render_target(state, surface);
 	set_viewport(state, 0, 0, surface->width, surface->height);
@@ -1764,82 +1768,82 @@ void fd_make_current(struct fd_state *state,
 	emit_mem_write(state, state->solid_const,
 			init_shader_const, ARRAY_SIZE(init_shader_const));
 
-	OUT_PKT0(ring, REG_TP0_CHICKEN, 1);
+	OUT_PKT0(ring, REG_A2XX_TP0_CHICKEN, 1);
 	OUT_RING(ring, 0x00000002);
 
 	OUT_PKT3(ring, CP_INVALIDATE_STATE, 1);
 	OUT_RING(ring, 0x00007fff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_VS_CONST));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_VS_CONST));
 	OUT_RING(ring, 0x00100020);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_PS_CONST));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_PS_CONST));
 	OUT_RING(ring, 0x000e0120);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_A220_PC_MAX_VTX_INDX));
-	OUT_RING(ring, 0xffffffff);	/* A220_PC_MAX_VTX_INDX */
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_MAX_VTX_INDX));
+	OUT_RING(ring, 0xffffffff);	/* VGT_MAX_VTX_INDX */
 	OUT_RING(ring, 0x00000000);	/* VGT_MIN_VTX_INDX */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_PC_INDX_OFFSET));
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_INDX_OFFSET));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A220_PC_VERTEX_REUSE_BLOCK_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
 	OUT_RING(ring, 0x0000003b);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_CONTEXT_MISC));
-	OUT_RING(ring, SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_CONTEXT_MISC));
+	OUT_RING(ring, A2XX_SQ_CONTEXT_MISC_SC_SAMPLE_CNTL(CENTERS_ONLY));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_SQ_INTERPOLATOR_CNTL));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_INTERPOLATOR_CNTL));
 	OUT_RING(ring, 0xffffffff);
 
 	emit_pa_state(state);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_MODECONTROL));
-	OUT_RING(ring, RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
+	OUT_RING(ring, A2XX_RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_BLEND_CONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_CONTROL));
 	OUT_RING(ring, state->rb_blendcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
-	OUT_RING(ring, RB_COLORCONTROL_BLEND_DISABLE);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
+	OUT_RING(ring, A2XX_RB_COLORCONTROL_BLEND_DISABLE);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_SAMPLE_POS));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_SAMPLE_POS));
 	OUT_RING(ring, 0x88888888);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLOR_DEST_MASK));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_DEST_MASK));
 	OUT_RING(ring, 0xffffffff);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COPY_DEST_INFO));
-	OUT_RING(ring, RB_COPY_DEST_INFO_FORMAT(COLORX_4_4_4_4) |
-			RB_COPY_DEST_INFO_WRITE_RED |
-			RB_COPY_DEST_INFO_WRITE_GREEN |
-			RB_COPY_DEST_INFO_WRITE_BLUE |
-			RB_COPY_DEST_INFO_WRITE_ALPHA);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_DEST_INFO));
+	OUT_RING(ring, A2XX_RB_COPY_DEST_INFO_FORMAT(COLORX_4_4_4_4) |
+			A2XX_RB_COPY_DEST_INFO_WRITE_RED |
+			A2XX_RB_COPY_DEST_INFO_WRITE_GREEN |
+			A2XX_RB_COPY_DEST_INFO_WRITE_BLUE |
+			A2XX_RB_COPY_DEST_INFO_WRITE_ALPHA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_SQ_WRAPPING_0));
+	OUT_RING(ring, CP_REG(REG_A2XX_SQ_WRAPPING_0));
 	OUT_RING(ring, 0x00000000);	/* SQ_WRAPPING_0 */
 	OUT_RING(ring, 0x00000000);	/* SQ_WRAPPING_1 */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_PA_SU_POINT_MINMAX));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SU_POINT_MINMAX));
 	OUT_RING(ring, 0x04000008);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_ALPHA_REF));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_ALPHA_REF));
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT3(ring, CP_SET_DRAW_INIT_FLAGS, 1);
@@ -1851,7 +1855,7 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x5f601000);
 	OUT_RING(ring, 0x00000001);
 
-	OUT_PKT0(ring, REG_SQ_INST_STORE_MANAGMENT, 1);
+	OUT_PKT0(ring, REG_A2XX_SQ_INST_STORE_MANAGMENT, 1);
 	OUT_RING(ring, 0x00000180);
 
 	OUT_PKT3(ring, CP_INVALIDATE_STATE, 1);
@@ -1876,97 +1880,59 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x3ec00000);
 	OUT_RING(ring, 0x3e800000);
 
-#if 0 /* binning */
-	OUT_PKT0(ring, REG_A220_VSC_BIN_SIZE, 1);
-	OUT_RING(ring, (state->render_target.bin_h/32 << 5) |
-			state->render_target.bin_w/32);
-
-	OUT_PKT0(ring, REG_0c02, 1);
-	OUT_RING(ring, state->bo660c8000->gpuaddr + 0x80);
-
-	OUT_PKT0(ring, REG_0c04, 1);
-	OUT_RING(ring, 0x00000000);
-
-	OUT_PKT0(ring, REG_0c06, 24);
-	OUT_RING(ring, 0x01100000);
-	OUT_RING(ring, state->bo660ca000->gpuaddr);
-	OUT_RING(ring, 0x00040000);
-	OUT_RING(ring, 0x01100001);
-	OUT_RING(ring, state->bo661a6000->gpuaddr);
-	OUT_RING(ring, 0x00040000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000000);
-#else
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_PA_SC_SCREEN_SCISSOR_TL));
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_SCREEN_SCISSOR_TL));
 	OUT_RING(ring, xy2d(0,0));			/* PA_SC_SCREEN_SCISSOR_TL */
 	OUT_RING(ring, xy2d(surface->width, /* PA_SC_SCREEN_SCISSOR_BR */
 			surface->height));
-#endif
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLOR_MASK));
-	OUT_RING(ring, RB_COLOR_MASK_WRITE_RED |
-			RB_COLOR_MASK_WRITE_GREEN |
-			RB_COLOR_MASK_WRITE_BLUE |
-			RB_COLOR_MASK_WRITE_ALPHA);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_MASK));
+	OUT_RING(ring, A2XX_RB_COLOR_MASK_WRITE_RED |
+			A2XX_RB_COLOR_MASK_WRITE_GREEN |
+			A2XX_RB_COLOR_MASK_WRITE_BLUE |
+			A2XX_RB_COLOR_MASK_WRITE_ALPHA);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_DEPTHCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_DEPTHCONTROL));
 	OUT_RING(ring, state->rb_depthcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_RB_STENCILREFMASK_BF));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_STENCILREFMASK_BF));
 	OUT_RING(ring, 0x00000000);		/* RB_STENCILREFMASK_BF */
 	OUT_RING(ring, 0x00000000);		/* REG_RB_STENCILREFMASK */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_COLORCONTROL));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
 	OUT_RING(ring, state->rb_colorcontrol);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
-	OUT_RING(ring, CP_REG(REG_RB_BLEND_RED));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_RED));
 	OUT_RING(ring, 0x00000000);		/* REG_RB_BLEND_RED */
 	OUT_RING(ring, 0x00000000);		/* REG_RB_BLEND_GREEN */
 	OUT_RING(ring, 0x00000000);		/* REG_RB_BLEND_BLUE */
 	OUT_RING(ring, 0x000000ff);		/* REG_RB_BLEND_ALPHA */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
-	OUT_RING(ring, CP_REG(REG_RB_SURFACE_INFO));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_SURFACE_INFO));
 	OUT_RING(ring, state->render_target.bin_w);  /* RB_SURFACE_INFO */
 	OUT_RING(ring, 0x200 | surface->color);      /* RB_COLOR_INFO */
-	bin_w = state->render_target.bin_w;
-	if (state->rb_depthcontrol & RB_DEPTHCONTROL_STENCIL_ENABLE) {
+	base = state->render_target.bin_w * state->render_target.bin_h;
+	if (state->rb_depthcontrol & A2XX_RB_DEPTHCONTROL_STENCIL_ENABLE) {
 		OUT_RING(ring,                           /* RB_DEPTH_INFO */
-				RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_24_8) |
-				RB_DEPTH_INFO_DEPTH_BASE(bin_w >> 2));
-	} else if (state->rb_depthcontrol & RB_DEPTHCONTROL_Z_ENABLE) {
+				A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_24_8) |
+				A2XX_RB_DEPTH_INFO_DEPTH_BASE(base));
+	} else if (state->rb_depthcontrol & A2XX_RB_DEPTHCONTROL_Z_ENABLE) {
 		OUT_RING(ring,                           /* RB_DEPTH_INFO */
-				RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_16) |
-				RB_DEPTH_INFO_DEPTH_BASE(bin_w >> 2));
+				A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_16) |
+				A2XX_RB_DEPTH_INFO_DEPTH_BASE(base));
 	} else {
 		OUT_RING(ring,                           /* RB_DEPTH_INFO */
-				RB_DEPTH_INFO_DEPTH_BASE(bin_w >> 2));
+				A2XX_RB_DEPTH_INFO_DEPTH_BASE(base));
 	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_RB_SAMPLE_POS));
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_SAMPLE_POS));
 	OUT_RING(ring, 0x88888888);
 
 	fd_ringbuffer_flush(ring);

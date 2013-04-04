@@ -27,12 +27,12 @@
 #include <freedreno_drmif.h>
 
 /* TODO this needs to move somewhere.. */
-#include "a2xx_reg.h"
+#include "util.h"
 struct fd_surface {
 	struct fd_bo *bo;
 	uint32_t cpp;	/* bytes per pixel */
 	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
-	enum COLORFORMATX color;
+	enum a2xx_colorformatx color;
 };
 
 struct fd_winsys {
