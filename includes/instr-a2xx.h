@@ -299,7 +299,7 @@ typedef enum {
 	SAMPLE_CENTER = 1,
 } instr_sample_loc_t;
 
-typedef enum SURFACEFORMAT instr_surf_fmt_t;
+typedef enum a2xx_sq_surfaceformat instr_surf_fmt_t;
 
 typedef struct PACKED {
 	/* dword0: */

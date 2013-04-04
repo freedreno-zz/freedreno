@@ -27,7 +27,8 @@
 #include <string.h>
 
 #include "disasm.h"
-#include "a2xx_reg.h"
+#include "adreno_common.xml.h"
+#include "a2xx.xml.h"
 #include "instr-a2xx.h"
 
 static const char *levels[] = {
