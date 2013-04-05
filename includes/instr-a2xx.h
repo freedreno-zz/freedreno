@@ -26,6 +26,10 @@
 
 #define PACKED __attribute__((__packed__))
 
+#include "adreno_common.xml.h"
+#include "a2xx.xml.h"
+
+
 /*
  * ALU instructions:
  */
@@ -350,7 +354,7 @@ typedef struct PACKED {
 	/* dword1: */
 	uint16_t            dst_swiz                 : 12;
 	uint8_t             format_comp_all          : 1;   /* '1' for signed, '0' for unsigned? */
-	uint8_t             num_format_all           : 1;
+	uint8_t             num_format_all           : 1;   /* '0' for normalized, '1' for unnormalized */
 	uint8_t             signed_rf_mode_all       : 1;
 	uint8_t             reserved1                : 1;
 	instr_surf_fmt_t    format                   : 6;

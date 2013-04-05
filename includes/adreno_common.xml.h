@@ -8,9 +8,9 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30411 bytes, from 2013-04-04 21:59:44)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35685 bytes, from 2013-04-05 17:33:03)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   2797 bytes, from 2013-04-04 17:52:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   2972 bytes, from 2013-04-05 17:32:38)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   7736 bytes, from 2013-04-04 20:24:12)
 
 Copyright (C) 2013 by the following authors:
@@ -100,6 +100,12 @@ enum adreno_rb_surface_endian {
 	ENDIAN_16IN32 = 3,
 	ENDIAN_8IN64 = 4,
 	ENDIAN_8IN128 = 5,
+};
+
+enum adreno_rb_dither_mode {
+	DITHER_DISABLE = 0,
+	DITHER_ALWAYS = 1,
+	DITHER_IF_ALPHA_OFF = 2,
 };
 
 

@@ -8,9 +8,9 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30411 bytes, from 2013-04-04 21:59:44)
+- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30372 bytes, from 2013-04-05 17:32:29)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   2797 bytes, from 2013-04-04 17:52:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   2972 bytes, from 2013-04-05 17:32:38)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   7736 bytes, from 2013-04-04 20:24:12)
 
 Copyright (C) 2013 by the following authors:
@@ -38,15 +38,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 
-enum a2xx_rb_dither_mode {
-	DISABLE = 0,
-	ALWAYS = 1,
-	IF_ALPHA_OFF = 2,
-};
-
 enum a2xx_rb_dither_type {
-	PIXEL = 0,
-	SUBPIXEL = 1,
+	DITHER_PIXEL = 0,
+	DITHER_SUBPIXEL = 1,
 };
 
 enum a2xx_colorformatx {
@@ -65,6 +59,7 @@ enum a2xx_colorformatx {
 	COLORX_32_32_32_32_FLOAT = 12,
 	COLORX_2_3_3 = 13,
 	COLORX_8_8_8 = 14,
+	COLORX_INVALID = 15,
 };
 
 enum a2xx_sq_surfaceformat {
@@ -135,6 +130,7 @@ enum a2xx_sq_surfaceformat {
 enum a2xx_rb_depth_format {
 	DEPTHX_16 = 0,
 	DEPTHX_24_8 = 1,
+	DEPTHX_INVALID = 2,
 };
 
 enum a2xx_sq_ps_vtx_mode {
@@ -160,8 +156,8 @@ enum a2xx_dx_clip_space {
 };
 
 enum a2xx_pa_su_sc_polymode {
-	DISABLED = 0,
-	DUALMODE = 1,
+	POLY_DISABLED = 0,
+	POLY_DUALMODE = 1,
 };
 
 enum a2xx_rb_edram_mode {
@@ -936,7 +932,7 @@ static inline uint32_t A2XX_RB_COLORCONTROL_ROP_CODE(uint32_t val)
 }
 #define A2XX_RB_COLORCONTROL_DITHER_MODE__MASK			0x00003000
 #define A2XX_RB_COLORCONTROL_DITHER_MODE__SHIFT			12
-static inline uint32_t A2XX_RB_COLORCONTROL_DITHER_MODE(enum a2xx_rb_dither_mode val)
+static inline uint32_t A2XX_RB_COLORCONTROL_DITHER_MODE(enum adreno_rb_dither_mode val)
 {
 	return ((val) << A2XX_RB_COLORCONTROL_DITHER_MODE__SHIFT) & A2XX_RB_COLORCONTROL_DITHER_MODE__MASK;
 }
@@ -1334,7 +1330,7 @@ static inline uint32_t A2XX_RB_COPY_DEST_INFO_SWAP(uint32_t val)
 }
 #define A2XX_RB_COPY_DEST_INFO_DITHER_MODE__MASK		0x00000c00
 #define A2XX_RB_COPY_DEST_INFO_DITHER_MODE__SHIFT		10
-static inline uint32_t A2XX_RB_COPY_DEST_INFO_DITHER_MODE(enum a2xx_rb_dither_mode val)
+static inline uint32_t A2XX_RB_COPY_DEST_INFO_DITHER_MODE(enum adreno_rb_dither_mode val)
 {
 	return ((val) << A2XX_RB_COPY_DEST_INFO_DITHER_MODE__SHIFT) & A2XX_RB_COPY_DEST_INFO_DITHER_MODE__MASK;
 }
