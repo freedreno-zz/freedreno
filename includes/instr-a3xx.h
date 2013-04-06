@@ -26,6 +26,9 @@
 
 #define PACKED __attribute__((__packed__))
 
+#include <stdint.h>
+#include <assert.h>
+
 typedef enum {
 	/* category 0: */
 	OPC_NOP = 0,

@@ -47,7 +47,7 @@ static inline uint32_t fui(float f)
 
 #include "adreno_common.xml.h"
 #include "adreno_pm4.xml.h"
-#include "a2xx.xml.h"
+#include "a3xx.xml.h"
 
 #define CP_REG(reg) ((0x4 << 16) | ((unsigned int)((reg) - (0x2000))))
 
