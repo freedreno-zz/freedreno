@@ -574,10 +574,26 @@ static void print_instr_cat6(instr_t *instr)
 	switch (cat6->opc) {
 	case OPC_LDG:
 	case OPC_LDP:
+	case OPC_LDL:
+	case OPC_LDLW:
+	case OPC_LDLV:
 		/* load instructions: */
 		print_reg_dst((reg_t)(cat6->a.dst), type_size(cat6->type) == 32, false);
 		printf(",");
-		printf("%c[", (cat6->opc == OPC_LDG) ? 'g' : 'p');
+		switch (cat6->opc) {
+		case OPC_LDG:
+			printf("g");
+			break;
+		case OPC_LDP:
+			printf("p");
+			break;
+		case OPC_LDL:
+		case OPC_LDLW:
+		case OPC_LDLV:
+			printf("l");
+			break;
+		}
+		printf("[");
 		print_reg_src((reg_t)(cat6->a.src), true,
 				false, false, false, false, false, false);
 		if (cat6->a.off)
@@ -595,8 +611,23 @@ static void print_instr_cat6(instr_t *instr)
 		break;
 	case OPC_STG:
 	case OPC_STP:
+	case OPC_STL:
+	case OPC_STLW:
 		/* store instructions: */
-		printf("%c[", (cat6->opc == OPC_STG) ? 'g' : 'p');
+		printf(",");
+		switch (cat6->opc) {
+		case OPC_STG:
+			printf("g");
+			break;
+		case OPC_STP:
+			printf("p");
+			break;
+		case OPC_STL:
+		case OPC_STLW:
+			printf("l");
+			break;
+		}
+		printf("[");
 		print_reg_dst((reg_t)(cat6->b.dst), true, false);
 		if (cat6->b.off || cat6->b.off_hi)
 			printf("%+d", u2i((cat6->b.off_hi << 8) | cat6->b.off, 13));
