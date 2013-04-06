@@ -30,7 +30,7 @@
 #include <stdbool.h>
 
 #include "util.h"
-#include "instr-a2xx.h"
+#include "instr-a3xx.h"
 
 /* simple allocator to carve allocations out of an up-front allocated heap,
  * so that we can free everything easily in one shot.

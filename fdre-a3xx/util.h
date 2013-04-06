@@ -31,6 +31,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /**
  * Return float bits.
@@ -68,10 +69,6 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 {
 	return ((y & 0x3fff) << 16) | (x & 0x3fff);
 }
-
-typedef enum {
-	true = 1, false = 0
-} bool;
 
 #define enable_debug 0  /* TODO make dynamic */
 

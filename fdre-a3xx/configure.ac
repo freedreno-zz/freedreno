@@ -41,6 +41,18 @@ AC_PROG_YACC
 # Initialize libtool
 AC_PROG_LIBTOOL
 
+# Obtain compiler/linker options for depedencies
+PKG_CHECK_MODULES(DRM, libdrm libdrm_freedreno)
+
+# Check for X11/libdri2
+PKG_CHECK_MODULES(X11, x11 dri2, [HAVE_X11=yes], [HAVE_X11=no])
+if test "x$HAVE_X11" = "xyes"; then
+	AC_DEFINE(HAVE_X11, 1, [Have X11 support])
+else
+	AC_MSG_WARN([Building without X11 support])
+fi
+AM_CONDITIONAL(ENABLE_X11, [test "x$HAVE_X11" = xyes])
+
 dnl ===========================================================================
 dnl check compiler flags
 AC_DEFUN([LIBDRM_CC_TRY_FLAG], [
@@ -81,5 +93,6 @@ AC_SUBST(WARN_CFLAGS)
 
 AC_CONFIG_FILES([
 	Makefile
-	asm/Makefile])
+	asm/Makefile
+	tests/Makefile])
 AC_OUTPUT

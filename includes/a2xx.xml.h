@@ -8,9 +8,9 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30372 bytes, from 2013-04-05 17:32:29)
+- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30212 bytes, from 2013-04-09 20:15:07)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   2972 bytes, from 2013-04-05 17:32:38)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-09 20:15:19)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   7736 bytes, from 2013-04-04 20:24:12)
 
 Copyright (C) 2013 by the following authors:
@@ -125,12 +125,6 @@ enum a2xx_sq_surfaceformat {
 	FMT_CTX1 = 60,
 	FMT_DXT3A_AS_1_1_1_1 = 61,
 	FMT_INVALID = 62,
-};
-
-enum a2xx_rb_depth_format {
-	DEPTHX_16 = 0,
-	DEPTHX_24_8 = 1,
-	DEPTHX_INVALID = 2,
 };
 
 enum a2xx_sq_ps_vtx_mode {
@@ -539,7 +533,7 @@ static inline uint32_t A2XX_RB_COLOR_INFO_BASE(uint32_t val)
 #define REG_A2XX_RB_DEPTH_INFO					0x00002002
 #define A2XX_RB_DEPTH_INFO_DEPTH_FORMAT__MASK			0x00000001
 #define A2XX_RB_DEPTH_INFO_DEPTH_FORMAT__SHIFT			0
-static inline uint32_t A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(enum a2xx_rb_depth_format val)
+static inline uint32_t A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(enum adreno_rb_depth_format val)
 {
 	return ((val) << A2XX_RB_DEPTH_INFO_DEPTH_FORMAT__SHIFT) & A2XX_RB_DEPTH_INFO_DEPTH_FORMAT__MASK;
 }

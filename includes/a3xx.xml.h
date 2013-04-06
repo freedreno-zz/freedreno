@@ -8,9 +8,9 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35685 bytes, from 2013-04-05 17:33:03)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35757 bytes, from 2013-04-09 20:15:45)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   2972 bytes, from 2013-04-05 17:32:38)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-09 20:15:19)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   7736 bytes, from 2013-04-04 20:24:12)
 
 Copyright (C) 2013 by the following authors:
@@ -622,13 +622,17 @@ static inline uint32_t A3XX_RB_DEPTH_CONTROL_ZFUNC(enum adreno_compare_func val)
 #define REG_A3XX_UNKNOWN_2101					0x00002101
 
 #define REG_A3XX_RB_DEPTH_INFO					0x00002102
-#define A3XX_RB_DEPTH_INFO_DEPTH_FORMAT_DEPTHX_16		0x00000000
-#define A3XX_RB_DEPTH_INFO_DEPTH_FORMAT_DEPTHX_24_8		0x00000001
+#define A3XX_RB_DEPTH_INFO_DEPTH_FORMAT__MASK			0x00000001
+#define A3XX_RB_DEPTH_INFO_DEPTH_FORMAT__SHIFT			0
+static inline uint32_t A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(enum adreno_rb_depth_format val)
+{
+	return ((val) << A3XX_RB_DEPTH_INFO_DEPTH_FORMAT__SHIFT) & A3XX_RB_DEPTH_INFO_DEPTH_FORMAT__MASK;
+}
 #define A3XX_RB_DEPTH_INFO_DEPTH_BASE__MASK			0xfffff800
 #define A3XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT			11
 static inline uint32_t A3XX_RB_DEPTH_INFO_DEPTH_BASE(uint32_t val)
 {
-	return ((val) << A3XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT) & A3XX_RB_DEPTH_INFO_DEPTH_BASE__MASK;
+	return ((val >> 10) << A3XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT) & A3XX_RB_DEPTH_INFO_DEPTH_BASE__MASK;
 }
 
 #define REG_A3XX_RB_DEPTH_PITCH					0x00002103
@@ -1427,6 +1431,18 @@ static inline uint32_t A3XX_TPL1_TP_FS_TEX_OFFSET_BASETABLEPTR(uint32_t val)
 #define REG_A3XX_VBIF_OUT_AXI_AOOO				0x0000305f
 
 #define REG_A3XX_VSC_BIN_SIZE					0x00000c01
+#define A3XX_VSC_BIN_SIZE_WIDTH__MASK				0x0000001f
+#define A3XX_VSC_BIN_SIZE_WIDTH__SHIFT				0
+static inline uint32_t A3XX_VSC_BIN_SIZE_WIDTH(uint32_t val)
+{
+	return ((val >> 5) << A3XX_VSC_BIN_SIZE_WIDTH__SHIFT) & A3XX_VSC_BIN_SIZE_WIDTH__MASK;
+}
+#define A3XX_VSC_BIN_SIZE_HEIGHT__MASK				0x000003e0
+#define A3XX_VSC_BIN_SIZE_HEIGHT__SHIFT				5
+static inline uint32_t A3XX_VSC_BIN_SIZE_HEIGHT(uint32_t val)
+{
+	return ((val >> 5) << A3XX_VSC_BIN_SIZE_HEIGHT__SHIFT) & A3XX_VSC_BIN_SIZE_HEIGHT__MASK;
+}
 
 #define REG_A3XX_VSC_SIZE_ADDRESS				0x00000c02
 
@@ -1506,7 +1522,7 @@ static inline uint32_t A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(uint32_t val)
 
 #define REG_A3XX_UNKNOWN_0EE0					0x00000ee0
 
-#define REG_A3XX_UNKNOWN_0f03					0x00000f03
+#define REG_A3XX_UNKNOWN_0F03					0x00000f03
 
 
 #endif /* A3XX_XML */
