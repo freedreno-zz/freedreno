@@ -66,7 +66,7 @@ MAYBE_WARN="-Wall -Wextra -Wno-packed-bitfield-compat \
 -Wsign-compare -Werror-implicit-function-declaration \
 -Wpointer-arith -Wwrite-strings -Wstrict-prototypes \
 -Wnested-externs \
--Wpacked -Wswitch-enum -Wmissing-format-attribute \
+-Wpacked -Wswitch -Wmissing-format-attribute \
 -Wstrict-aliasing=2 -Winit-self -Wunsafe-loop-optimizations \
 -Wdeclaration-after-statement -Wold-style-definition \
 -Wno-missing-field-initializers -Wno-unused-parameter \

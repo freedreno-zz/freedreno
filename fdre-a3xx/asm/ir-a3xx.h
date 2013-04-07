@@ -39,21 +39,21 @@ struct ir3_shader * fd_asm_parse(const char *src);
 
 struct ir3_shader_info {
 	int8_t   max_reg;   /* highest GPR # used by shader */
-	uint8_t  max_input_reg;
-	uint64_t regs_written;
+	int8_t   max_half_reg;
 };
 
 struct ir3_register {
 	enum {
 		IR3_REG_CONST  = 0x001,
 		IR3_REG_IMMED  = 0x002,
-		IR3_REG_RELATIV= 0x004,
-		IR3_REG_R      = 0x008,
-		IR3_REG_NEGATE = 0x010,
-		IR3_REG_ABS    = 0x020,
-		IR3_REG_EVEN   = 0x040,
-		IR3_REG_POS_INF= 0x080,
-		IR3_REG_EI     = 0x100,
+		IR3_REG_HALF   = 0x004,
+		IR3_REG_RELATIV= 0x008,
+		IR3_REG_R      = 0x010,
+		IR3_REG_NEGATE = 0x020,
+		IR3_REG_ABS    = 0x040,
+		IR3_REG_EVEN   = 0x080,
+		IR3_REG_POS_INF= 0x100,
+		IR3_REG_EI     = 0x200,
 	} flags;
 	union {
 		/* normal registers: */
@@ -120,6 +120,7 @@ struct ir3_instruction {
 			int iim_val;
 		} cat6;
 	};
+	int line;
 };
 
 /* somewhat arbitrary limits.. */
@@ -187,7 +188,7 @@ struct ir3_shader {
 struct ir3_shader * ir3_shader_create(void);
 void ir3_shader_destroy(struct ir3_shader *shader);
 int ir3_shader_assemble(struct ir3_shader *shader,
-		uint32_t *dwords, int sizedwords,
+		uint32_t *dwords, uint32_t sizedwords,
 		struct ir3_shader_info *info);
 
 struct ir3_attribute * ir3_attribute_create(struct ir3_shader *shader,

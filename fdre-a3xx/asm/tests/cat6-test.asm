@@ -3455,3 +3455,6 @@ stp.u16 p[r1.w],hr0.w, 1
 stp.u16 p[r0.w-4],hr0.y, 1
 ldp.f32 r1.w,p[r0.w-4], 1
 stg.f32 g[r1.y],r1.z, 1
+nop
+nop
+nop

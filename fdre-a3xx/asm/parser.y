@@ -45,11 +45,14 @@ static struct {
 	unsigned wrmask;
 } rflags;
 
+int asm_yyget_lineno(void);
+
 static struct ir3_instruction * new_instr(int cat, opc_t opc)
 {
 	instr = ir3_instr_create(shader, cat, opc);
 	instr->flags = iflags.flags;
 	instr->repeat = iflags.repeat;
+	instr->line = asm_yyget_lineno();
 	iflags.flags = iflags.repeat = 0;
 	return instr;
 }
@@ -96,8 +99,11 @@ static struct ir3_instruction * parse_type_type(struct ir3_instruction *instr,
 
 static struct ir3_register * new_reg(int num, unsigned flags)
 {
-	struct ir3_register *reg = ir3_reg_create(instr, num, flags);
-	reg->flags |= rflags.flags;
+	struct ir3_register *reg;
+	flags |= rflags.flags;
+	if (num & 0x1)
+		flags |= IR3_REG_HALF;
+	reg = ir3_reg_create(instr, num>>1, flags);
 	reg->wrmask = rflags.wrmask;
 	rflags.flags = rflags.wrmask = 0;
 	return reg;
@@ -116,7 +122,6 @@ int yyparse(void);
 
 void yyerror(const char *error)
 {
-	int asm_yyget_lineno(void);
 	fprintf(stderr, "error at line %d: %s\n", asm_yyget_lineno(), error);
 }
 
@@ -181,7 +186,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_EVEN
 %token <tok> T_POS_INFINITY
 %token <tok> T_EI
-%token <tok> T_WRMASK
+%token <num> T_WRMASK
 
 /* instruction flags */
 %token <tok> T_SY
@@ -449,8 +454,8 @@ instr:             iflags cat0_instr
 |                  iflags cat5_instr
 |                  iflags cat6_instr
 
-cat0_src:          '!' T_P0        { instr->cat0.inv = true; instr->cat0.comp = $2; }
-|                  T_P0            { instr->cat0.comp = $1; }
+cat0_src:          '!' T_P0        { instr->cat0.inv = true; instr->cat0.comp = $2 >> 1; }
+|                  T_P0            { instr->cat0.comp = $1 >> 1; }
 
 cat0_immed:        '#' integer     { instr->cat0.immed = $2; }
 
@@ -638,8 +643,8 @@ cat6_load:         T_OP_LDG  { new_instr(6, OPC_LDG); }  cat6_type dst_reg ',' '
 |                  T_OP_LDLV { new_instr(6, OPC_LDLV); } cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
 
 cat6_store:        T_OP_STG  { new_instr(6, OPC_STG); }  cat6_type 'g' '[' dst_reg cat6_offset ']' ',' reg ',' cat6_immed
-|                  T_OP_STP  { new_instr(6, OPC_STL); }  cat6_type 'p' '[' dst_reg cat6_offset ']' ',' reg ',' cat6_immed
-|                  T_OP_STL  { new_instr(6, OPC_STP); }  cat6_type 'l' '[' dst_reg cat6_offset ']' ',' reg ',' cat6_immed
+|                  T_OP_STP  { new_instr(6, OPC_STP); }  cat6_type 'p' '[' dst_reg cat6_offset ']' ',' reg ',' cat6_immed
+|                  T_OP_STL  { new_instr(6, OPC_STL); }  cat6_type 'l' '[' dst_reg cat6_offset ']' ',' reg ',' cat6_immed
 |                  T_OP_STLW { new_instr(6, OPC_STLW); } cat6_type 'l' '[' dst_reg cat6_offset ']' ',' reg ',' cat6_immed
 
 cat6_storei:       T_OP_STI  { new_instr(6, OPC_STI); }  cat6_type dst_reg cat6_offset ',' reg ',' cat6_immed
@@ -677,8 +682,8 @@ cat6_instr:        cat6_load
 |                  cat6_todo
 
 reg:               T_REGISTER     { $$ = new_reg($1, 0); }
-|                  T_A0           { $$ = new_reg((61 << 2) + $1, 0); }
-|                  T_P0           { $$ = new_reg((62 << 2) + $1, 0); }
+|                  T_A0           { $$ = new_reg((61 << 3) + $1, IR3_REG_HALF); }
+|                  T_P0           { $$ = new_reg((62 << 3) + $1, 0); }
 
 const:             T_CONSTANT     { $$ = new_reg($1, IR3_REG_CONST); }
 
@@ -720,7 +725,7 @@ offset:            { $$ = 0; }
 |                  '+' integer { $$ = $2; }
 |                  '-' integer { $$ = -$2; }
 
-relative:          'c' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV)->offset = 4; }
+relative:          'c' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV)->offset = $4; }
 
 immediate:         integer             { new_reg(0, IR3_REG_IMMED)->iim_val = $1; }
 |                  '(' integer ')'     { new_reg(0, IR3_REG_IMMED)->fim_val = $2; }

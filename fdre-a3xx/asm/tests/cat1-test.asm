@@ -40,7 +40,7 @@ mov.f32f32 r1.z, r6.w
 (jp)mov.s32s32 r1.y, 0
 cov.s32s16 hr0.y, r2.z
 mov.s16s16 hr4.y, 0
-;mov.s16s16 hr4.z, 65535
+mov.s16s16 hr4.z, 65535
 cov.s16s32 r2.z, hr0.y
 (jp)mov.s32s32 r1.w, -65536
 mov.s32s32 r2.y, 16777216
@@ -6687,3 +6687,6 @@ mov.s16s16 hr0.z, 0
 mov.s16s16 hr0.w, 65535
 cov.s32s16 hr0.z, r1.w
 (jp)mov.f32f32 r2.x, (1.000000)
+nop
+nop
+nop

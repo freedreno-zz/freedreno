@@ -45,3 +45,4 @@ cos r1.y, r1.y
 rcp r1.y, r1.y
 rcp r2.x, r2.x
 sin r1.z, r1.z
+nop

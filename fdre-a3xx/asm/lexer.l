@@ -30,17 +30,32 @@
 #define TOKEN(t) (asm_yylval.tok = t)
 extern YYSTYPE asm_yylval;
 
+static int parse_wrmask(const char *src)
+{
+	int i, num = 0;
+	for (i = 0; i < 4; i++) {
+		if ("xyzw"[i] == src[1]) {
+			num |= (1 << i);
+			src++;
+		}
+	}
+	return num;
+}
+
 static int parse_reg(const char *str)
 {
-	int num;
-	if (str[0] == 'h') str++;
+	int num = 0;
+	if (str[0] == 'h') {
+		str++;
+		num++;
+	}
 	str++;
-	num = strtol(str, &str, 10) << 2;
+	num += strtol(str, &str, 10) << 3;
 	switch (str[1]) {
 	case 'x': num += 0; break;
-	case 'y': num += 1; break;
-	case 'z': num += 2; break;
-	case 'w': num += 3; break;
+	case 'y': num += 2; break;
+	case 'z': num += 4; break;
+	case 'w': num += 6; break;
 	default: assert(0); break;
 	}
 	return num;
@@ -74,7 +89,7 @@ static int parse_reg(const char *str)
 "(ei)"                            return TOKEN(T_EI);
 "(jp)"                            return TOKEN(T_JP);
 "(rpt"[0-7]")"                    asm_yylval.num = strtol(yytext+4, NULL, 10); return T_RPT;
-"("[xyzw]+")"                     return TOKEN(T_WRMASK);
+"("[x]?[y]?[z]?[w]?")"            asm_yylval.num = parse_wrmask(yytext); return T_WRMASK;
 
 [h]?"r"[0-9]+"."[xyzw]            asm_yylval.num = parse_reg(yytext); return T_REGISTER;
 [h]?"c"[0-9]+"."[xyzw]            asm_yylval.num = parse_reg(yytext); return T_CONSTANT;

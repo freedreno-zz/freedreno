@@ -73,7 +73,6 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-#if 0 // TODO .. for now just testing that parsing..
 	sizedwords = ir3_shader_assemble(shader, dwords, ARRAY_SIZE(dwords), &info);
 	if (sizedwords <= 0) {
 		ERROR_MSG("assembler failed");
@@ -91,7 +90,6 @@ int main(int argc, char **argv)
 		ERROR_MSG("could not write '%s': %s", outfile, strerror(errno));
 		return -1;
 	}
-#endif
 
 	ir3_shader_destroy(shader);
 

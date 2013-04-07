@@ -66,63 +66,406 @@ void ir3_shader_destroy(struct ir3_shader *shader)
 	free(shader);
 }
 
-int ir3_shader_assemble(struct ir3_shader *shader,
-		uint32_t *dwords, int sizedwords,
-		struct ir3_shader_info *info)
+#define iassert(cond) do { \
+	if (!(cond)) { \
+		fprintf(stderr, "bogus instruction at line %d\n", instr->line); \
+		assert(cond); \
+		return -1; \
+	} } while (0)
+
+static uint32_t reg(struct ir3_register *reg,
+		struct ir3_shader_info *info, uint32_t valid_flags)
 {
-	uint32_t i, j;
-	uint32_t *ptr = dwords;
-	uint32_t idx = 0;
-	int ret;
+	reg_t val = { .dummy32 = 0 };
 
-	info->max_reg       = -1;
-	info->max_input_reg = 0;
-	info->regs_written  = 0;
+	assert(!(reg->flags & ~valid_flags));
 
-#if 0
-	/* we need an even # of CF's.. insert a NOP if needed */
-	if (shader->cfs_count != ALIGN(shader->cfs_count, 2))
-		ir3_cf_create(shader, T_NOP);
+	if (reg->flags & IR3_REG_IMMED) {
+		val.iim_val = reg->iim_val;
+	} else {
+		val.comp = reg->num & 0x3;
+		val.num  = reg->num >> 2;
 
-	/* first pass, resolve sizes and addresses: */
-	ret = shader_resolve(shader);
-	if (ret) {
-		ERROR_MSG("resolve failed: %d", ret);
-		return ret;
-	}
-
-	/* second pass, emit CF program in pairs: */
-	for (i = 0; i < shader->cfs_count; i += 2) {
-		instr_cf_t *cfs = (instr_cf_t *)ptr;
-		ret = cf_emit(shader->cfs[i], &cfs[0]);
-		if (ret) {
-			ERROR_MSG("CF emit failed: %d\n", ret);
-			return ret;
-		}
-		ret = cf_emit(shader->cfs[i+1], &cfs[1]);
-		if (ret) {
-			ERROR_MSG("CF emit failed: %d\n", ret);
-			return ret;
-		}
-		ptr += 3;
-	}
-
-	/* third pass, emit ALU/FETCH: */
-	for (i = 0; i < shader->cfs_count; i++) {
-		struct ir3_cf *cf = shader->cfs[i];
-		if ((cf->cf_type == T_EXEC) || (cf->cf_type == T_EXEC_END)) {
-			for (j = 0; j < cf->exec.instrs_count; j++) {
-				ret = instr_emit(cf->exec.instrs[j], ptr, idx++, info);
-				if (ret) {
-					ERROR_MSG("instruction emit failed: %d", ret);
-					return ret;
-				}
-				ptr += 3;
+		if (!(reg->flags & IR3_REG_CONST)) {
+			/* update register stats: */
+			if (reg->flags & IR3_REG_HALF) {
+				info->max_half_reg =
+					max(info->max_half_reg, val.num);
+			} else {
+				info->max_reg =
+					max(info->max_reg, val.num);
 			}
 		}
 	}
-#endif
-	return ptr - dwords;
+
+	return val.dummy32;
+}
+
+static int emit_cat0(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	instr_cat0_t *cat0 = ptr;
+
+	cat0->immed    = instr->cat0.immed;
+	cat0->repeat   = instr->repeat;
+	cat0->ss       = !!(instr->flags & IR3_INSTR_SS);
+	cat0->inv      = instr->cat0.inv;
+	cat0->comp     = instr->cat0.comp;
+	cat0->opc      = instr->opc;
+	cat0->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat0->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat0->opc_cat  = 0;
+
+	return 0;
+}
+
+static uint32_t type_flags(type_t type)
+{
+	return (type_size(type) == 32) ? 0 : IR3_REG_HALF;
+}
+
+static int emit_cat1(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *src = instr->regs[1];
+	instr_cat1_t *cat1 = ptr;
+
+	iassert(instr->regs_count == 2);
+	iassert(!((dst->flags ^ type_flags(instr->cat1.dst_type)) & IR3_REG_HALF));
+	iassert((src->flags & IR3_REG_IMMED) ||
+			!((src->flags ^ type_flags(instr->cat1.src_type)) & IR3_REG_HALF));
+
+	if (src->flags & IR3_REG_IMMED) {
+		cat1->iim_val = src->iim_val;
+		cat1->src_im  = 1;
+	} else if (src->flags & IR3_REG_RELATIV) {
+		cat1->off       = src->offset;
+		cat1->src_rel   = 1;
+		cat1->must_be_3 = 3;
+	} else {
+		cat1->src  = reg(src, info, IR3_REG_IMMED | IR3_REG_RELATIV |
+				IR3_REG_R | IR3_REG_CONST | IR3_REG_HALF);
+	}
+
+	cat1->dst      = reg(dst, info, IR3_REG_RELATIV | IR3_REG_EVEN |
+			IR3_REG_POS_INF | IR3_REG_HALF);
+	cat1->repeat   = instr->repeat;
+	cat1->src_r    = !!(src->flags & IR3_REG_R);
+	cat1->ss       = !!(instr->flags & IR3_INSTR_SS);
+	cat1->dst_type = instr->cat1.dst_type;
+	cat1->dst_rel  = !!(dst->flags & IR3_REG_RELATIV);
+	cat1->src_type = instr->cat1.src_type;
+	cat1->src_c    = !!(src->flags & IR3_REG_CONST);
+	cat1->even     = !!(dst->flags & IR3_REG_EVEN);
+	cat1->pos_inf  = !!(dst->flags & IR3_REG_POS_INF);
+	cat1->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat1->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat1->opc_cat  = 1;
+
+	return 0;
+}
+
+static int emit_cat2(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *src1 = instr->regs[1];
+	struct ir3_register *src2 = instr->regs[2];
+	instr_cat2_t *cat2 = ptr;
+
+	iassert((instr->regs_count == 2) || (instr->regs_count == 3));
+
+	cat2->src1     = reg(src1, info, IR3_REG_RELATIV | IR3_REG_CONST |
+			IR3_REG_IMMED | IR3_REG_NEGATE | IR3_REG_ABS | IR3_REG_R |
+			IR3_REG_HALF);
+	cat2->src1_rel = !!(src1->flags & IR3_REG_RELATIV);
+	cat2->src1_c   = !!(src1->flags & IR3_REG_CONST);
+	cat2->src1_im  = !!(src1->flags & IR3_REG_IMMED);
+	cat2->src1_neg = !!(src1->flags & IR3_REG_NEGATE);
+	cat2->src1_abs = !!(src1->flags & IR3_REG_ABS);
+	cat2->src1_r   = !!(src1->flags & IR3_REG_R);
+
+	if (src2) {
+		iassert((src2->flags & IR3_REG_IMMED) ||
+				!((src1->flags ^ src2->flags) & IR3_REG_HALF));
+		cat2->src2     = reg(src2, info, IR3_REG_RELATIV | IR3_REG_CONST |
+				IR3_REG_IMMED | IR3_REG_NEGATE | IR3_REG_ABS | IR3_REG_R |
+				IR3_REG_HALF);
+		cat2->src2_rel = !!(src2->flags & IR3_REG_RELATIV);
+		cat2->src2_c   = !!(src2->flags & IR3_REG_CONST);
+		cat2->src2_im  = !!(src2->flags & IR3_REG_IMMED);
+		cat2->src2_neg = !!(src2->flags & IR3_REG_NEGATE);
+		cat2->src2_abs = !!(src2->flags & IR3_REG_ABS);
+		cat2->src2_r   = !!(src2->flags & IR3_REG_R);
+	}
+
+	cat2->dst      = reg(dst, info, IR3_REG_EI | IR3_REG_HALF);
+	cat2->repeat   = instr->repeat;
+	cat2->ss       = !!(instr->flags & IR3_INSTR_SS);
+	cat2->ul       = !!(instr->flags & IR3_INSTR_UL);
+	cat2->dst_half = !!((src1->flags ^ dst->flags) & IR3_REG_HALF);
+	cat2->ei       = !!(dst->flags & IR3_REG_EI);
+	cat2->cond     = instr->cat2.condition;
+	cat2->full     = ! (src1->flags & IR3_REG_HALF);
+	cat2->opc      = instr->opc;
+	cat2->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat2->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat2->opc_cat  = 2;
+
+	return 0;
+}
+
+static int emit_cat3(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *src1 = instr->regs[1];
+	struct ir3_register *src2 = instr->regs[2];
+	struct ir3_register *src3 = instr->regs[3];
+	instr_cat3_t *cat3 = ptr;
+	uint32_t src_flags = 0;
+
+	switch (instr->opc) {
+	case OPC_MAD_F16:
+	case OPC_MAD_U16:
+	case OPC_MAD_S16:
+	case OPC_SEL_B16:
+	case OPC_SEL_S16:
+	case OPC_SEL_F16:
+	case OPC_SAD_S16:
+	case OPC_SAD_S32:  // really??
+		src_flags |= IR3_REG_HALF;
+		break;
+	default:
+		break;
+	}
+
+	iassert(instr->regs_count == 4);
+	iassert(!((src1->flags ^ src_flags) & IR3_REG_HALF));
+	iassert(!((src2->flags ^ src_flags) & IR3_REG_HALF));
+	iassert(!((src3->flags ^ src_flags) & IR3_REG_HALF));
+
+	cat3->src1     = reg(src1, info, IR3_REG_RELATIV | IR3_REG_CONST |
+			IR3_REG_NEGATE | IR3_REG_R | IR3_REG_HALF);
+	cat3->src1_rel = !!(src1->flags & IR3_REG_RELATIV);
+	cat3->src1_c   = !!(src1->flags & IR3_REG_CONST);
+	cat3->src1_neg = !!(src1->flags & IR3_REG_NEGATE);
+	cat3->src1_r   = !!(src1->flags & IR3_REG_R);
+
+	cat3->src2     = reg(src2, info, IR3_REG_CONST | IR3_REG_NEGATE |
+			IR3_REG_R | IR3_REG_HALF);
+	cat3->src2_c   = !!(src2->flags & IR3_REG_CONST);
+	cat3->src2_neg = !!(src2->flags & IR3_REG_NEGATE);
+	cat3->src2_r   = !!(src2->flags & IR3_REG_R);
+
+	cat3->src3     = reg(src3, info, IR3_REG_RELATIV | IR3_REG_CONST |
+			IR3_REG_NEGATE | IR3_REG_R | IR3_REG_HALF);
+	cat3->src3_rel = !!(src3->flags & IR3_REG_RELATIV);
+	cat3->src3_c   = !!(src3->flags & IR3_REG_CONST);
+	cat3->src3_neg = !!(src3->flags & IR3_REG_NEGATE);
+	cat3->src3_r   = !!(src3->flags & IR3_REG_R);
+
+	cat3->dst      = reg(dst, info, IR3_REG_HALF);
+	cat3->repeat   = instr->repeat;
+	cat3->ss       = !!(instr->flags & IR3_INSTR_SS);
+	cat3->ul       = !!(instr->flags & IR3_INSTR_UL);
+	cat3->dst_half = !!((src_flags ^ dst->flags) & IR3_REG_HALF);
+	cat3->opc      = instr->opc;
+	cat3->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat3->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat3->opc_cat  = 3;
+
+	return 0;
+}
+
+static int emit_cat4(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *src = instr->regs[1];
+	instr_cat4_t *cat4 = ptr;
+
+	iassert(instr->regs_count == 2);
+
+	cat4->src      = reg(src, info, IR3_REG_RELATIV | IR3_REG_CONST |
+			IR3_REG_IMMED | IR3_REG_NEGATE | IR3_REG_ABS | IR3_REG_R |
+			IR3_REG_HALF);
+	cat4->src_rel  = !!(src->flags & IR3_REG_RELATIV);
+	cat4->src_c    = !!(src->flags & IR3_REG_CONST);
+	cat4->src_im   = !!(src->flags & IR3_REG_IMMED);
+	cat4->src_neg  = !!(src->flags & IR3_REG_NEGATE);
+	cat4->src_abs  = !!(src->flags & IR3_REG_ABS);
+	cat4->src_r    = !!(src->flags & IR3_REG_R);
+
+	cat4->dst      = reg(dst, info, IR3_REG_HALF);
+	cat4->repeat   = instr->repeat;
+	cat4->ss       = !!(instr->flags & IR3_INSTR_SS);
+	cat4->ul       = !!(instr->flags & IR3_INSTR_UL);
+	cat4->dst_half = !!((src->flags ^ dst->flags) & IR3_REG_HALF);
+	cat4->full     = ! (src->flags & IR3_REG_HALF);
+	cat4->opc      = instr->opc;
+	cat4->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat4->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat4->opc_cat  = 4;
+
+	return 0;
+}
+
+static int emit_cat5(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *src1 = instr->regs[1];
+	struct ir3_register *src2 = instr->regs[2];
+	struct ir3_register *src3 = instr->regs[3];
+	instr_cat5_t *cat5 = ptr;
+
+	iassert(!((dst->flags ^ type_flags(instr->cat5.type)) & IR3_REG_HALF));
+
+	if (src1) {
+		cat5->full = ! (src1->flags & IR3_REG_HALF);
+		cat5->src1 = reg(src1, info, IR3_REG_HALF);
+	}
+
+
+	if (instr->flags & IR3_INSTR_S2EN) {
+		if (src2) {
+			iassert(!((src1->flags ^ src2->flags) & IR3_REG_HALF));
+			cat5->s2en.src2 = reg(src2, info, IR3_REG_HALF);
+		}
+		if (src3) {
+			iassert(src3->flags & IR3_REG_HALF);
+			cat5->s2en.src3 = reg(src3, info, IR3_REG_HALF);
+		}
+		iassert(!(instr->cat5.samp | instr->cat5.tex));
+	} else {
+		iassert(!src3);
+		if (src2) {
+			iassert(!((src1->flags ^ src2->flags) & IR3_REG_HALF));
+			cat5->norm.src2 = reg(src2, info, IR3_REG_HALF);
+		}
+		cat5->norm.samp = instr->cat5.samp;
+		cat5->norm.tex  = instr->cat5.tex;
+	}
+
+	cat5->dst      = reg(dst, info, IR3_REG_HALF);
+	cat5->wrmask   = dst->wrmask;
+	cat5->type     = instr->cat5.type;
+	cat5->is_3d    = !!(instr->flags & IR3_INSTR_3D);
+	cat5->is_a     = !!(instr->flags & IR3_INSTR_A);
+	cat5->is_s     = !!(instr->flags & IR3_INSTR_S);
+	cat5->is_s2en  = !!(instr->flags & IR3_INSTR_S2EN);
+	cat5->is_o     = !!(instr->flags & IR3_INSTR_O);
+	cat5->is_p     = !!(instr->flags & IR3_INSTR_P);
+	cat5->opc      = instr->opc;
+	cat5->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat5->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat5->opc_cat  = 5;
+
+	return 0;
+}
+
+static int emit_cat6(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info)
+{
+	struct ir3_register *dst = instr->regs[0];
+	struct ir3_register *src = instr->regs[1];
+	instr_cat6_t *cat6 = ptr;
+
+	iassert(instr->regs_count == 2);
+
+	switch (instr->opc) {
+	/* load instructions: */
+	case OPC_LDG:
+	case OPC_LDP:
+	case OPC_LDL:
+	case OPC_LDLW:
+	case OPC_LDLV:
+	case OPC_PREFETCH: {
+		instr_cat6a_t *cat6a = ptr;
+
+		iassert(!((dst->flags ^ type_flags(instr->cat6.type)) & IR3_REG_HALF));
+
+		cat6a->must_be_one1  = 1;
+		cat6a->must_be_one2  = 1;
+		cat6a->off = instr->cat6.offset;
+		cat6a->src = reg(src, info, 0);
+		cat6a->dst = reg(dst, info, IR3_REG_HALF);
+		break;
+	}
+	/* store instructions: */
+	case OPC_STG:
+	case OPC_STP:
+	case OPC_STL:
+	case OPC_STLW:
+	case OPC_STI: {
+		instr_cat6b_t *cat6b = ptr;
+		uint32_t src_flags = type_flags(instr->cat6.type);
+		uint32_t dst_flags = (instr->opc == OPC_STI) ? IR3_REG_HALF : 0;
+
+		iassert(!((src->flags ^ src_flags) & IR3_REG_HALF));
+
+		cat6b->must_be_one1  = 1;
+		cat6b->must_be_one2  = 1;
+		cat6b->src    = reg(src, info, src_flags);
+		cat6b->off_hi = instr->cat6.offset >> 8;
+		cat6b->off    = instr->cat6.offset;
+		cat6b->dst    = reg(dst, info, dst_flags);
+
+		break;
+	}
+	default:
+		// TODO
+		break;
+	}
+
+	cat6->iim_val  = instr->cat6.iim_val;
+	cat6->type     = instr->cat6.type;
+	cat6->opc      = instr->opc;
+	cat6->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
+	cat6->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat6->opc_cat  = 6;
+
+	return 0;
+}
+
+static int (*emit[])(struct ir3_instruction *instr, void *ptr,
+		struct ir3_shader_info *info) = {
+	emit_cat0, emit_cat1, emit_cat2, emit_cat3, emit_cat4, emit_cat5, emit_cat6,
+};
+
+int ir3_shader_assemble(struct ir3_shader *shader,
+		uint32_t *dwords, uint32_t sizedwords,
+		struct ir3_shader_info *info)
+{
+	uint32_t i;
+
+	info->max_reg       = -1;
+	info->max_half_reg  = -1;
+
+	/* need a integer number of instruction "groups" (sets of four
+	 * instructions), so pad out w/ NOPs if needed:
+	 */
+	while (shader->instrs_count != ALIGN(shader->instrs_count, 4))
+		ir3_instr_create(shader, 0, OPC_NOP);
+
+	/* each instruction is 64bits: */
+	if (sizedwords < (2 * shader->instrs_count))
+		return -ENOSPC;
+
+	memset(dwords, 0, 4 * 2 * shader->instrs_count);
+
+	for (i = 0; i < shader->instrs_count; i++) {
+		struct ir3_instruction *instr = shader->instrs[i];
+		int ret = emit[instr->category](instr, dwords, info);
+		if (ret)
+			return ret;
+		dwords += 2;
+	}
+
+	/* on success, return the shader size: */
+	return 2 * shader->instrs_count;
 }
 
 
@@ -205,303 +548,6 @@ struct ir3_instruction * ir3_instr_create(struct ir3_shader *shader,
 	return instr;
 }
 
-#if 0
-
-static uint32_t instr_fetch_opc(struct ir3_instruction *instr)
-{
-	switch (instr->fetch.opc) {
-	default:
-		ERROR_MSG("invalid fetch opc: %d\n", instr->fetch.opc);
-	case T_SAMPLE: return 0x01;
-	case T_VERTEX: return 0x00;
-	}
-}
-
-static uint32_t instr_vector_opc(struct ir3_instruction *instr)
-{
-	switch (instr->alu.vector_opc) {
-	default:
-		ERROR_MSG("invalid vector opc: %d\n", instr->alu.vector_opc);
-#define OPC(x) case T_##x: return x
-	OPC(ADDv);
-	OPC(MULv);
-	OPC(MAXv);
-	OPC(MINv);
-	OPC(SETEv);
-	OPC(SETGTv);
-	OPC(SETGTEv);
-	OPC(SETNEv);
-	OPC(FRACv);
-	OPC(TRUNCv);
-	OPC(FLOORv);
-	OPC(MULADDv);
-	OPC(CNDEv);
-	OPC(CNDGTEv);
-	OPC(CNDGTv);
-	OPC(DOT4v);
-	OPC(DOT3v);
-	OPC(DOT2ADDv);
-	OPC(CUBEv);
-	OPC(MAX4v);
-	OPC(PRED_SETE_PUSHv);
-	OPC(PRED_SETNE_PUSHv);
-	OPC(PRED_SETGT_PUSHv);
-	OPC(PRED_SETGTE_PUSHv);
-	OPC(KILLEv);
-	OPC(KILLGTv);
-	OPC(KILLGTEv);
-	OPC(KILLNEv);
-	OPC(DSTv);
-	OPC(MOVAv);
-#undef OPC
-	}
-}
-
-static uint32_t instr_scalar_opc(struct ir3_instruction *instr)
-{
-	switch (instr->alu.scalar_opc) {
-	default:
-		ERROR_MSG("invalid scalar: %d\n", instr->alu.scalar_opc);
-#define OPC(x) case T_##x: return x
-	OPC(ADDs);
-	OPC(ADD_PREVs);
-	OPC(MULs);
-	OPC(MUL_PREVs);
-	OPC(MUL_PREV2s);
-	OPC(MAXs);
-	OPC(MINs);
-	OPC(SETEs);
-	OPC(SETGTs);
-	OPC(SETGTEs);
-	OPC(SETNEs);
-	OPC(FRACs);
-	OPC(TRUNCs);
-	OPC(FLOORs);
-	OPC(EXP_IEEE);
-	OPC(LOG_CLAMP);
-	OPC(LOG_IEEE);
-	OPC(RECIP_CLAMP);
-	OPC(RECIP_FF);
-	OPC(RECIP_IEEE);
-	OPC(RECIPSQ_CLAMP);
-	OPC(RECIPSQ_FF);
-	OPC(RECIPSQ_IEEE);
-	OPC(MOVAs);
-	OPC(MOVA_FLOORs);
-	OPC(SUBs);
-	OPC(SUB_PREVs);
-	OPC(PRED_SETEs);
-	OPC(PRED_SETNEs);
-	OPC(PRED_SETGTs);
-	OPC(PRED_SETGTEs);
-	OPC(PRED_SET_INVs);
-	OPC(PRED_SET_POPs);
-	OPC(PRED_SET_CLRs);
-	OPC(PRED_SET_RESTOREs);
-	OPC(KILLEs);
-	OPC(KILLGTs);
-	OPC(KILLGTEs);
-	OPC(KILLNEs);
-	OPC(KILLONEs);
-	OPC(SQRT_IEEE);
-	OPC(MUL_CONST_0);
-	OPC(MUL_CONST_1);
-	OPC(ADD_CONST_0);
-	OPC(ADD_CONST_1);
-	OPC(SUB_CONST_0);
-	OPC(SUB_CONST_1);
-	OPC(SIN);
-	OPC(COS);
-	OPC(RETAIN_PREV);
-#undef OPC
-	}
-}
-
-/*
- * FETCH instructions:
- */
-
-static int instr_emit_fetch(struct ir3_instruction *instr,
-		uint32_t *dwords, uint32_t idx,
-		struct ir3_shader_info *info)
-{
-	instr_fetch_t *fetch = (instr_fetch_t *)dwords;
-	int reg = 0;
-	struct ir3_register *dst_reg = instr->regs[reg++];
-	struct ir3_register *src_reg = instr->regs[reg++];
-
-	memset(fetch, 0, sizeof(*fetch));
-
-	reg_update_stats(dst_reg, info, true);
-	reg_update_stats(src_reg, info, false);
-
-	fetch->opc = instr_fetch_opc(instr);
-
-	if (instr->fetch.opc == T_VERTEX) {
-		instr_fetch_vtx_t *vtx = &fetch->vtx;
-
-		assert(instr->fetch.stride <= 0xff);
-		assert(instr->fetch.fmt <= 0x3f);
-		assert(instr->fetch.const_idx <= 0x1f);
-		assert(instr->fetch.const_idx_sel <= 0x3);
-
-		vtx->src_reg = src_reg->num;
-		vtx->src_swiz = reg_fetch_src_swiz(src_reg, 1);
-		vtx->dst_reg = dst_reg->num;
-		vtx->dst_swiz = reg_fetch_dst_swiz(dst_reg);
-		vtx->must_be_one = 1;
-		vtx->num_format_all = 1;
-		vtx->const_index = instr->fetch.const_idx;
-		vtx->const_index_sel = instr->fetch.const_idx_sel;
-		vtx->format_comp_all = instr->fetch.sign == T_SIGNED;
-		vtx->format = instr->fetch.fmt;
-		vtx->stride = instr->fetch.stride;
-
-		/* XXX this seems to always be set, except on the
-		 * internal shaders used for GMEM->MEM blits
-		 */
-		vtx->num_format_all = 1;
-
-		/* XXX seems like every FETCH but the first has
-		 * this bit set:
-		 */
-		vtx->reserved3 = (idx > 0) ? 0x1 : 0x0;
-		vtx->reserved0 = (idx > 0) ? 0x0 : 0x1;
-	} else {
-		instr_fetch_tex_t *tex = &fetch->tex;
-
-		assert(instr->fetch.const_idx <= 0x1f);
-
-		tex->src_reg = src_reg->num;
-		tex->src_swiz = reg_fetch_src_swiz(src_reg, 3);
-		tex->dst_reg = dst_reg->num;
-		tex->dst_swiz = reg_fetch_dst_swiz(dst_reg);
-
-		tex->mag_filter = TEX_FILTER_USE_FETCH_CONST;
-		tex->min_filter = TEX_FILTER_USE_FETCH_CONST;
-		tex->mip_filter = TEX_FILTER_USE_FETCH_CONST;
-		tex->aniso_filter = ANISO_FILTER_USE_FETCH_CONST;
-		tex->arbitrary_filter = ARBITRARY_FILTER_USE_FETCH_CONST;
-		tex->vol_mag_filter = TEX_FILTER_USE_FETCH_CONST;
-		tex->vol_min_filter = TEX_FILTER_USE_FETCH_CONST;
-		tex->use_comp_lod = 1;
-	}
-
-	return 0;
-}
-
-/*
- * ALU instructions:
- */
-
-static int instr_emit_alu(struct ir3_instruction *instr, uint32_t *dwords,
-		struct ir3_shader_info *info)
-{
-	int reg = 0;
-	instr_alu_t *alu = (instr_alu_t *)dwords;
-	struct ir3_register *dst_reg  = instr->regs[reg++];
-	struct ir3_register *src1_reg;
-	struct ir3_register *src2_reg;
-	struct ir3_register *src3_reg;
-
-	memset(alu, 0, sizeof(*alu));
-
-	/* handle instructions w/ 3 src operands: */
-	if (instr->alu.vector_opc == T_MULADDv) {
-		/* note: disassembler lists 3rd src first, ie:
-		 *   MULADDv Rdst = Rsrc3 + (Rsrc1 * Rsrc2)
-		 * which is the reason for this strange ordering.
-		 */
-		src3_reg = instr->regs[reg++];
-	} else {
-		src3_reg = NULL;
-	}
-
-	src1_reg = instr->regs[reg++];
-	src2_reg = instr->regs[reg++];
-
-	reg_update_stats(dst_reg, info, true);
-	reg_update_stats(src1_reg, info, false);
-	reg_update_stats(src2_reg, info, false);
-
-	assert((dst_reg->flags & ~IR3_REG_EXPORT) == 0);
-	assert(!dst_reg->swizzle || (strlen(dst_reg->swizzle) == 4));
-	assert((src1_reg->flags & IR3_REG_EXPORT) == 0);
-	assert(!src1_reg->swizzle || (strlen(src1_reg->swizzle) == 4));
-	assert((src2_reg->flags & IR3_REG_EXPORT) == 0);
-	assert(!src2_reg->swizzle || (strlen(src2_reg->swizzle) == 4));
-
-	alu->vector_dest         = dst_reg->num;
-	alu->export_data         = !!(dst_reg->flags & IR3_REG_EXPORT);
-	alu->vector_write_mask   = reg_alu_dst_swiz(dst_reg);
-	alu->vector_opc          = instr_vector_opc(instr);
-
-	// TODO predicate case/condition.. need to add to parser
-
-	alu->src2_reg            = src2_reg->num;
-	alu->src2_swiz           = reg_alu_src_swiz(src2_reg);
-	alu->src2_reg_negate     = !!(src2_reg->flags & IR3_REG_NEGATE);
-	alu->src2_reg_abs        = !!(src2_reg->flags & IR3_REG_ABS);
-	alu->src2_sel            = !(src2_reg->flags & IR3_REG_CONST);
-
-	alu->src1_reg            = src1_reg->num;
-	alu->src1_swiz           = reg_alu_src_swiz(src1_reg);
-	alu->src1_reg_negate     = !!(src1_reg->flags & IR3_REG_NEGATE);
-	alu->src1_reg_abs        = !!(src1_reg->flags & IR3_REG_ABS);
-	alu->src1_sel            = !(src1_reg->flags & IR3_REG_CONST);
-
-	if (instr->alu.scalar_opc) {
-		struct ir3_register *sdst_reg = instr->regs[reg++];
-
-		reg_update_stats(sdst_reg, info, true);
-
-		assert(sdst_reg->flags == dst_reg->flags);
-
-		if (src3_reg) {
-			assert(src3_reg == instr->regs[reg++]);
-		} else {
-			src3_reg = instr->regs[reg++];
-		}
-
-		alu->scalar_dest         = sdst_reg->num;
-		alu->scalar_write_mask   = reg_alu_dst_swiz(sdst_reg);
-		alu->scalar_opc          = instr_scalar_opc(instr);
-	} else {
-		/* not sure if this is required, but adreno compiler seems
-		 * to always set scalar opc to MAXs if it is not used:
-		 */
-		alu->scalar_opc = MAXs;
-	}
-
-	if (src3_reg) {
-		reg_update_stats(src3_reg, info, false);
-
-		alu->src3_reg            = src3_reg->num;
-		alu->src3_swiz           = reg_alu_src_swiz(src3_reg);
-		alu->src3_reg_negate     = !!(src3_reg->flags & IR3_REG_NEGATE);
-		alu->src3_reg_abs        = !!(src3_reg->flags & IR3_REG_ABS);
-		alu->src3_sel            = !(src3_reg->flags & IR3_REG_CONST);
-	} else {
-		/* not sure if this is required, but adreno compiler seems
-		 * to always set register bank for 3rd src if unused:
-		 */
-		alu->src3_sel = 1;
-	}
-
-	return 0;
-}
-
-static int instr_emit(struct ir3_instruction *instr, uint32_t *dwords,
-		uint32_t idx, struct ir3_shader_info *info)
-{
-	switch (instr->instr_type) {
-	case T_FETCH: return instr_emit_fetch(instr, dwords, idx, info);
-	case T_ALU:   return instr_emit_alu(instr, dwords, info);
-	}
-	return -1;
-}
-#endif
-
 struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 		int num, int flags)
 {
@@ -514,137 +560,3 @@ struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 	instr->regs[instr->regs_count++] = reg;
 	return reg;
 }
-
-#if 0
-static void reg_update_stats(struct ir3_register *reg,
-		struct ir3_shader_info *info, bool dest)
-{
-	if (!(reg->flags & (IR3_REG_CONST|IR3_REG_EXPORT))) {
-		info->max_reg = max(info->max_reg, reg->num);
-
-		if (dest) {
-			info->regs_written |= (1 << reg->num);
-		} else if (!(info->regs_written & (1 << reg->num))) {
-			/* for registers that haven't been written, they must be an
-			 * input register that the thread scheduler (presumably?)
-			 * needs to know about:
-			 */
-			info->max_input_reg = max(info->max_input_reg, reg->num);
-		}
-	}
-}
-
-static uint32_t reg_fetch_src_swiz(struct ir3_register *reg, uint32_t n)
-{
-	uint32_t swiz = 0;
-	int i;
-
-	assert(reg->flags == 0);
-	assert(reg->swizzle && (strlen(reg->swizzle) == n));
-
-	DEBUG_MSG("fetch src R%d.%s", reg->num, reg->swizzle);
-
-	for (i = n-1; i >= 0; i--) {
-		swiz <<= 2;
-		switch (reg->swizzle[i]) {
-		default:
-			ERROR_MSG("invalid fetch src swizzle: %s", reg->swizzle);
-		case 'x': swiz |= 0x0; break;
-		case 'y': swiz |= 0x1; break;
-		case 'z': swiz |= 0x2; break;
-		case 'w': swiz |= 0x3; break;
-		}
-	}
-
-	return swiz;
-}
-
-static uint32_t reg_fetch_dst_swiz(struct ir3_register *reg)
-{
-	uint32_t swiz = 0;
-	int i;
-
-	assert(reg->flags == 0);
-	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
-
-	DEBUG_MSG("fetch dst R%d.%s", reg->num, reg->swizzle);
-
-	if (reg->swizzle) {
-		for (i = 3; i >= 0; i--) {
-			swiz <<= 3;
-			switch (reg->swizzle[i]) {
-			default:
-				ERROR_MSG("invalid dst swizzle: %s", reg->swizzle);
-			case 'x': swiz |= 0x0; break;
-			case 'y': swiz |= 0x1; break;
-			case 'z': swiz |= 0x2; break;
-			case 'w': swiz |= 0x3; break;
-			case '0': swiz |= 0x4; break;
-			case '1': swiz |= 0x5; break;
-			case '_': swiz |= 0x7; break;
-			}
-		}
-	} else {
-		swiz = 0x688;
-	}
-
-	return swiz;
-}
-
-/* actually, a write-mask */
-static uint32_t reg_alu_dst_swiz(struct ir3_register *reg)
-{
-	uint32_t swiz = 0;
-	int i;
-
-	assert((reg->flags & ~IR3_REG_EXPORT) == 0);
-	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
-
-	DEBUG_MSG("alu dst R%d.%s", reg->num, reg->swizzle);
-
-	if (reg->swizzle) {
-		for (i = 3; i >= 0; i--) {
-			swiz <<= 1;
-			if (reg->swizzle[i] == "xyzw"[i]) {
-				swiz |= 0x1;
-			} else if (reg->swizzle[i] != '_') {
-				ERROR_MSG("invalid dst swizzle: %s", reg->swizzle);
-				break;
-			}
-		}
-	} else {
-		swiz = 0xf;
-	}
-
-	return swiz;
-}
-
-static uint32_t reg_alu_src_swiz(struct ir3_register *reg)
-{
-	uint32_t swiz = 0;
-	int i;
-
-	assert((reg->flags & IR3_REG_EXPORT) == 0);
-	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
-
-	DEBUG_MSG("vector src R%d.%s", reg->num, reg->swizzle);
-
-	if (reg->swizzle) {
-		for (i = 3; i >= 0; i--) {
-			swiz <<= 2;
-			switch (reg->swizzle[i]) {
-			default:
-				ERROR_MSG("invalid vector src swizzle: %s", reg->swizzle);
-			case 'x': swiz |= (0x0 - i) & 0x3; break;
-			case 'y': swiz |= (0x1 - i) & 0x3; break;
-			case 'z': swiz |= (0x2 - i) & 0x3; break;
-			case 'w': swiz |= (0x3 - i) & 0x3; break;
-			}
-		}
-	} else {
-		swiz = 0x0;
-	}
-
-	return swiz;
-}
-#endif

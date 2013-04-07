@@ -237,6 +237,7 @@ typedef union PACKED {
 	/* for immediate val: */
 	int32_t  iim_val   : 11;
 	/* to make compiler happy: */
+	uint32_t dummy32;
 	uint32_t dummy11   : 11;
 	uint32_t dummy8    : 8;
 } reg_t;

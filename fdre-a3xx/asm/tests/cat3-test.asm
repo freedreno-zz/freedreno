@@ -1156,3 +1156,5 @@ sel.b32 r2.x, r1.w, r2.x, r1.z
 sel.b32 r1.z, r1.z, r2.x, r1.w
 sel.b16 hr0.y, hr0.y, hr0.z, hr0.w
 sel.b16 hr0.y, hr0.w, hr0.y, hr0.z
+nop
+nop

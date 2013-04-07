@@ -614,7 +614,6 @@ static void print_instr_cat6(instr_t *instr)
 	case OPC_STL:
 	case OPC_STLW:
 		/* store instructions: */
-		printf(",");
 		switch (cat6->opc) {
 		case OPC_STG:
 			printf("g");
