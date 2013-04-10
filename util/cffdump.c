@@ -341,7 +341,9 @@ static void reg_vfd_fetch_instr_0_x(const char *name, uint32_t dword, int level)
 	int idx;
 
 	/* this is a bit ugly way, but oh well.. */
-	sscanf(name, "VFD_FETCH_INSTR_0_%x", &idx);
+	sscanf(name, "VFD_FETCH_INSTR_0_%x", &idx) ||
+		sscanf(name, "VFD_FETCH[0x%x].INSTR_0", &idx) ||
+		sscanf(name, "VFD_FETCH[%d].INSTR_0", &idx);
 
 	vfd_fetch_state[idx] = *(vfd_fetch_state_t *)&dword;
 }
@@ -362,6 +364,16 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 		// XXX we probably need to know min/max vtx to know the
 		// right values to dump..
 		uint32_t sizedwords = vfd_fetch_state[idx].fetchsize + 1;
+		dump_float(buf, sizedwords, level+1);
+		dump_hex(buf, sizedwords, level+1);
+	}
+}
+
+static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
+{
+	void *buf = hostptr(dword);
+	if (buf) {
+		uint32_t sizedwords = 32;
 		dump_float(buf, sizedwords, level+1);
 		dump_hex(buf, sizedwords, level+1);
 	}
@@ -459,6 +471,10 @@ static const const struct {
 		REG(VFD_FETCH_INSTR_1(14), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(15), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(15), reg_vfd_fetch_instr_1_x),
+		REG(SP_VS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
+		REG(SP_FS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
+		REG(SP_VS_OBJ_START_REG, reg_dump_gpuaddr),
+		REG(SP_FS_OBJ_START_REG, reg_dump_gpuaddr),
 #undef REG
 }, *type0_reg;
 
@@ -869,6 +885,14 @@ static void cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
 	dump_float((float *)&dwords[1], sizedwords-1, level+1);
 }
 
+static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t val = dwords[0] & 0xffff;
+	uint32_t and = dwords[1];
+	uint32_t or  = dwords[2];
+	printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
+}
+
 #define CP(x, fxn)   [CP_ ## x] = { #x, fxn }
 static const struct {
 	const char *name;
@@ -884,7 +908,7 @@ static const struct {
 		CP(WAT_REG_GTE, NULL),
 		CP(WAIT_UNTIL_READ, NULL),
 		CP(WAIT_IB_PFD_COMPLETE, NULL),
-		CP(REG_RMW, NULL),
+		CP(REG_RMW, cp_rmw),
 		CP(REG_TO_MEM, NULL),
 		CP(MEM_WRITE, cp_mem_write),
 		CP(MEM_WRITE_CNTR, NULL),
