@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35757 bytes, from 2013-04-09 20:15:45)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35933 bytes, from 2013-04-12 00:45:38)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-09 20:15:19)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   7736 bytes, from 2013-04-04 20:24:12)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   8875 bytes, from 2013-04-12 00:45:38)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -70,6 +70,10 @@ enum a3xx_state_block_id {
 	HLSQ_BLOCK_ID_TP_MIPMAP = 3,
 	HLSQ_BLOCK_ID_SP_VS = 4,
 	HLSQ_BLOCK_ID_SP_FS = 6,
+};
+
+enum a3xx_cache_opcode {
+	INVALIDATE = 1,
 };
 
 enum a3xx_fmt {
@@ -321,7 +325,7 @@ static inline uint32_t A3XX_GRAS_SU_MODE_CONTROL_LINEHALFWIDTH(uint32_t val)
 #define REG_A3XX_GRAS_SC_CONTROL				0x00002072
 #define A3XX_GRAS_SC_CONTROL_RENDER_MODE__MASK			0x000000f0
 #define A3XX_GRAS_SC_CONTROL_RENDER_MODE__SHIFT			4
-static inline uint32_t A3XX_GRAS_SC_CONTROL_RENDER_MODE(uint32_t val)
+static inline uint32_t A3XX_GRAS_SC_CONTROL_RENDER_MODE(enum a3xx_render_mode val)
 {
 	return ((val) << A3XX_GRAS_SC_CONTROL_RENDER_MODE__SHIFT) & A3XX_GRAS_SC_CONTROL_RENDER_MODE__MASK;
 }
@@ -937,6 +941,18 @@ static inline uint32_t A3XX_VFD_CONTROL_1_MAXSTORAGE(uint32_t val)
 {
 	return ((val) << A3XX_VFD_CONTROL_1_MAXSTORAGE__SHIFT) & A3XX_VFD_CONTROL_1_MAXSTORAGE__MASK;
 }
+#define A3XX_VFD_CONTROL_1_REGID4VTX__MASK			0x00ff0000
+#define A3XX_VFD_CONTROL_1_REGID4VTX__SHIFT			16
+static inline uint32_t A3XX_VFD_CONTROL_1_REGID4VTX(uint32_t val)
+{
+	return ((val) << A3XX_VFD_CONTROL_1_REGID4VTX__SHIFT) & A3XX_VFD_CONTROL_1_REGID4VTX__MASK;
+}
+#define A3XX_VFD_CONTROL_1_REGID4INST__MASK			0xff000000
+#define A3XX_VFD_CONTROL_1_REGID4INST__SHIFT			24
+static inline uint32_t A3XX_VFD_CONTROL_1_REGID4INST(uint32_t val)
+{
+	return ((val) << A3XX_VFD_CONTROL_1_REGID4INST__SHIFT) & A3XX_VFD_CONTROL_1_REGID4INST__MASK;
+}
 
 #define REG_A3XX_VFD_INDEX_MIN					0x00002242
 
@@ -993,6 +1009,12 @@ static inline uint32_t A3XX_VFD_DECODE_INSTR_FORMAT(enum a3xx_fmt val)
 {
 	return ((val) << A3XX_VFD_DECODE_INSTR_FORMAT__SHIFT) & A3XX_VFD_DECODE_INSTR_FORMAT__MASK;
 }
+#define A3XX_VFD_DECODE_INSTR_REGID__MASK			0x000ff000
+#define A3XX_VFD_DECODE_INSTR_REGID__SHIFT			12
+static inline uint32_t A3XX_VFD_DECODE_INSTR_REGID(uint32_t val)
+{
+	return ((val) << A3XX_VFD_DECODE_INSTR_REGID__SHIFT) & A3XX_VFD_DECODE_INSTR_REGID__MASK;
+}
 #define A3XX_VFD_DECODE_INSTR_SHIFTCNT__MASK			0x1f000000
 #define A3XX_VFD_DECODE_INSTR_SHIFTCNT__SHIFT			24
 static inline uint32_t A3XX_VFD_DECODE_INSTR_SHIFTCNT(uint32_t val)
@@ -1008,6 +1030,12 @@ static inline uint32_t A3XX_VFD_DECODE_INSTR_SHIFTCNT(uint32_t val)
 static inline uint32_t A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD(uint32_t val)
 {
 	return ((val) << A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD__SHIFT) & A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD__MASK;
+}
+#define A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT__MASK	0x0000ff00
+#define A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT__SHIFT	8
+static inline uint32_t A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT(uint32_t val)
+{
+	return ((val) << A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT__SHIFT) & A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT__MASK;
 }
 
 #define REG_A3XX_VPC_ATTR					0x00002280
@@ -1144,6 +1172,18 @@ static inline uint32_t A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET(uint32_t val)
 }
 
 #define REG_A3XX_SP_VS_PARAM_REG				0x000022c6
+#define A3XX_SP_VS_PARAM_REG_POSREGID__MASK			0x000000ff
+#define A3XX_SP_VS_PARAM_REG_POSREGID__SHIFT			0
+static inline uint32_t A3XX_SP_VS_PARAM_REG_POSREGID(uint32_t val)
+{
+	return ((val) << A3XX_SP_VS_PARAM_REG_POSREGID__SHIFT) & A3XX_SP_VS_PARAM_REG_POSREGID__MASK;
+}
+#define A3XX_SP_VS_PARAM_REG_PSIZEREGID__MASK			0x0000ff00
+#define A3XX_SP_VS_PARAM_REG_PSIZEREGID__SHIFT			8
+static inline uint32_t A3XX_SP_VS_PARAM_REG_PSIZEREGID(uint32_t val)
+{
+	return ((val) << A3XX_SP_VS_PARAM_REG_PSIZEREGID__SHIFT) & A3XX_SP_VS_PARAM_REG_PSIZEREGID__MASK;
+}
 #define A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR__MASK		0xfff00000
 #define A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR__SHIFT		20
 static inline uint32_t A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(uint32_t val)
@@ -1154,11 +1194,23 @@ static inline uint32_t A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(uint32_t val)
 #define REG_A3XX_SP_VS_OUT(i0)				       (0x000022c7 + 0x1*(i0))
 
 #define REG_A3XX_SP_VS_OUT_REG(i0)			       (0x000022c7 + 0x1*(i0))
+#define A3XX_SP_VS_OUT_REG_A_REGID__MASK			0x000001ff
+#define A3XX_SP_VS_OUT_REG_A_REGID__SHIFT			0
+static inline uint32_t A3XX_SP_VS_OUT_REG_A_REGID(uint32_t val)
+{
+	return ((val) << A3XX_SP_VS_OUT_REG_A_REGID__SHIFT) & A3XX_SP_VS_OUT_REG_A_REGID__MASK;
+}
 #define A3XX_SP_VS_OUT_REG_A_COMPMASK__MASK			0x00001e00
 #define A3XX_SP_VS_OUT_REG_A_COMPMASK__SHIFT			9
 static inline uint32_t A3XX_SP_VS_OUT_REG_A_COMPMASK(uint32_t val)
 {
 	return ((val) << A3XX_SP_VS_OUT_REG_A_COMPMASK__SHIFT) & A3XX_SP_VS_OUT_REG_A_COMPMASK__MASK;
+}
+#define A3XX_SP_VS_OUT_REG_B_REGID__MASK			0x000001ff
+#define A3XX_SP_VS_OUT_REG_B_REGID__SHIFT			0
+static inline uint32_t A3XX_SP_VS_OUT_REG_B_REGID(uint32_t val)
+{
+	return ((val) << A3XX_SP_VS_OUT_REG_B_REGID__SHIFT) & A3XX_SP_VS_OUT_REG_B_REGID__MASK;
 }
 #define A3XX_SP_VS_OUT_REG_B_COMPMASK__MASK			0x00001e00
 #define A3XX_SP_VS_OUT_REG_B_COMPMASK__SHIFT			9
@@ -1323,6 +1375,12 @@ static inline uint32_t A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(uint32_t val)
 #define REG_A3XX_SP_FS_MRT(i0)				       (0x000022f0 + 0x1*(i0))
 
 #define REG_A3XX_SP_FS_MRT_REG(i0)			       (0x000022f0 + 0x1*(i0))
+#define A3XX_SP_FS_MRT_REG_REGID__MASK				0x000000ff
+#define A3XX_SP_FS_MRT_REG_REGID__SHIFT				0
+static inline uint32_t A3XX_SP_FS_MRT_REG_REGID(uint32_t val)
+{
+	return ((val) << A3XX_SP_FS_MRT_REG_REGID__SHIFT) & A3XX_SP_FS_MRT_REG_REGID__MASK;
+}
 #define A3XX_SP_FS_MRT_REG_PRECISION__MASK			0x00000100
 #define A3XX_SP_FS_MRT_REG_PRECISION__SHIFT			8
 static inline uint32_t A3XX_SP_FS_MRT_REG_PRECISION(uint32_t val)
@@ -1511,7 +1569,12 @@ static inline uint32_t A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(uint32_t val)
 {
 	return ((val) << A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR__SHIFT) & A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR__MASK;
 }
-#define A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE_INVALIDATE	0x0100000000000000ULL
+#define A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE__MASK		0x30000000
+#define A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE__SHIFT		28
+static inline uint32_t A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(enum a3xx_cache_opcode val)
+{
+	return ((val) << A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE__SHIFT) & A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE__MASK;
+}
 #define A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE		0x80000000
 
 #define REG_A3XX_UNKNOWN_0EC4					0x00000ec4

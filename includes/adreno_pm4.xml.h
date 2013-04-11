@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30212 bytes, from 2013-04-09 20:15:07)
+- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30212 bytes, from 2013-04-12 00:45:30)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-09 20:15:19)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   7736 bytes, from 2013-04-04 20:24:12)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   8875 bytes, from 2013-04-12 00:45:38)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -155,6 +155,63 @@ enum adreno_pm4_type3_packets {
 	CP_COND_INDIRECT_BUFFER_PFD = 50,
 	CP_INDIRECT_BUFFER_PFE = 63,
 };
+
+enum adreno_state_block {
+	SB_TEXTURE = 2,
+	SB_MIPMAP = 3,
+	SB_VERTEX = 4,
+	SB_FRAGMENT = 6,
+};
+
+enum adreno_state_type {
+	ST_SHADER = 0,
+	ST_CONSTANTS = 1,
+};
+
+enum adreno_state_src {
+	SS_DIRECT = 0,
+	SS_INDIRECT = 4,
+};
+
+#define REG_CP_LOAD_STATE_0					0x00000000
+#define CP_LOAD_STATE_0_DST_OFF__MASK				0x0000ffff
+#define CP_LOAD_STATE_0_DST_OFF__SHIFT				0
+static inline uint32_t CP_LOAD_STATE_0_DST_OFF(uint32_t val)
+{
+	return ((val) << CP_LOAD_STATE_0_DST_OFF__SHIFT) & CP_LOAD_STATE_0_DST_OFF__MASK;
+}
+#define CP_LOAD_STATE_0_STATE_SRC__MASK				0x00070000
+#define CP_LOAD_STATE_0_STATE_SRC__SHIFT			16
+static inline uint32_t CP_LOAD_STATE_0_STATE_SRC(enum adreno_state_src val)
+{
+	return ((val) << CP_LOAD_STATE_0_STATE_SRC__SHIFT) & CP_LOAD_STATE_0_STATE_SRC__MASK;
+}
+#define CP_LOAD_STATE_0_STATE_BLOCK__MASK			0x00380000
+#define CP_LOAD_STATE_0_STATE_BLOCK__SHIFT			19
+static inline uint32_t CP_LOAD_STATE_0_STATE_BLOCK(enum adreno_state_block val)
+{
+	return ((val) << CP_LOAD_STATE_0_STATE_BLOCK__SHIFT) & CP_LOAD_STATE_0_STATE_BLOCK__MASK;
+}
+#define CP_LOAD_STATE_0_NUM_UNIT__MASK				0x7fc00000
+#define CP_LOAD_STATE_0_NUM_UNIT__SHIFT				22
+static inline uint32_t CP_LOAD_STATE_0_NUM_UNIT(uint32_t val)
+{
+	return ((val) << CP_LOAD_STATE_0_NUM_UNIT__SHIFT) & CP_LOAD_STATE_0_NUM_UNIT__MASK;
+}
+
+#define REG_CP_LOAD_STATE_1					0x00000001
+#define CP_LOAD_STATE_1_STATE_TYPE__MASK			0x00000003
+#define CP_LOAD_STATE_1_STATE_TYPE__SHIFT			0
+static inline uint32_t CP_LOAD_STATE_1_STATE_TYPE(enum adreno_state_type val)
+{
+	return ((val) << CP_LOAD_STATE_1_STATE_TYPE__SHIFT) & CP_LOAD_STATE_1_STATE_TYPE__MASK;
+}
+#define CP_LOAD_STATE_1_EXT_SRC_ADDR__MASK			0xfffffffc
+#define CP_LOAD_STATE_1_EXT_SRC_ADDR__SHIFT			2
+static inline uint32_t CP_LOAD_STATE_1_EXT_SRC_ADDR(uint32_t val)
+{
+	return ((val >> 2) << CP_LOAD_STATE_1_EXT_SRC_ADDR__SHIFT) & CP_LOAD_STATE_1_EXT_SRC_ADDR__MASK;
+}
 
 
 #endif /* ADRENO_PM4_XML */

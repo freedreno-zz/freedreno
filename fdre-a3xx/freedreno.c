@@ -34,39 +34,6 @@
 #include "ws.h"
 #include "bmp.h"
 
-
-/* ************************************************************************* */
-
-struct fd_param {
-	const char *name;
-	enum {
-		FD_PARAM_ATTRIBUTE,
-		FD_PARAM_ATTRIBUTE_VBO,
-		FD_PARAM_TEXTURE,
-		FD_PARAM_UNIFORM,
-	} type;
-	union {
-		struct fd_bo *bo;         /* FD_PARAM_ATTRIBUTE_VBO */
-		struct fd_surface *tex;   /* FD_PARAM_TEXTURE */
-		struct { /* FD_PARAM_ATTRIBUTE and FD_PARAM_UNIFORM */
-			/* user ptr and dimensions for passed in uniform/attribute:
-			 *   elem_size - size of individual element in bytes
-			 *   size      - number of elements per group
-			 *   count     - number of groups
-			 * so total size in bytes is elem_size * size * count
-			 */
-			const void *data;
-			uint32_t elem_size, size, count;
-		};
-	};
-};
-
-#define MAX_PARAMS 32
-struct fd_parameters {
-	struct fd_param params[MAX_PARAMS];
-	uint32_t nparams;
-};
-
 struct fd_state {
 
 	struct fd_winsys *ws;
@@ -99,27 +66,13 @@ struct fd_state {
 	struct fd_program *program;
 
 	/* uniform related params: */
-	struct {
-		struct fd_parameters params;
-	} uniforms;
+	struct fd_parameters uniforms, solid_uniforms;
 
 	/* attribute related params: */
-	struct {
-		/* gpu buffer used for passing parameters by ptr to the gpu..
-		 * it is used in a circular buffer fashion, wrapping around,
-		 * so we don't immediately overwrite the parameters for the
-		 * last draw cmd which the gpu may still be using:
-		 */
-		struct fd_bo *bo;
-		uint32_t off;
-
-		struct fd_parameters params;
-	} attributes;
+	struct fd_parameters attributes, solid_attributes;
 
 	/* texture related params: */
-	struct {
-		struct fd_parameters params;
-	} textures;
+	struct fd_parameters textures;
 
 	struct {
 		/* render target: */
@@ -132,7 +85,7 @@ struct fd_state {
 	} render_target;
 
 	struct {
-		uint32_t color;
+		float color[4];
 		uint32_t stencil;
 		float depth;
 	} clear;
@@ -196,12 +149,14 @@ static void emit_mem_write(struct fd_state *state, struct fd_bo *bo,
 }
 
 const char *solid_vertex_shader_asm =
+		"@attribute(r0.x)  aPosition                             \n"
 		"(sy)(ss)end                                             \n"
 		"nop                                                     \n"
 		"nop                                                     \n"
 		"nop                                                     \n";
 
 const char *solid_fragment_shader_asm =
+		"@uniform(hc0.x) uColor                                  \n"
 		"(sy)(ss)(rpt3)mov.f16f16 hr0.x, (r)hc0.x                \n"
 		"end                                                     \n"
 		"nop                                                     \n"
@@ -218,8 +173,10 @@ static const float init_shader_const[] = {
 struct fd_state * fd_init(void)
 {
 	struct fd_state *state;
+	struct fd_param *p;
 	uint64_t val;
-	int i, ret;
+	unsigned i;
+	int ret;
 
 	state = calloc(1, sizeof(*state));
 	assert(state);
@@ -248,9 +205,6 @@ struct fd_state * fd_init(void)
 	state->vs_pvt_mem = fd_bo_new(state->ws->dev, 0x2000, 0);
 	state->fs_pvt_mem = fd_bo_new(state->ws->dev, 0x2000, 0);
 
-	/* allocate bo to pass vertices: */
-	state->attributes.bo = fd_bo_new(state->ws->dev, 0x20000, 0);
-
 	state->program = fd_program_new();
 
 	state->solid_program = fd_program_new();
@@ -268,6 +222,17 @@ struct fd_state * fd_init(void)
 		ERROR_MSG("failed to attach solid fragment shader: %d", ret);
 		goto fail;
 	}
+
+	/* manually setup the solid-program attribute/uniform: */
+	p = find_param(&state->solid_attributes, "aPosition");
+	p->fmt = FMT_FLOAT_32_32_32;
+	p->bo  = state->solid_const;
+
+	p = find_param(&state->solid_uniforms, "uColor");
+	p->elem_size = 4;
+	p->size  = 4;
+	p->count = 1;
+	p->data  = &state->clear.color[0];
 
 	/* setup initial GL state: */
 	state->cull_mode = GL_BACK;
@@ -293,7 +258,6 @@ struct fd_state * fd_init(void)
 
 	state->clear.depth = 1;
 	state->clear.stencil = 0;
-	state->clear.color = 0x00000000;
 
 	for (i = 0; i < ARRAY_SIZE(state->rb_mrt); i++) {
 		state->rb_mrt[i].blendcontrol =
@@ -347,72 +311,41 @@ int fd_set_program(struct fd_state *state, struct fd_program *program)
 	return fd_link(state);
 }
 
-static struct fd_param * find_param(struct fd_parameters *params,
-		const char *name)
-{
-	uint32_t i;
-	struct fd_param *p;
-
-	/* if this param is already bound, just update it: */
-	for (i = 0; i < params->nparams; i++) {
-		p = &params->params[i];
-		if (!strcmp(name, p->name)) {
-			return p;
-		}
-	}
-
-	if (i == ARRAY_SIZE(params->params)) {
-		ERROR_MSG("too many params, cannot bind %s", name);
-		return NULL;
-	}
-
-	p = &params->params[params->nparams++];
-	p->name = name;
-
-	return p;
-}
-
 /* for VBO's */
 struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 		uint32_t size, const void *data)
 {
-	struct fd_bo *bo = fd_bo_new(state->ws->dev, size, 0); /* TODO read-only? */
+	struct fd_bo *bo = fd_bo_new(state->ws->dev, size, 0);
 	memcpy(fd_bo_map(bo), data, size);
 	return bo;
 }
 
 int fd_attribute_bo(struct fd_state *state, const char *name,
-		struct fd_bo * bo)
+		enum a3xx_fmt fmt, struct fd_bo * bo)
 {
-	struct fd_param *p = find_param(&state->attributes.params, name);
+	struct fd_param *p = find_param(&state->attributes, name);
 	if (!p)
 		return -1;
-	p->type = FD_PARAM_ATTRIBUTE_VBO;
+	p->fmt  = fmt;
 	p->bo   = bo;
 	return 0;
 }
 
 int fd_attribute_pointer(struct fd_state *state, const char *name,
-		uint32_t size, uint32_t count, const void *data)
+		enum a3xx_fmt fmt, uint32_t count, const void *data)
 {
-	struct fd_param *p = find_param(&state->attributes.params, name);
-	if (!p)
-		return -1;
-	p->type = FD_PARAM_ATTRIBUTE;
-	p->elem_size = 4;  /* for now just 32bit types */
-	p->size  = size;
-	p->count = count;
-	p->data  = data;
-	return 0;
+	uint32_t size = fmt2size(fmt) * count;
+	struct fd_bo *bo = fd_bo_new(state->ws->dev, size, 0);
+	memcpy(fd_bo_map(bo), data, size);
+	return fd_attribute_bo(state, name, fmt, bo);
 }
 
 int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data)
 {
-	struct fd_param *p = find_param(&state->uniforms.params, name);
+	struct fd_param *p = find_param(&state->uniforms, name);
 	if (!p)
 		return -1;
-	p->type = FD_PARAM_UNIFORM;
 	p->elem_size = 4;  /* for now just 32bit types */
 	p->size  = size;
 	p->count = count;
@@ -424,12 +357,38 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 int fd_set_texture(struct fd_state *state, const char *name,
 		struct fd_surface *tex)
 {
-	struct fd_param *p = find_param(&state->textures.params, name);
+	struct fd_param *p = find_param(&state->textures, name);
 	if (!p)
 		return -1;
-	p->type = FD_PARAM_TEXTURE;
 	p->tex = tex;
 	return 0;
+}
+
+static void emit_draw_indx(struct fd_ringbuffer *ring, enum pc_di_primtype primtype,
+		enum pc_di_index_size index_size, uint32_t count,
+		struct fd_bo *indx_bo, uint32_t idx_offset, uint32_t idx_size)
+{
+	enum pc_di_src_sel src_sel = indx_bo ? DI_SRC_SEL_DMA : DI_SRC_SEL_AUTO_INDEX;
+
+	/* NOTE: blob driver always inserts a dummy DI_PT_POINTLIST draw.. not
+	 * sure if this is needed or is a workaround for some early hw, or??
+	 */
+
+	OUT_PKT3(ring, CP_DRAW_INDX, 3);
+	OUT_RING(ring, 0x00000000);   /* viz query info. */
+	OUT_RING(ring, DRAW(DI_PT_POINTLIST, DI_SRC_SEL_AUTO_INDEX,
+			INDEX_SIZE_IGN, 1));
+	OUT_RING(ring, 0);            /* NumIndices */
+
+
+	OUT_PKT3(ring, CP_DRAW_INDX, indx_bo ? 5 : 3);
+	OUT_RING(ring, 0x00000000);   /* viz query info. */
+	OUT_RING(ring, DRAW(primtype, src_sel, index_size, IGNORE_VISIBILITY));
+	OUT_RING(ring, count);        /* NumIndices */
+	if (indx_bo) {
+		OUT_RELOC(ring, indx_bo, idx_offset, 0);
+		OUT_RING (ring, idx_size);
+	}
 }
 
 /* emit cmdstream to blit from GMEM back to the surface */
@@ -439,9 +398,12 @@ static void emit_gmem2mem(struct fd_state *state,
 {
 }
 
-void fd_clear_color(struct fd_state *state, uint32_t color)
+void fd_clear_color(struct fd_state *state, float color[4])
 {
-	state->clear.color = color;
+	state->clear.color[0] = color[0];
+	state->clear.color[1] = color[1];
+	state->clear.color[2] = color[2];
+	state->clear.color[3] = color[3];
 }
 
 void fd_clear_stencil(struct fd_state *state, uint32_t s)
@@ -457,12 +419,16 @@ void fd_clear_depth(struct fd_state *state, float depth)
 int fd_clear(struct fd_state *state, GLbitfield mask)
 {
 	struct fd_ringbuffer *ring = state->ring;
-	struct fd_surface *surface = state->render_target.surface;
-	uint32_t reg;
 
 	state->dirty = true;
 
-	// XXX TODO
+	// TODO set state according to whether we clear color/depth/stencil..
+
+	fd_program_emit_state(state->solid_program,
+			&state->solid_uniforms, &state->solid_attributes,
+			ring);
+
+	emit_draw_indx(ring, DI_PT_RECTLIST, INDEX_SIZE_IGN, 2, NULL, 0, 0);
 
 	return 0;
 }
@@ -1034,10 +1000,9 @@ void fd_make_current(struct fd_state *state,
 
 		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
 		OUT_RING(ring, A3XX_RB_MRT_CONTROL_READ_DEST_ENABLE |
-				A3XX_RB_MRT_CONTROL_ROP_CODE(0) |
+				A3XX_RB_MRT_CONTROL_ROP_CODE(12) |
 				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_DISABLE) |
 				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf));
-
 		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
 				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
 				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));

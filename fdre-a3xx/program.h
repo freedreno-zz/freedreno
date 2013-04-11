@@ -38,21 +38,13 @@ struct fd_program * fd_program_new(void);
 int fd_program_attach_asm(struct fd_program *program,
 		enum fd_shader_type type, const char *src);
 
-struct ir3_attribute;
-struct ir3_const;
 struct ir3_sampler;
-struct ir3_uniform;
 
-struct ir3_attribute ** fd_program_attributes(struct fd_program *program,
-		enum fd_shader_type type, int *cnt);
-struct ir3_const ** fd_program_consts(struct fd_program *program,
-		enum fd_shader_type type, int *cnt);
 struct ir3_sampler ** fd_program_samplers(struct fd_program *program,
 		enum fd_shader_type type, int *cnt);
-struct ir3_uniform ** fd_program_uniforms(struct fd_program *program,
-		enum fd_shader_type type, int *cnt);
 
-int fd_program_emit_shader(struct fd_program *program,
-		enum fd_shader_type type, struct fd_ringbuffer *ring);
+void fd_program_emit_state(struct fd_program *program,
+		struct fd_parameters *uniforms, struct fd_parameters *attr,
+		struct fd_ringbuffer *ring);
 
 #endif /* PROGRAM_H_ */

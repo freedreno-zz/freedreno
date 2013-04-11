@@ -444,6 +444,17 @@ int ir3_shader_assemble(struct ir3_shader *shader,
 	info->max_reg       = -1;
 	info->max_half_reg  = -1;
 
+	/* need to include the attributes/vbo's in the register accounting,
+	 * since they use registers, but are fetched outside of the shader
+	 * program:
+	 *
+	 * TODO need to remember to handle this somehow in gallium driver,
+	 * which wouldn't be using the assembler metadata (attributes/
+	 * uniforms/etc)
+	 */
+	for (i = 0; i < shader->attributes_count; i++)
+		reg(shader->attributes[i]->rstart, info, IR3_REG_HALF);
+
 	/* need a integer number of instruction "groups" (sets of four
 	 * instructions), so pad out w/ NOPs if needed:
 	 */
@@ -468,14 +479,36 @@ int ir3_shader_assemble(struct ir3_shader *shader,
 	return 2 * shader->instrs_count;
 }
 
+static struct ir3_register * reg_create(struct ir3_shader *shader,
+		int num, int flags)
+{
+	struct ir3_register *reg =
+			ir3_alloc(shader, sizeof(struct ir3_register));
+	DEBUG_MSG("%x, %d, %c", flags, num>>2, "xyzw"[num & 0x3]);
+	reg->flags = flags;
+	reg->num = num;
+	return reg;
+}
+
+/* this is a bit of the logic from the parser (using bit 0 to indicate
+ * half vs full register) leaking through.. but all this stuff can be
+ * stripped out of the version of the IR code that ends up in gallium
+ * so I guess it doesn't matter if it is a bit fugly..
+ */
+static struct ir3_register * reg_create_from_num(struct ir3_shader *shader,
+		int num, int flags)
+{
+	if (num & 0x1)
+		flags |= IR3_REG_HALF;
+	return reg_create(shader, num>>1, flags);
+}
 
 struct ir3_attribute * ir3_attribute_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name)
 {
 	struct ir3_attribute *a = ir3_alloc(shader, sizeof(struct ir3_attribute));
-	DEBUG_MSG("R%d-R%d: %s", rstart, rstart + num - 1, name);
 	a->name   = ir3_strdup(shader, name);
-	a->rstart = rstart;
+	a->rstart = reg_create_from_num(shader, rstart, 0);
 	a->num    = num;
 	assert(shader->attributes_count < ARRAY_SIZE(shader->attributes));
 	shader->attributes[shader->attributes_count++] = a;
@@ -486,12 +519,11 @@ struct ir3_const * ir3_const_create(struct ir3_shader *shader,
 		int cstart, float v0, float v1, float v2, float v3)
 {
 	struct ir3_const *c = ir3_alloc(shader, sizeof(struct ir3_const));
-	DEBUG_MSG("C%d: %f, %f, %f, %f", cstart, v0, v1, v2, v3);
 	c->val[0] = v0;
 	c->val[1] = v1;
 	c->val[2] = v2;
 	c->val[3] = v3;
-	c->cstart = cstart;
+	c->cstart = reg_create_from_num(shader, cstart, IR3_REG_CONST);
 	assert(shader->consts_count < ARRAY_SIZE(shader->consts));
 	shader->consts[shader->consts_count++] = c;
 	return c;
@@ -501,7 +533,6 @@ struct ir3_sampler * ir3_sampler_create(struct ir3_shader *shader,
 		int idx, const char *name)
 {
 	struct ir3_sampler *s = ir3_alloc(shader, sizeof(struct ir3_sampler));
-	DEBUG_MSG("CONST(%d): %s", idx, name);
 	s->name   = ir3_strdup(shader, name);
 	s->idx    = idx;
 	assert(shader->samplers_count < ARRAY_SIZE(shader->samplers));
@@ -513,9 +544,8 @@ struct ir3_uniform * ir3_uniform_create(struct ir3_shader *shader,
 		int cstart, int num, const char *name)
 {
 	struct ir3_uniform *u = ir3_alloc(shader, sizeof(struct ir3_uniform));
-	DEBUG_MSG("C%d-C%d: %s", cstart, cstart + num - 1, name);
 	u->name   = ir3_strdup(shader, name);
-	u->cstart = cstart;
+	u->cstart = reg_create_from_num(shader, cstart, IR3_REG_CONST);
 	u->num    = num;
 	assert(shader->uniforms_count < ARRAY_SIZE(shader->uniforms));
 	shader->uniforms[shader->uniforms_count++] = u;
@@ -526,9 +556,8 @@ struct ir3_varying * ir3_varying_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name)
 {
 	struct ir3_varying *v = ir3_alloc(shader, sizeof(struct ir3_varying));
-	DEBUG_MSG("R%d-R%d: %s", rstart, rstart + num - 1, name);
 	v->name   = ir3_strdup(shader, name);
-	v->rstart = rstart;
+	v->rstart = reg_create_from_num(shader, rstart, 0);
 	v->num    = num;
 	assert(shader->varyings_count < ARRAY_SIZE(shader->varyings));
 	shader->varyings[shader->varyings_count++] = v;
@@ -551,11 +580,7 @@ struct ir3_instruction * ir3_instr_create(struct ir3_shader *shader,
 struct ir3_register * ir3_reg_create(struct ir3_instruction *instr,
 		int num, int flags)
 {
-	struct ir3_register *reg =
-			ir3_alloc(instr->shader, sizeof(struct ir3_register));
-	DEBUG_MSG("%x, %d, %c", flags, num>>2, "xyzw"[num & 0x3]);
-	reg->flags = flags;
-	reg->num = num;
+	struct ir3_register *reg = reg_create(instr->shader, num, flags);
 	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
 	instr->regs[instr->regs_count++] = reg;
 	return reg;

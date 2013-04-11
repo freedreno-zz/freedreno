@@ -43,7 +43,8 @@ int fd_set_program(struct fd_state *state, struct fd_program *program);
 
 struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 		uint32_t size, const void *data);
-int fd_attribute_bo(struct fd_state *state, const char *name, struct fd_bo * bo);
+int fd_attribute_bo(struct fd_state *state, const char *name,
+		enum a3xx_fmt fmt, struct fd_bo * bo);
 int fd_attribute_pointer(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data);
 int fd_uniform_attach(struct fd_state *state, const char *name,
@@ -51,7 +52,7 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 int fd_set_texture(struct fd_state *state, const char *name,
 		struct fd_surface *tex);
 
-void fd_clear_color(struct fd_state *state, uint32_t color);
+void fd_clear_color(struct fd_state *state, float color[4]);
 void fd_clear_stencil(struct fd_state *state, uint32_t s);
 void fd_clear_depth(struct fd_state *state, float depth);
 int fd_clear(struct fd_state *state, GLbitfield mask);

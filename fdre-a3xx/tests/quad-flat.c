@@ -61,11 +61,11 @@ int main(int argc, char **argv)
 		"}                            \n";
 #else
 	const char *vertex_shader_asm =
-		"@attribute(R1)  aPosition                                        \n"
+		"@attribute(r0.x)  aPosition                                      \n"
 		"(sy)(ss)end                                                      \n";
 	const char *fragment_shader_asm =
+		"@uniform(hc0.x) uColor                                           \n"
 		// XXX why not use a (rpt3)??
-		"@uniform(C0) uColor                                              \n"
 		"(sy)(ss)mov.f16f16 hr0.x, hc0.x                                  \n"
 		"mov.f16f16 hr0.y, hc0.y                                          \n"
 		"mov.f16f16 hr0.z, hc0.z                                          \n"
@@ -91,10 +91,10 @@ int main(int argc, char **argv)
 
 	fd_link(state);
 
-	fd_clear_color(state, 0xff505050);
+	fd_clear_color(state, (float[]){ 1.0, 0.5, 0.5, 0.5 });
 	fd_clear(state, GL_COLOR_BUFFER_BIT);
 
-	fd_attribute_pointer(state, "aPosition", 3, 4, vertices);
+	fd_attribute_pointer(state, "aPosition", FMT_FLOAT_32_32_32, 4, vertices);
 
 	fd_uniform_attach(state, "uColor", 4, 1, color);
 

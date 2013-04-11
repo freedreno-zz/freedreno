@@ -132,13 +132,13 @@ struct ir3_instruction {
 
 struct ir3_attribute {
 	const char *name;
-	int rstart;         /* first register */
-	int num;            /* number of registers */
+	struct ir3_register *rstart;  /* first register */
+	int num;                      /* number of registers */
 };
 
 struct ir3_const {
 	float val[4];
-	int cstart;         /* first const register */
+	struct ir3_register *cstart;  /* first const register */
 };
 
 struct ir3_sampler {
@@ -148,14 +148,14 @@ struct ir3_sampler {
 
 struct ir3_uniform {
 	const char *name;
-	int cstart;         /* first const register */
-	int num;            /* number of const registers */
+	struct ir3_register *cstart;  /* first const register */
+	int num;                      /* number of const registers */
 };
 
 struct ir3_varying {
 	const char *name;
-	int rstart;         /* first register */
-	int num;            /* number of registers */
+	struct ir3_register *rstart;  /* first register */
+	int num;                      /* number of registers */
 };
 
 /* this is just large to cope w/ the large test *.asm: */

@@ -52,6 +52,9 @@ static inline uint32_t fui(float f)
 
 #define CP_REG(reg) ((0x4 << 16) | ((unsigned int)((reg) - (0x2000))))
 
+/* for conditionally setting boolean flag(s): */
+#define COND(bool, val) ((bool) ? (val) : 0)
+
 static inline uint32_t DRAW(enum pc_di_primtype prim_type,
 		enum pc_di_src_sel source_select, enum pc_di_index_size index_size,
 		enum pc_di_vis_cull_mode vis_cull_mode)
@@ -91,5 +94,125 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
+
+
+/* ************************************************************************* */
+
+struct fd_param {
+	const char *name;
+	union {
+		struct {                  /* attributes */
+			struct fd_bo *bo;
+			enum a3xx_fmt fmt;
+		};
+		struct fd_surface *tex;   /* textures */
+		struct {                  /* uniforms */
+			/* user ptr and dimensions for passed in uniform:
+			 *   elem_size - size of individual element in bytes
+			 *   size      - number of elements per group
+			 *   count     - number of groups
+			 * so total size in bytes is elem_size * size * count
+			 */
+			const void *data;
+			uint32_t elem_size, size, count;
+		};
+	};
+};
+
+#define MAX_PARAMS 32
+struct fd_parameters {
+	struct fd_param params[MAX_PARAMS];
+	uint32_t nparams;
+};
+
+static inline struct fd_param * find_param(struct fd_parameters *params,
+		const char *name)
+{
+	uint32_t i;
+	struct fd_param *p;
+
+	/* if this param is already bound, just update it: */
+	for (i = 0; i < params->nparams; i++) {
+		p = &params->params[i];
+		if (!strcmp(name, p->name)) {
+			return p;
+		}
+	}
+
+	if (i == ARRAY_SIZE(params->params)) {
+		ERROR_MSG("too many params, cannot bind %s", name);
+		return NULL;
+	}
+
+	p = &params->params[params->nparams++];
+	p->name = name;
+
+	return p;
+}
+
+static inline uint32_t fmt2size(enum a3xx_fmt fmt)
+{
+	switch (fmt) {
+	case FMT_UBYTE_8:
+	case FMT_NORM_UBYTE_8:
+	case FMT_BYTE_8:
+	case FMT_NORM_BYTE_8:
+		return 1;
+
+	case FMT_SHORT_16:
+	case FMT_USHORT_16:
+	case FMT_NORM_SHORT_16:
+	case FMT_NORM_USHORT_16:
+	case FMT_UBYTE_8_8:
+	case FMT_NORM_UBYTE_8_8:
+	case FMT_BYTE_8_8:
+	case FMT_NORM_BYTE_8_8:
+		return 2;
+
+	case FMT_UBYTE_8_8_8:
+	case FMT_NORM_UBYTE_8_8_8:
+	case FMT_BYTE_8_8_8:
+	case FMT_NORM_BYTE_8_8_8:
+		return 3;
+
+	case FMT_FLOAT_32:
+	case FMT_FIXED_32:
+	case FMT_SHORT_16_16:
+	case FMT_USHORT_16_16:
+	case FMT_NORM_SHORT_16_16:
+	case FMT_NORM_USHORT_16_16:
+	case FMT_UBYTE_8_8_8_8:
+	case FMT_NORM_UBYTE_8_8_8_8:
+	case FMT_BYTE_8_8_8_8:
+	case FMT_NORM_BYTE_8_8_8_8:
+		return 4;
+
+	case FMT_SHORT_16_16_16:
+	case FMT_USHORT_16_16_16:
+	case FMT_NORM_SHORT_16_16_16:
+	case FMT_NORM_USHORT_16_16_16:
+		return 6;
+
+	case FMT_FLOAT_32_32:
+	case FMT_FIXED_32_32:
+	case FMT_SHORT_16_16_16_16:
+	case FMT_USHORT_16_16_16_16:
+	case FMT_NORM_SHORT_16_16_16_16:
+	case FMT_NORM_USHORT_16_16_16_16:
+		return 8;
+
+	case FMT_FLOAT_32_32_32:
+	case FMT_FIXED_32_32_32:
+		return 12;
+
+	case FMT_FLOAT_32_32_32_32:
+	case FMT_FIXED_32_32_32_32:
+		return 16;
+
+	default:
+		assert(0); /* invalid format */
+		return 0;
+	}
+}
 
 #endif /* UTIL_H_ */
