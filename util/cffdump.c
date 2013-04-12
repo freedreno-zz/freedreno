@@ -619,7 +619,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
 	uint32_t state_type = dwords[1] & 0x3;
 	uint32_t ext_src_addr = dwords[1] & 0xfffffffc;
-	void *contents;
+	void *contents = NULL;
 
 	printf("%s%s %s, dst_off=%04x, state_src=%04x, state_block_id=%d, "
 			"num_unit=%d, state_type=%d, ext_src_addr=%08x, size=%04x\n",
@@ -631,8 +631,9 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	/* we could either have a ptr to other gpu buffer, or directly have
 	 * contents inline:
 	 */
-	contents = hostptr(ext_src_addr);
-	if (!contents)
+	if (ext_src_addr)
+		contents = hostptr(ext_src_addr);
+	else
 		contents = dwords + 2;
 
 	if ((state_type == 0) && ((state_block_id == HLSQ_BLOCK_ID_SP_VS) ||
@@ -839,6 +840,10 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 			dump_hex(ptr, dwords[4]/4, level+1);
 		}
 	}
+
+	/* don't bother dumping registers for the dummy draw_indx's.. */
+	if (num_indices == 0)
+		return;
 
 	/* dump current state of registers: */
 	printf("%scurrent register values\n", levels[level]);
