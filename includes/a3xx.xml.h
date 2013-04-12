@@ -8,7 +8,7 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35933 bytes, from 2013-04-12 00:45:38)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  36110 bytes, from 2013-04-12 17:45:17)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   8875 bytes, from 2013-04-12 00:45:38)
@@ -123,6 +123,11 @@ enum a3xx_msaa_samples {
 	MSAA_ONE = 0,
 	MSAA_TWO = 1,
 	MSAA_FOUR = 2,
+};
+
+enum adreno_rb_copy_control_mode {
+	RB_COPY_RESOLVE = 1,
+	RB_COPY_DEPTH_STENCIL = 5,
 };
 
 #define REG_A3XX_RBBM_HW_VERSION				0x00000000
@@ -559,8 +564,12 @@ static inline uint32_t A3XX_RB_COPY_CONTROL_MSAA_RESOLVE(enum a3xx_msaa_samples 
 {
 	return ((val) << A3XX_RB_COPY_CONTROL_MSAA_RESOLVE__SHIFT) & A3XX_RB_COPY_CONTROL_MSAA_RESOLVE__MASK;
 }
-#define A3XX_RB_COPY_CONTROL_MODE_RESOLVE			0x00000100
-#define A3XX_RB_COPY_CONTROL_MODE_DEPTH_STENCIL			0x00000500
+#define A3XX_RB_COPY_CONTROL_MODE__MASK				0x00000070
+#define A3XX_RB_COPY_CONTROL_MODE__SHIFT			4
+static inline uint32_t A3XX_RB_COPY_CONTROL_MODE(enum adreno_rb_copy_control_mode val)
+{
+	return ((val) << A3XX_RB_COPY_CONTROL_MODE__SHIFT) & A3XX_RB_COPY_CONTROL_MODE__MASK;
+}
 #define A3XX_RB_COPY_CONTROL_GMEM_BASE__MASK			0xffffc000
 #define A3XX_RB_COPY_CONTROL_GMEM_BASE__SHIFT			14
 static inline uint32_t A3XX_RB_COPY_CONTROL_GMEM_BASE(uint32_t val)
@@ -1085,6 +1094,7 @@ static inline uint32_t A3XX_VPC_PACK_NUMNONPOSVSVAR(uint32_t val)
 #define REG_A3XX_VPC_VARY_CYLWRAP_ENABLE_1			0x0000228b
 
 #define REG_A3XX_SP_SP_CTRL_REG					0x000022c0
+#define A3XX_SP_SP_CTRL_REG_RESOLVE				0x00010000
 #define A3XX_SP_SP_CTRL_REG_CONSTMODE__MASK			0x000c0000
 #define A3XX_SP_SP_CTRL_REG_CONSTMODE__SHIFT			18
 static inline uint32_t A3XX_SP_SP_CTRL_REG_CONSTMODE(uint32_t val)

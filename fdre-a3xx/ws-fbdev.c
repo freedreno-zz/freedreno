@@ -156,6 +156,13 @@ struct fd_winsys * fd_winsys_fbdev_open(void)
 			ws_fbdev->var.yres_virtual,
 			ws_fbdev->fix.line_length);
 
+	ws_fbdev->var.yoffset = ws_fbdev->var.xoffset = 0;
+	ret = ioctl(fd, FBIOPAN_DISPLAY, &ws_fbdev->var);
+	if (ret) {
+		WARN_MSG("failed to pan: %d (%s)",
+				ret, strerror(errno));
+	}
+
 	ws_fbdev->fd = fd;
 	ws_fbdev->ptr = mmap(0,
 			ws_fbdev->var.yres_virtual * ws_fbdev->fix.line_length,

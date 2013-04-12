@@ -57,6 +57,18 @@ OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
 	fd_ringbuffer_emit_reloc(ring, bo, offset, or);
 }
 
+/* shifted reloc: */
+static inline void
+OUT_RELOCS(struct fd_ringbuffer *ring, struct fd_bo *bo,
+		uint32_t offset, uint32_t or, int32_t shift)
+{
+	if (LOG_DWORDS) {
+		DEBUG_MSG("ring[%p]: OUT_RELOCS  %04x:  %p+%u << %d", ring,
+				(uint32_t)(ring->cur - ring->last_start), bo, offset, shift);
+	}
+	fd_ringbuffer_emit_reloc_shift(ring, bo, offset, or, shift);
+}
+
 static inline void BEGIN_RING(struct fd_ringbuffer *ring, uint32_t ndwords)
 {
 	if ((ring->cur + ndwords) >= ring->end) {

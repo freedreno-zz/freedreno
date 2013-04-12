@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 
 	fd_link(state);
 
-	fd_clear_color(state, (float[]){ 1.0, 0.5, 0.5, 0.5 });
+	fd_clear_color(state, (float[]){ 0.5, 0.5, 0.5, 1.0 });
 	fd_clear(state, GL_COLOR_BUFFER_BIT);
 
 	fd_attribute_pointer(state, "aPosition", FMT_FLOAT_32_32_32, 4, vertices);
@@ -105,6 +105,8 @@ int main(int argc, char **argv)
 	fd_flush(state);
 
 	fd_dump_bmp(surface, "quad-flat.bmp");
+
+	sleep(1);
 
 	fd_fini(state);
 

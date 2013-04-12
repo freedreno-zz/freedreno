@@ -267,6 +267,8 @@ void fd_program_emit_state(struct fd_program *program,
 	OUT_PKT0(ring, REG_A3XX_SP_SP_CTRL_REG, 1);
 	OUT_RING(ring, A3XX_SP_SP_CTRL_REG_CONSTMODE(0) |
 			A3XX_SP_SP_CTRL_REG_SLEEPMODE(1) |
+			// XXX "resolve" (?) bit set on gmem->mem pass..
+			COND(!uniforms, A3XX_SP_SP_CTRL_REG_RESOLVE) |
 			// XXX sometimes 0, sometimes 1:
 			A3XX_SP_SP_CTRL_REG_LOMODE(1));
 
@@ -392,6 +394,9 @@ void fd_program_emit_state(struct fd_program *program,
 			A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(INVALIDATE) |
 			A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE);
 
-	emit_uniconst(ring, vs, uniforms, SB_VERTEX);
-	emit_uniconst(ring, fs, uniforms, SB_FRAGMENT);
+	/* for RB_RESOLVE_PASS, I think the consts are not needed: */
+	if (uniforms) {
+		emit_uniconst(ring, vs, uniforms, SB_VERTEX);
+		emit_uniconst(ring, fs, uniforms, SB_FRAGMENT);
+	}
 }
