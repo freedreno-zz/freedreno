@@ -92,16 +92,6 @@ struct ir3_sampler ** fd_program_samplers(struct fd_program *program,
 	return shader->ir->samplers;
 }
 
-static uint32_t footprint(int32_t max)
-{
-	/* The register footprint is in units of vec4, ie. the registers
-	 * are allocated in sets of four consecutive scalers (rN.x -> rN.w)
-	 */
-	if (max < 0)
-		return 0;
-	return (max >> 2) + 1;
-}
-
 static uint32_t instrlen(struct fd_shader *shader)
 {
 	/* the instructions length is in units of instruction groups
@@ -126,6 +116,15 @@ static uint32_t totalattr(struct fd_shader *shader)
 	uint32_t i, n = 0;
 	for (i = 0; i < shader->ir->attributes_count; i++)
 		n += shader->ir->attributes[i]->num;
+	return n * 4;
+}
+
+static uint32_t totalvar(struct fd_shader *shader)
+{
+	/* in units of scalar, ie. vec4 -> 4 */
+	uint32_t i, n = 0;
+	for (i = 0; i < shader->ir->varyings_count; i++)
+		n += shader->ir->varyings[i]->num;
 	return n * 4;
 }
 
@@ -234,7 +233,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	struct ir3_shader_info *fsi = &fs->info;
 	uint32_t vsconstlen = constlen(vs);
 	uint32_t fsconstlen = constlen(fs);
-	int i;
+	int i, outloc;
 
 	// TODO don't hard-code gl_Position to r0.x:
 	uint32_t posregid = 0;
@@ -245,8 +244,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	// TODO don't hard-code gl_FragColor to r0.x:
 	uint32_t colorregid = 0;
 
-	// TODO figure out # of register varying slots (ie. a vec4 -> 4, float -> 1, mat4 -> 16):
-	uint32_t numvar = 0;
+	uint32_t numvar = totalvar(fs);
 
 	assert (vs->ir->varyings_count == fs->ir->varyings_count);
 
@@ -290,21 +288,79 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	OUT_PKT0(ring, REG_A3XX_SP_VS_CTRL_REG0, 3);
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG0_THREADMODE(MULTI) |
 			A3XX_SP_VS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
-			A3XX_SP_VS_CTRL_REG0_HALFREGFOOTPRINT(footprint(vsi->max_half_reg)) |
-			A3XX_SP_VS_CTRL_REG0_FULLREGFOOTPRINT(footprint(vsi->max_reg)) |
+			A3XX_SP_VS_CTRL_REG0_HALFREGFOOTPRINT(vsi->max_half_reg + 1) |
+			A3XX_SP_VS_CTRL_REG0_FULLREGFOOTPRINT(vsi->max_reg + 1) |
 			A3XX_SP_VS_CTRL_REG0_INOUTREGOVERLAP(0) |
 			A3XX_SP_VS_CTRL_REG0_THREADSIZE(TWO_QUADS) |
 			A3XX_SP_VS_CTRL_REG0_SUPERTHREADMODE |
 			A3XX_SP_VS_CTRL_REG0_LENGTH(instrlen(vs)));
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vsconstlen) |
 			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(0) |
-			A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET(4));
+			A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET(4 * (vsi->max_reg + 1)));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(posregid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psizeregid) |
 			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fs->ir->varyings_count));
 
-	// TODO set SP_VS_OUT[0-8] properly based on varying positions
-	// TODO we need to set SP_VS_VPC_DST[0-4] properly based on varying position/sizes
+	for (i = 0; i < vs->ir->varyings_count; ) {
+		struct ir3_varying *v;
+		uint32_t reg = 0;
+
+		OUT_PKT0(ring, REG_A3XX_SP_VS_OUT_REG(i/2), 1);
+
+		v = vs->ir->varyings[i++];
+		if (v) {
+			reg |= A3XX_SP_VS_OUT_REG_A_REGID(v->rstart->num);
+			reg |= A3XX_SP_VS_OUT_REG_A_COMPMASK(0xf);
+		}
+
+		v = vs->ir->varyings[i++];
+		if (v) {
+			reg |= A3XX_SP_VS_OUT_REG_B_REGID(v->rstart->num);
+			reg |= A3XX_SP_VS_OUT_REG_B_COMPMASK(0xf);
+		}
+
+		OUT_RING(ring, reg);
+	}
+
+	outloc = 8;    /* I assume 0 and 4 are gl_Position/gl_PointSize? */
+	for (i = 0; i < vs->ir->varyings_count; ) {
+		struct ir3_varying *v;
+		uint32_t reg = 0;
+
+		OUT_PKT0(ring, REG_A3XX_SP_VS_VPC_DST_REG(i/4), 1);
+
+		/* note: if we supported anything other than vec4 varyings, we'd
+		 * actually be incrementing outloc by the actual varying size in
+		 * units of scalar registers (ie. vec3 -> 3)
+		 */
+
+		v = vs->ir->varyings[i++];
+		if (v) {
+			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC0(outloc);
+			outloc += 4 * v->num;
+		}
+
+		v = vs->ir->varyings[i++];
+		if (v) {
+			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC1(outloc);
+			outloc += 4 * v->num;
+		}
+
+		v = vs->ir->varyings[i++];
+		if (v) {
+			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC2(outloc);
+			outloc += 4 * v->num;
+		}
+
+		v = vs->ir->varyings[i++];
+		if (v) {
+			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC3(outloc);
+			outloc += 4 * v->num;
+		}
+
+		OUT_RING(ring, reg);
+	}
+
 	// TODO SP_VS_OBJ_OFFSET_REG / SP_VS_OBJ_START_REG
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
@@ -313,8 +369,8 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	OUT_PKT0(ring, REG_A3XX_SP_FS_CTRL_REG0, 2);
 	OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
 			A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
-			A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(footprint(fsi->max_half_reg)) |
-			A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(footprint(fsi->max_reg)) |
+			A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(fsi->max_half_reg + 1) |
+			A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(fsi->max_reg + 1) |
 			A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
 			A3XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
 			A3XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |

@@ -37,6 +37,9 @@ LDADD = \
 	$(top_builddir)/libfreedreno.la
 
 TESTS = \
+	fan-smoothed \
+	strip-smoothed \
+	triangle-smoothed \
 	triangle-quad \
 	quad-flat
 
@@ -44,4 +47,7 @@ noinst_PROGRAMS = $(TESTS)
 
 quad_flat_SOURCES         = quad-flat.c
 triangle_quad_SOURCES     = triangle-quad.c
+triangle_smoothed_SOURCES = triangle-smoothed.c
+strip_smoothed_SOURCES    = strip-smoothed.c
+fan_smoothed_SOURCES      = fan-smoothed.c
 

@@ -822,6 +822,12 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	fd_program_emit_state(state->program, first, &state->uniforms,
 			&state->attributes, ring);
 
+	OUT_PKT0(ring, REG_A3XX_PC_PRIM_VTX_CNTL, 1);
+	OUT_RING(ring, A3XX_PC_PRIM_VTX_CNTL_STRIDE_IN_VPC(2) | // XXX
+			A3XX_PC_PRIM_VTX_CNTL_POLYMODE_FRONT_PTYPE(PC_DRAW_TRIANGLES) |
+			A3XX_PC_PRIM_VTX_CNTL_POLYMODE_BACK_PTYPE(PC_DRAW_TRIANGLES) |
+			A3XX_PC_PRIM_VTX_CNTL_PROVOKING_VTX_LAST);
+
 	emit_draw_indx(ring, mode2prim(mode), idx_type, count,
 			indx_bo, 0, idx_size);
 
@@ -1259,6 +1265,9 @@ void fd_make_current(struct fd_state *state,
 	OUT_PKT0(ring, REG_A3XX_RB_WINDOW_SIZE, 1);
 	OUT_RING(ring, A3XX_RB_WINDOW_SIZE_WIDTH(surface->width) |
 			A3XX_RB_WINDOW_SIZE_HEIGHT(surface->height));
+
+	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
+	OUT_RING(ring, A3XX_GRAS_CL_CLIP_CNTL_IJ_PERSP_CENTER);
 
 	fd_ringbuffer_flush(ring);
 
