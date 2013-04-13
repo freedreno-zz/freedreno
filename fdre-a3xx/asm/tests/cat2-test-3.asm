@@ -3736,5 +3736,5 @@ mul.f r1.z, r1.z, c9.z
 mul.f r1.z, r1.z, c6.w
 add.f r1.z, r1.z, c8.w
 add.s r0.w, r0.w, -4
-nop
+(sy)(ss)(rpt3)bary.f (ei)hr0.x, (r)0, r0.x
 nop

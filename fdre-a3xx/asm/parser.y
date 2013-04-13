@@ -719,6 +719,7 @@ src_reg_or_const_or_rel: src_reg_or_const
 |                  relative
 
 src_reg_or_const_or_rel_or_imm: src_reg_or_const_or_rel
+|                  src_reg_flags immediate
 |                  immediate
 
 offset:            { $$ = 0; }
