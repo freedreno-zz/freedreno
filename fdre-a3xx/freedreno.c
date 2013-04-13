@@ -399,7 +399,7 @@ static void emit_gmem2mem(struct fd_state *state,
 		struct fd_ringbuffer *ring, struct fd_surface *surface,
 		uint32_t xoff, uint32_t yoff)
 {
-	fd_program_emit_state(state->solid_program,
+	fd_program_emit_state(state->solid_program, 0,
 			NULL, &state->solid_attributes, ring);
 
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
@@ -486,7 +486,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	// TODO set state according to whether we clear color/depth/stencil..
 
-	fd_program_emit_state(state->solid_program,
+	fd_program_emit_state(state->solid_program, 0,
 			&state->solid_uniforms, &state->solid_attributes,
 			ring);
 
@@ -771,10 +771,63 @@ int fd_tex_param(struct fd_state *state, GLenum name, GLint param)
 	}
 }
 
+static enum pc_di_primtype mode2prim(GLenum mode)
+{
+	switch (mode) {
+	case GL_TRIANGLE_STRIP: return DI_PT_TRISTRIP;
+	case GL_TRIANGLE_FAN:   return DI_PT_TRIFAN;
+	case GL_TRIANGLES:      return DI_PT_TRILIST;
+	default:
+		ERROR_MSG("unsupported mode: %d", mode);
+		return -1;
+	}
+}
+
 static int draw_impl(struct fd_state *state, GLenum mode,
 		GLint first, GLsizei count, GLenum type, const GLvoid *indices)
 {
-	// XXX TODO
+
+	struct fd_ringbuffer *ring = state->ring;
+	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
+	uint32_t idx_size;
+	struct fd_bo *indx_bo = NULL;
+
+	if (indices) {
+		switch (type) {
+		case GL_UNSIGNED_BYTE:
+			idx_type = INDEX_SIZE_8_BIT;
+			idx_size = count;
+			break;
+		case GL_UNSIGNED_SHORT:
+			idx_type = INDEX_SIZE_16_BIT;
+			idx_size = 2 * count;
+			break;
+		case GL_UNSIGNED_INT:
+			idx_type = INDEX_SIZE_32_BIT;
+			idx_size = 4 * count;
+			break;
+		default:
+			ERROR_MSG("invalid type");
+			return -1;
+		}
+
+		indx_bo = fd_bo_new(state->ws->dev, idx_size, 0);
+		memcpy(fd_bo_map(indx_bo), indices, idx_size);
+
+	} else {
+		idx_type = INDEX_SIZE_IGN;
+		idx_size = 0;
+	}
+
+	fd_program_emit_state(state->program, first, &state->uniforms,
+			&state->attributes, ring);
+
+	emit_draw_indx(ring, mode2prim(mode), idx_type, count,
+			indx_bo, 0, idx_size);
+
+	if (indx_bo)
+		fd_bo_del(indx_bo);
+
 	return 0;
 }
 
@@ -1009,7 +1062,7 @@ void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface)
 {
 	struct fd_ringbuffer *ring = state->ring;
-	uint32_t base, bw, bh;
+	uint32_t bw, bh;
 	int i;
 
 	attach_render_target(state, surface);

@@ -146,7 +146,8 @@ emit_shader(struct fd_ringbuffer *ring, struct fd_shader *shader,
 }
 
 static void emit_vtx_fetch(struct fd_ringbuffer *ring,
-		struct fd_shader *shader, struct fd_parameters *attr)
+		struct fd_shader *shader, struct fd_parameters *attr,
+		uint32_t first)
 {
 	uint32_t i;
 
@@ -162,7 +163,7 @@ static void emit_vtx_fetch(struct fd_ringbuffer *ring,
 				COND(switchnext, A3XX_VFD_FETCH_INSTR_0_SWITCHNEXT) |
 				A3XX_VFD_FETCH_INSTR_0_INDEXCODE(i) |
 				A3XX_VFD_FETCH_INSTR_0_STEPRATE(1));
-		OUT_RELOC(ring, p->bo, 0, 0);   /* VFD_FETCH[i].INSTR_1 */
+		OUT_RELOC(ring, p->bo, s * first, 0);    /* VFD_FETCH[i].INSTR_1 */
 
 		OUT_PKT0(ring, REG_A3XX_VFD_DECODE_INSTR(i), 1);
 		OUT_RING(ring, A3XX_VFD_DECODE_INSTR_WRITEMASK(0xf) |
@@ -223,7 +224,7 @@ static void emit_uniconst(struct fd_ringbuffer *ring,
 		OUT_RING(ring, buf[i]);
 }
 
-void fd_program_emit_state(struct fd_program *program,
+void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		struct fd_parameters *uniforms, struct fd_parameters *attr,
 		struct fd_ringbuffer *ring)
 {
@@ -383,7 +384,7 @@ void fd_program_emit_state(struct fd_program *program,
 			A3XX_VFD_CONTROL_1_REGID4VTX(63 << 2) |
 			A3XX_VFD_CONTROL_1_REGID4INST(63 << 2));
 
-	emit_vtx_fetch(ring, vs, attr);
+	emit_vtx_fetch(ring, vs, attr, first);
 
 	/* we have this sometimes, not others.. perhaps we could be clever
 	 * and figure out actually when we need to invalidate cache:
