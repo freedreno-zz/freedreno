@@ -49,6 +49,7 @@ typedef enum {
 
 static bool dump_shaders = false;
 static bool no_color = false;
+static bool summary = false;
 
 static const char *levels[] = {
 		"\t",
@@ -313,6 +314,9 @@ static void reg_vsc_pipe_data_length(const char *name, uint32_t dword, int level
 
 	vsc_pipe_data[idx].length = dword;
 
+	if (summary)
+		return;
+
 	/* as this is the last register in the triplet written, we dump
 	 * the pipe data here..
 	 */
@@ -358,6 +362,9 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 		sscanf(name, "VFD_FETCH[0x%x].INSTR_1", &idx) ||
 		sscanf(name, "VFD_FETCH[%d].INSTR_1", &idx);
 
+	if (summary)
+		return;
+
 	buf = hostptr(dword);
 
 	if (buf) {
@@ -371,10 +378,14 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 
 static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 {
-	void *buf = hostptr(dword);
+	void *buf;
+
+	if (summary)
+		return;
+
+	buf = hostptr(dword);
 	if (buf) {
-		uint32_t sizedwords = 32;
-		dump_float(buf, sizedwords, level+1);
+		uint32_t sizedwords = 64;
 		dump_hex(buf, sizedwords, level+1);
 	}
 }
@@ -534,22 +545,23 @@ static const char *regname(uint32_t regbase, int color)
 
 static void dump_register(uint32_t regbase, uint32_t dword, int level)
 {
-	struct rnndecaddrinfo *info;
-
 	if (!db) {
 		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
 		init_a2xx();
 	}
 
-	info = rnndec_decodeaddr(vc, dom, regbase, 0);
+	if (!summary) {
+		struct rnndecaddrinfo *info =
+				rnndec_decodeaddr(vc, dom, regbase, 0);
 
-	if (info && info->typeinfo) {
-		printf("%s%s: %s\n", levels[level], info->name,
-				rnndec_decodeval(vc, info->typeinfo, dword, info->width));
-	} else if (info) {
-		printf("%s%s: %08x\n", levels[level], info->name, dword);
-	} else {
-		printf("%s<%04x>: %08x\n", levels[level], regbase, dword);
+		if (info && info->typeinfo) {
+			printf("%s%s: %s\n", levels[level], info->name,
+					rnndec_decodeval(vc, info->typeinfo, dword, info->width));
+		} else if (info) {
+			printf("%s%s: %08x\n", levels[level], info->name, dword);
+		} else {
+			printf("%s<%04x>: %08x\n", levels[level], regbase, dword);
+		}
 	}
 
 	if (type0_reg[regbase].fxn) {
@@ -791,7 +803,8 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	case 0x4:
 		val += 0x2000;
-		dump_registers(val, dwords+1, sizedwords-1, level+1);
+		if (!summary)
+			dump_registers(val, dwords+1, sizedwords-1, level+1);
 		break;
 	}
 }
@@ -807,6 +820,9 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t prim_type     = dwords[1] & 0x1f;
 	uint32_t source_select = (dwords[1] >> 6) & 0x3;
 	uint32_t num_indices   = dwords[2];
+	bool saved_summary = summary;
+
+	summary = false;
 
 	printf("%sprim_type:     %s (%d)\n", levels[level],
 			vgt_prim_types[prim_type], prim_type);
@@ -843,7 +859,7 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	/* don't bother dumping registers for the dummy draw_indx's.. */
 	if (num_indices == 0)
-		return;
+		goto out;
 
 	/* dump current state of registers: */
 	printf("%scurrent register values\n", levels[level]);
@@ -855,6 +871,9 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 			continue;
 		dump_register(regbase, lastval, level+1);
 	}
+
+out:
+	summary = saved_summary;
 }
 
 static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -865,8 +884,12 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t ibsize = dwords[1];
 	uint32_t *ptr = NULL;
 
-	printf("%sibaddr:%08x\n", levels[level], ibaddr);
-	printf("%sibsize:%08x\n", levels[level], ibsize);
+	if (!summary) {
+		printf("%sibaddr:%08x\n", levels[level], ibaddr);
+		printf("%sibsize:%08x\n", levels[level], ibsize);
+	} else {
+		level--;
+	}
 
 	/* map gpuaddr back to hostptr: */
 	for (i = 0; i < nbuffers; i++) {
@@ -895,7 +918,8 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t val = dwords[0] & 0xffff;
 	uint32_t and = dwords[1];
 	uint32_t or  = dwords[2];
-	printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
+	if (!summary)
+		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
 }
 
 #define CP(x, fxn)   [CP_ ## x] = { #x, fxn }
@@ -961,25 +985,32 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	while (dwords_left > 0) {
 		int type = dwords[0] >> 30;
-		printf("t%d", type);
+		if (!summary)
+			printf("t%d", type);
 		switch (type) {
 		case 0x0: /* type-0 */
 			count = (dwords[0] >> 16)+2;
 			val = GET_PM4_TYPE0_REGIDX(dwords);
-			printf("%swrite %s%s\n", levels[level+1], regname(val, 1),
-					(dwords[0] & 0x8000) ? " (same register)" : "");
+			if (!summary) {
+				printf("%swrite %s%s\n", levels[level+1], regname(val, 1),
+						(dwords[0] & 0x8000) ? " (same register)" : "");
+			}
 			dump_registers(val, dwords+1, count-1, level+2);
-			dump_hex(dwords, count, level+1);
+			if (!summary)
+				dump_hex(dwords, count, level+1);
 			break;
 		case 0x1: /* type-1 */
 			count = 3;
 			val = dwords[0] & 0xfff;
-			printf("%swrite %s\n", levels[level+1], regname(val, 1));
+			if (!summary)
+				printf("%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+1, 1, level+2);
 			val = (dwords[0] >> 12) & 0xfff;
-			printf("%swrite %s\n", levels[level+1], regname(val, 1));
+			if (!summary)
+				printf("%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+2, 1, level+2);
-			dump_hex(dwords, count, level+1);
+			if (!summary)
+				dump_hex(dwords, count, level+1);
 			break;
 		case 0x3: /* type-3 */
 			count = ((dwords[0] >> 16) & 0x3fff) + 2;
@@ -1012,19 +1043,32 @@ int main(int argc, char **argv)
 	void *buf = NULL;
 	int fd, sz, i, n = 1;
 
-	if (!strcmp(argv[n], "--verbose")) {
-		disasm_set_debug(PRINT_RAW);
-		n++;
-	}
+	while (1) {
+		if (!strcmp(argv[n], "--verbose")) {
+			disasm_set_debug(PRINT_RAW);
+			n++;
+			continue;
+		}
 
-	if (!strcmp(argv[n], "--dump-shaders")) {
-		dump_shaders = true;
-		n++;
-	}
+		if (!strcmp(argv[n], "--dump-shaders")) {
+			dump_shaders = true;
+			n++;
+			continue;
+		}
 
-	if (!strcmp(argv[n], "--no-color")) {
-		no_color = true;
-		n++;
+		if (!strcmp(argv[n], "--no-color")) {
+			no_color = true;
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--summary")) {
+			summary = true;
+			n++;
+			continue;
+		}
+
+		break;
 	}
 
 	if (argc-n != 1)
