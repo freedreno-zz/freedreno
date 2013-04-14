@@ -98,7 +98,7 @@ static inline void
 OUT_IB(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
 		struct fd_ringmarker *end)
 {
-	OUT_PKT3(ring, CP_INDIRECT_BUFFER_PFD, 2);
+	OUT_PKT3(ring, CP_INDIRECT_BUFFER, 2);
 	fd_ringbuffer_emit_reloc_ring(ring, start);
 	OUT_RING(ring, fd_ringmarker_dwords(start, end));
 }

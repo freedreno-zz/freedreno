@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  36110 bytes, from 2013-04-12 17:45:17)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35636 bytes, from 2013-04-14 15:49:49)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   8875 bytes, from 2013-04-12 00:45:38)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9347 bytes, from 2013-04-14 14:36:42)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -1517,6 +1517,30 @@ static inline uint32_t A3XX_VSC_BIN_SIZE_HEIGHT(uint32_t val)
 #define REG_A3XX_VSC_PIPE(i0)				       (0x00000c06 + 0x3*(i0))
 
 #define REG_A3XX_VSC_PIPE_CONFIG(i0)			       (0x00000c06 + 0x3*(i0))
+#define A3XX_VSC_PIPE_CONFIG_X__MASK				0x000003ff
+#define A3XX_VSC_PIPE_CONFIG_X__SHIFT				0
+static inline uint32_t A3XX_VSC_PIPE_CONFIG_X(uint32_t val)
+{
+	return ((val) << A3XX_VSC_PIPE_CONFIG_X__SHIFT) & A3XX_VSC_PIPE_CONFIG_X__MASK;
+}
+#define A3XX_VSC_PIPE_CONFIG_Y__MASK				0x000ffc00
+#define A3XX_VSC_PIPE_CONFIG_Y__SHIFT				10
+static inline uint32_t A3XX_VSC_PIPE_CONFIG_Y(uint32_t val)
+{
+	return ((val) << A3XX_VSC_PIPE_CONFIG_Y__SHIFT) & A3XX_VSC_PIPE_CONFIG_Y__MASK;
+}
+#define A3XX_VSC_PIPE_CONFIG_W__MASK				0x00f00000
+#define A3XX_VSC_PIPE_CONFIG_W__SHIFT				20
+static inline uint32_t A3XX_VSC_PIPE_CONFIG_W(uint32_t val)
+{
+	return ((val) << A3XX_VSC_PIPE_CONFIG_W__SHIFT) & A3XX_VSC_PIPE_CONFIG_W__MASK;
+}
+#define A3XX_VSC_PIPE_CONFIG_H__MASK				0x0f000000
+#define A3XX_VSC_PIPE_CONFIG_H__SHIFT				24
+static inline uint32_t A3XX_VSC_PIPE_CONFIG_H(uint32_t val)
+{
+	return ((val) << A3XX_VSC_PIPE_CONFIG_H__SHIFT) & A3XX_VSC_PIPE_CONFIG_H__MASK;
+}
 
 #define REG_A3XX_VSC_PIPE_DATA_ADDRESS(i0)		       (0x00000c07 + 0x3*(i0))
 

@@ -67,13 +67,7 @@ static inline uint32_t DRAW(enum pc_di_primtype prim_type,
 			(1                 << 14);
 }
 
-/* convert x,y to dword */
-static inline uint32_t xy2d(uint16_t x, uint16_t y)
-{
-	return ((y & 0x3fff) << 16) | (x & 0x3fff);
-}
-
-#define enable_debug 0  /* TODO make dynamic */
+#define enable_debug 1  /* TODO make dynamic */
 
 #define ALIGN(v,a) (((v) + (a) - 1) & ~((a) - 1))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))

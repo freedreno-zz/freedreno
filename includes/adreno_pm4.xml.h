@@ -11,7 +11,7 @@ The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30212 bytes, from 2013-04-12 00:45:30)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   8875 bytes, from 2013-04-12 00:45:38)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9347 bytes, from 2013-04-14 14:36:42)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -154,6 +154,7 @@ enum adreno_pm4_type3_packets {
 	CP_COND_INDIRECT_BUFFER_PFE = 58,
 	CP_COND_INDIRECT_BUFFER_PFD = 50,
 	CP_INDIRECT_BUFFER_PFE = 63,
+	CP_SET_BIN = 76,
 };
 
 enum adreno_state_block {
@@ -211,6 +212,34 @@ static inline uint32_t CP_LOAD_STATE_1_STATE_TYPE(enum adreno_state_type val)
 static inline uint32_t CP_LOAD_STATE_1_EXT_SRC_ADDR(uint32_t val)
 {
 	return ((val >> 2) << CP_LOAD_STATE_1_EXT_SRC_ADDR__SHIFT) & CP_LOAD_STATE_1_EXT_SRC_ADDR__MASK;
+}
+
+#define REG_CP_SET_BIN_1					0x00000001
+#define CP_SET_BIN_1_X1__MASK					0x0000ffff
+#define CP_SET_BIN_1_X1__SHIFT					0
+static inline uint32_t CP_SET_BIN_1_X1(uint32_t val)
+{
+	return ((val) << CP_SET_BIN_1_X1__SHIFT) & CP_SET_BIN_1_X1__MASK;
+}
+#define CP_SET_BIN_1_Y1__MASK					0xffff0000
+#define CP_SET_BIN_1_Y1__SHIFT					16
+static inline uint32_t CP_SET_BIN_1_Y1(uint32_t val)
+{
+	return ((val) << CP_SET_BIN_1_Y1__SHIFT) & CP_SET_BIN_1_Y1__MASK;
+}
+
+#define REG_CP_SET_BIN_2					0x00000002
+#define CP_SET_BIN_2_X2__MASK					0x0000ffff
+#define CP_SET_BIN_2_X2__SHIFT					0
+static inline uint32_t CP_SET_BIN_2_X2(uint32_t val)
+{
+	return ((val) << CP_SET_BIN_2_X2__SHIFT) & CP_SET_BIN_2_X2__MASK;
+}
+#define CP_SET_BIN_2_Y2__MASK					0xffff0000
+#define CP_SET_BIN_2_Y2__SHIFT					16
+static inline uint32_t CP_SET_BIN_2_Y2(uint32_t val)
+{
+	return ((val) << CP_SET_BIN_2_Y2__SHIFT) & CP_SET_BIN_2_Y2__MASK;
 }
 
 

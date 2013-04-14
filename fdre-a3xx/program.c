@@ -92,6 +92,15 @@ struct ir3_sampler ** fd_program_samplers(struct fd_program *program,
 	return shader->ir->samplers;
 }
 
+uint32_t fd_program_outloc(struct fd_program *program)
+{
+	struct fd_shader *vs = get_shader(program, FD_SHADER_VERTEX);
+	/* we only support vec4 varyings, otherwise we'd have to
+	 * count 'em up:
+	 */
+	return 8 + (4 * vs->ir->varyings_count);
+}
+
 static uint32_t instrlen(struct fd_shader *shader)
 {
 	/* the instructions length is in units of instruction groups

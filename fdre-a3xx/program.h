@@ -42,7 +42,7 @@ struct ir3_sampler;
 
 struct ir3_sampler ** fd_program_samplers(struct fd_program *program,
 		enum fd_shader_type type, int *cnt);
-
+uint32_t fd_program_outloc(struct fd_program *program);
 void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		struct fd_parameters *uniforms, struct fd_parameters *attr,
 		struct fd_ringbuffer *ring);

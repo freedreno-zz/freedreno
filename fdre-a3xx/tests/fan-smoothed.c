@@ -82,6 +82,7 @@ int main(int argc, char **argv)
 		"(sy)(ss)(rpt3)bary.f (ei)hr0.x, (r)0, r0.x                          \n"
 		"end                                                                 \n";
 #endif
+	uint32_t width, height;
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("fd-triangle-smoothed", "");
@@ -90,7 +91,7 @@ int main(int argc, char **argv)
 	if (!state)
 		return -1;
 
-	surface = fd_surface_new(state, 256, 256);
+	surface = fd_surface_screen(state, &width, &height);
 	if (!surface)
 		return -1;
 
