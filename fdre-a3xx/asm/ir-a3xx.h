@@ -40,6 +40,7 @@ struct ir3_shader * fd_asm_parse(const char *src);
 struct ir3_shader_info {
 	int8_t   max_reg;   /* highest GPR # used by shader */
 	int8_t   max_half_reg;
+	int8_t   max_const;
 };
 
 struct ir3_register {
@@ -124,11 +125,12 @@ struct ir3_instruction {
 };
 
 /* somewhat arbitrary limits.. */
-#define MAX_ATTRIBUTES 32
+#define MAX_ATTRIBUTES 16
 #define MAX_CONSTS     32
 #define MAX_SAMPLERS   32
 #define MAX_UNIFORMS   32
-#define MAX_VARYINGS   32
+#define MAX_VARYINGS   16
+#define MAX_OUTS       2
 
 struct ir3_attribute {
 	const char *name;
@@ -153,6 +155,12 @@ struct ir3_uniform {
 };
 
 struct ir3_varying {
+	const char *name;
+	struct ir3_register *rstart;  /* first register */
+	int num;                      /* number of registers */
+};
+
+struct ir3_out {
 	const char *name;
 	struct ir3_register *rstart;  /* first register */
 	int num;                      /* number of registers */
@@ -183,6 +191,11 @@ struct ir3_shader {
 	uint32_t varyings_count;
 	struct ir3_varying *varyings[MAX_VARYINGS];
 
+	/* To specify the position of gl_Postion (default r0.x), gl_PointSize
+	 * (default r63.x), and gl_FragColor (default r0.x):
+	 */
+	uint32_t outs_count;
+	struct ir3_out *outs[MAX_OUTS];
 };
 
 struct ir3_shader * ir3_shader_create(void);
@@ -200,6 +213,8 @@ struct ir3_sampler * ir3_sampler_create(struct ir3_shader *shader,
 struct ir3_uniform * ir3_uniform_create(struct ir3_shader *shader,
 		int cstart, int num, const char *name);
 struct ir3_varying * ir3_varying_create(struct ir3_shader *shader,
+		int rstart, int num, const char *name);
+struct ir3_varying * ir3_out_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name);
 
 struct ir3_instruction * ir3_instr_create(struct ir3_shader *shader, int category, opc_t opc);

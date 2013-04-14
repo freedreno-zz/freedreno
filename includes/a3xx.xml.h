@@ -8,7 +8,7 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35636 bytes, from 2013-04-14 15:49:49)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35996 bytes, from 2013-04-16 20:11:04)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9347 bytes, from 2013-04-14 14:36:42)
@@ -40,6 +40,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 enum a3xx_render_mode {
 	RB_RENDERING_PASS = 0,
+	RB_TILING_PASS = 1,
 	RB_RESOLVE_PASS = 2,
 };
 
@@ -1168,17 +1169,17 @@ static inline uint32_t A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(uint32_t val)
 {
 	return ((val) << A3XX_SP_VS_CTRL_REG1_CONSTLENGTH__SHIFT) & A3XX_SP_VS_CTRL_REG1_CONSTLENGTH__MASK;
 }
-#define A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING__MASK		0x00f00000
-#define A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING__SHIFT		20
+#define A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT__MASK		0x000ffc00
+#define A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT__SHIFT		10
+static inline uint32_t A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(uint32_t val)
+{
+	return ((val) << A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT__SHIFT) & A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT__MASK;
+}
+#define A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING__MASK		0x3f000000
+#define A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING__SHIFT		24
 static inline uint32_t A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(uint32_t val)
 {
 	return ((val) << A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING__SHIFT) & A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING__MASK;
-}
-#define A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET__MASK		0x3f000000
-#define A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET__SHIFT		24
-static inline uint32_t A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET(uint32_t val)
-{
-	return ((val) << A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET__SHIFT) & A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET__MASK;
 }
 
 #define REG_A3XX_SP_VS_PARAM_REG				0x000022c6

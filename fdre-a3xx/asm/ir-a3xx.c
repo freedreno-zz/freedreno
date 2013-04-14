@@ -86,7 +86,9 @@ static uint32_t reg(struct ir3_register *reg,
 		val.comp = reg->num & 0x3;
 		val.num  = reg->num >> 2;
 
-		if (!(reg->flags & IR3_REG_CONST)) {
+		if (reg->flags & IR3_REG_CONST) {
+			info->max_const = max(info->max_const, val.num);
+		} else {
 			/* update register stats: */
 			if (reg->flags & IR3_REG_HALF) {
 				info->max_half_reg =
@@ -443,6 +445,7 @@ int ir3_shader_assemble(struct ir3_shader *shader,
 
 	info->max_reg       = -1;
 	info->max_half_reg  = -1;
+	info->max_const     = -1;
 
 	/* need to include the attributes/vbo's in the register accounting,
 	 * since they use registers, but are fetched outside of the shader
@@ -562,6 +565,18 @@ struct ir3_varying * ir3_varying_create(struct ir3_shader *shader,
 	assert(shader->varyings_count < ARRAY_SIZE(shader->varyings));
 	shader->varyings[shader->varyings_count++] = v;
 	return v;
+}
+
+struct ir3_varying * ir3_out_create(struct ir3_shader *shader,
+		int rstart, int num, const char *name)
+{
+	struct ir3_out *o = ir3_alloc(shader, sizeof(struct ir3_varying));
+	o->name   = ir3_strdup(shader, name);
+	o->rstart = reg_create_from_num(shader, rstart, 0);
+	o->num    = num;
+	assert(shader->outs_count < ARRAY_SIZE(shader->outs));
+	shader->outs[shader->outs_count++] = o;
+	return o;
 }
 
 struct ir3_instruction * ir3_instr_create(struct ir3_shader *shader,

@@ -932,6 +932,9 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	OUT_RING(ring, A3XX_PC_PRIM_VTX_CNTL_STRIDE_IN_VPC(stride_in_vpc) |
 			state->pc_prim_vtx_cntl);
 
+	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);
+	OUT_RING(ring, state->gras_su_mode_control);
+
 	emit_draw_indx(ring, mode2prim(mode), idx_type, count,
 			indx_bo, 0, idx_size);
 
@@ -1126,12 +1129,11 @@ static void attach_render_target(struct fd_state *state,
 	uint32_t bin_w, bin_h;
 	uint32_t cpp = color2cpp[surface->color];
 	uint32_t gmem_size = state->gmemsize_bytes;
-	uint32_t max_width = 992;
+	uint32_t max_width = 256;
 
 	if ((state->rb_depth_control & A3XX_RB_DEPTH_CONTROL_Z_ENABLE) |
 			(state->rb_stencil_control & A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE)) {
 		gmem_size /= 2;
-		max_width = 256;
 	}
 
 	state->render_target.surface = surface;

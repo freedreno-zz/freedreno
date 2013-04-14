@@ -77,6 +77,7 @@ static int parse_reg(const char *str)
 "@sampler"                        return TOKEN(T_A_SAMPLER);
 "@uniform"                        return TOKEN(T_A_UNIFORM);
 "@varying"                        return TOKEN(T_A_VARYING);
+"@out"                            return TOKEN(T_A_OUT);
 "(sy)"                            return TOKEN(T_SY);
 "(ss)"                            return TOKEN(T_SS);
 "(absneg)"                        return TOKEN(T_ABSNEG);

@@ -101,6 +101,16 @@ uint32_t fd_program_outloc(struct fd_program *program)
 	return 8 + (4 * vs->ir->varyings_count);
 }
 
+static uint32_t getpos(struct fd_shader *shader, const char *name,
+		uint32_t default_regid)
+{
+	uint32_t i;
+	for (i = 0; i < shader->ir->outs_count; i++)
+		if (!strcmp(shader->ir->outs[i]->name, name))
+			return shader->ir->outs[i]->num;
+	return default_regid;
+}
+
 static uint32_t instrlen(struct fd_shader *shader)
 {
 	/* the instructions length is in units of instruction groups
@@ -114,10 +124,10 @@ static uint32_t constlen(struct fd_shader *shader)
 	/* the constants length is in units of vec4's, and is the sum of
 	 * the uniforms and the built-in compiler constants
 	 */
-	uint32_t i, len = shader->ir->consts_count;
+	uint32_t i, len = 4 * shader->ir->consts_count;
 	for (i = 0; i < shader->ir->uniforms_count; i++)
 		len += shader->ir->uniforms[i]->num;
-	return len;
+	return ALIGN(len, 4) / 4;
 }
 
 static uint32_t totalattr(struct fd_shader *shader)
@@ -125,7 +135,7 @@ static uint32_t totalattr(struct fd_shader *shader)
 	uint32_t i, n = 0;
 	for (i = 0; i < shader->ir->attributes_count; i++)
 		n += shader->ir->attributes[i]->num;
-	return n * 4;
+	return n;
 }
 
 static uint32_t totalvar(struct fd_shader *shader)
@@ -134,7 +144,13 @@ static uint32_t totalvar(struct fd_shader *shader)
 	uint32_t i, n = 0;
 	for (i = 0; i < shader->ir->varyings_count; i++)
 		n += shader->ir->varyings[i]->num;
-	return n * 4;
+	return n;
+}
+
+/* # of components -> writemask */
+static uint32_t regmask(uint32_t num)
+{
+	return (1 << num) - 1;
 }
 
 static void
@@ -174,7 +190,7 @@ static void emit_vtx_fetch(struct fd_ringbuffer *ring,
 		OUT_RELOC(ring, p->bo, s * first, 0);    /* VFD_FETCH[i].INSTR_1 */
 
 		OUT_PKT0(ring, REG_A3XX_VFD_DECODE_INSTR(i), 1);
-		OUT_RING(ring, A3XX_VFD_DECODE_INSTR_WRITEMASK(0xf) |
+		OUT_RING(ring, A3XX_VFD_DECODE_INSTR_WRITEMASK(regmask(a->num)) |
 				A3XX_VFD_DECODE_INSTR_CONSTFILL |
 				A3XX_VFD_DECODE_INSTR_FORMAT(p->fmt) |
 				A3XX_VFD_DECODE_INSTR_REGID(a->rstart->num) |
@@ -242,16 +258,11 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	struct ir3_shader_info *fsi = &fs->info;
 	uint32_t vsconstlen = constlen(vs);
 	uint32_t fsconstlen = constlen(fs);
-	int i, outloc;
+	uint32_t i, outloc;
 
-	// TODO don't hard-code gl_Position to r0.x:
-	uint32_t posregid = 0;
-
-	// TODO don't hard-code gl_PointSize to r63.x:
-	uint32_t psizeregid = (63 << 2);
-
-	// TODO don't hard-code gl_FragColor to r0.x:
-	uint32_t colorregid = 0;
+	uint32_t posregid   = getpos(vs, "gl_Position", 0);
+	uint32_t psizeregid = getpos(vs, "gl_PointSize", (63 << 2));
+	uint32_t colorregid = getpos(fs, "gl_FragColor", 0);
 
 	uint32_t numvar = totalvar(fs);
 
@@ -303,9 +314,10 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 			A3XX_SP_VS_CTRL_REG0_THREADSIZE(TWO_QUADS) |
 			A3XX_SP_VS_CTRL_REG0_SUPERTHREADMODE |
 			A3XX_SP_VS_CTRL_REG0_LENGTH(instrlen(vs)));
+
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vsconstlen) |
-			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(0) |
-			A3XX_SP_VS_CTRL_REG1_HALFPRECVAROFFSET(4 * (vsi->max_reg + 1)));
+			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(totalattr(vs)) |
+			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(vsi->max_const));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(posregid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psizeregid) |
 			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fs->ir->varyings_count));
@@ -319,13 +331,13 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		v = vs->ir->varyings[i++];
 		if (v) {
 			reg |= A3XX_SP_VS_OUT_REG_A_REGID(v->rstart->num);
-			reg |= A3XX_SP_VS_OUT_REG_A_COMPMASK(0xf);
+			reg |= A3XX_SP_VS_OUT_REG_A_COMPMASK(regmask(v->num));
 		}
 
 		v = vs->ir->varyings[i++];
 		if (v) {
 			reg |= A3XX_SP_VS_OUT_REG_B_REGID(v->rstart->num);
-			reg |= A3XX_SP_VS_OUT_REG_B_COMPMASK(0xf);
+			reg |= A3XX_SP_VS_OUT_REG_B_COMPMASK(regmask(v->num));
 		}
 
 		OUT_RING(ring, reg);
@@ -346,25 +358,25 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		v = vs->ir->varyings[i++];
 		if (v) {
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC0(outloc);
-			outloc += 4 * v->num;
+			outloc += v->num;
 		}
 
 		v = vs->ir->varyings[i++];
 		if (v) {
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC1(outloc);
-			outloc += 4 * v->num;
+			outloc += v->num;
 		}
 
 		v = vs->ir->varyings[i++];
 		if (v) {
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC2(outloc);
-			outloc += 4 * v->num;
+			outloc += v->num;
 		}
 
 		v = vs->ir->varyings[i++];
 		if (v) {
 			reg |= A3XX_SP_VS_VPC_DST_REG_OUTLOC3(outloc);
-			outloc += 4 * v->num;
+			outloc += v->num;
 		}
 
 		OUT_RING(ring, reg);

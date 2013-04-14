@@ -175,6 +175,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_A_SAMPLER
 %token <tok> T_A_UNIFORM
 %token <tok> T_A_VARYING
+%token <tok> T_A_OUT
 
 /* src register flags */
 %token <tok> T_ABSNEG
@@ -407,6 +408,7 @@ header:            attribute_header
 |                  sampler_header
 |                  uniform_header
 |                  varying_header
+|                  out_header
 
 attribute_header:  T_A_ATTRIBUTE '(' reg_range ')' T_IDENTIFIER {
                        ir3_attribute_create(shader, $3.start, $3.num, $5);
@@ -428,11 +430,16 @@ varying_header:    T_A_VARYING '(' reg_range ')' T_IDENTIFIER {
                        ir3_varying_create(shader, $3.start, $3.num, $5);
 }
 
-reg_range:         T_REGISTER                { $$.start = $1; $$.num = 1; }
-|                  T_REGISTER '-' T_REGISTER { $$.start = $1; $$.num = 1 + $3 - $1; }
+out_header:        T_A_OUT '(' reg_range ')' T_IDENTIFIER {
+                       ir3_out_create(shader, $3.start, $3.num, $5);
+}
 
-const_range:       T_CONSTANT                { $$.start = $1; $$.num = 1; }
-|                  T_CONSTANT '-' T_CONSTANT { $$.start = $1; $$.num = 1 + $3 - $1; }
+                   /* NOTE: if just single register is specified (rather than a range) assume vec4 */
+reg_range:         T_REGISTER                { $$.start = $1; $$.num = 4; }
+|                  T_REGISTER '-' T_REGISTER { $$.start = $1; $$.num = 1 + ($3 >> 1) - ($1 >> 1); }
+
+const_range:       T_CONSTANT                { $$.start = $1; $$.num = 4; }
+|                  T_CONSTANT '-' T_CONSTANT { $$.start = $1; $$.num = 1 + ($3 >> 1) - ($1 >> 1); }
 
 iflag:             T_SY   { iflags.flags |= IR3_INSTR_SY; }
 |                  T_SS   { iflags.flags |= IR3_INSTR_SS; }
