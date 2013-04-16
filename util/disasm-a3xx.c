@@ -151,6 +151,7 @@ static struct {
 	regmask_t used;
 	regmask_t rbw;      /* read before write */
 	regmask_t war;      /* write after read */
+	regmask_t cnst;     /* used consts */
 } regs;
 
 static void print_regs(regmask_t *regmask, bool full)
@@ -202,6 +203,12 @@ static void print_reg_stats(int level)
 	printf("\n");
 	printf("%s- input (full):", levels[level]);
 	print_regs(&regs.rbw, true);
+	printf("\n");
+	printf("%s- const (half):", levels[level]);
+	print_regs(&regs.cnst, false);
+	printf("\n");
+	printf("%s- const (full):", levels[level]);
+	print_regs(&regs.cnst, true);
 	printf("\n");
 	printf("%s- output (half):", levels[level]);
 	print_regs(&regs.war, false);
@@ -263,6 +270,16 @@ static void print_reg_src(reg_t reg, bool full, bool r, bool c, bool im,
 
 			regmask_set(&regs.war, src, full, 0);
 			regmask_set(&regs.used, src, full, 1);
+
+			if (!r)
+				break;
+		}
+	} else if (c) {
+		int i, num = regidx(reg);
+		for (i = 0; i <= repeat; i++) {
+			unsigned src = num + i;
+
+			regmask_set(&regs.cnst, src, full, 1);
 
 			if (!r)
 				break;
