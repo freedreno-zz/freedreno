@@ -2,7 +2,7 @@
 # system after splitting the directory tree into various subdirs..
 # really need to clean this up but I've got better things to work on
 # right now:
-VPATH = tests-2d:tests-3d:util:wrap
+VPATH = tests-2d:tests-3d:tests-cl:util:wrap
 
 TESTS_2D = \
 	test-fill \
@@ -33,7 +33,10 @@ TESTS_3D = \
 	test-triangle-smoothed \
 	test-triangle-quad
 
-TESTS = $(TESTS_2D) $(TESTS_3D)
+TESTS_CL = \
+	test-image
+
+TESTS = $(TESTS_2D) $(TESTS_3D) $(TESTS_CL)
 UTILS = bmp.o
 
 CFLAGS = -Iincludes -Iutil
@@ -53,9 +56,10 @@ ifeq ($(strip $(BUILD)),bionic)
 # but I was getting eglCreateContext() failing otherwise.
 LFLAGS_3D = -lEGL_adreno200 -lGLESv2_adreno200
 LFLAGS_2D = -lC2D2 -lOpenVG
-LDFLAGS_MISC = -lgsl -llog -lcutils -lstdc++ -lstlport
+LFLAGS_CL = -lOpenCL
+LDFLAGS_MISC = -lgsl -llog -lcutils -lstdc++ -lstlport -lm
 CFLAGS += -DBIONIC
-CC = gcc -L /system/lib
+CC = gcc -L /system/lib -mfloat-abi=soft
 LD = ld --entry=_start -nostdlib --dynamic-linker /system/bin/linker -rpath /system/lib -L /system/lib
 # only build c2d2 bits for android, otherwise we don't have the right
 # headers/libs:
@@ -63,6 +67,7 @@ WRAP_C2D2 = wrap-c2d2.o
 else ifeq ($(strip $(BUILD)),glibc)
 LFLAGS_3D = -lEGL -lGLESv2
 LFLAGS_2D =
+LFLAGS_CL = -lOpenCL
 LDFLAGS_MISC = -lX11 -lm
 CC = gcc -L /usr/lib
 LD = gcc -L /usr/lib
@@ -71,15 +76,17 @@ else
 error "Invalid build type"
 endif
 
-LFLAGS = $(LFLAGS_2D) $(LFLAGS_3D) $(LDFLAGS_MISC) -ldl -lc
+LFLAGS = $(LFLAGS_2D) $(LFLAGS_3D) $(LFLAGS_CL) $(LDFLAGS_MISC) -ldl -lc
 
-all: tests-3d tests-2d
+all: tests-3d tests-2d tests-cl
 
 utils: libwrap.so $(UTILS) redump cffdump pgmdump zdump
 
 tests-2d: $(TESTS_2D) utils
 
 tests-3d: $(TESTS_3D) utils
+
+tests-cl: $(TESTS_CL) utils
 
 clean:
 	rm -f *.bmp *.dat *.so *.o *.rd *.html *-cffdump.txt *-pgmdump.txt *.log redump cffdump pgmdump $(TESTS)
