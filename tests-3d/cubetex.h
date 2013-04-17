@@ -4,7 +4,7 @@ static const struct {
   unsigned int 	 width;
   unsigned int 	 height;
   unsigned int 	 bytes_per_pixel; /* 3:RGB, 4:RGBA */ 
-  unsigned char	 pixel_data[512 * 512 * 3 + 1];
+  unsigned char	 pixel_data[512 * 512 * 4 + 1];
 } cube_texture = {
   512, 512, 3,
   "\331\323\303\327\320\277\330\321\300\332\325\306\316\306\261\320\311\265"

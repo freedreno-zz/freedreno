@@ -94,7 +94,7 @@ const char *fragment_shader_source =
 
 
 void test_cube_textured(GLint mag_filter, GLint min_filter,
-		GLint wrap_s, GLint wrap_t, GLint wrap_r)
+		GLint wrap_s, GLint wrap_t, GLint wrap_r, GLenum format, GLenum type)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
@@ -199,10 +199,9 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	};
 	EGLSurface surface;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("cube-textured", "mag_filter=%04x, min_filter=%04x, "
-			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x",
-			mag_filter, min_filter, wrap_s, wrap_t, wrap_r);
+			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x, format=%04x, type=%04x",
+			mag_filter, min_filter, wrap_s, wrap_t, wrap_r, format, type);
 
 	display = get_display();
 
@@ -279,9 +278,10 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	GCHK(glGenTextures(1, &texturename));
 	GCHK(glBindTexture(GL_TEXTURE_2D, texturename));
 	GCHK(glTexImage2D(
-			GL_TEXTURE_2D, 0, GL_RGB,
-			cube_texture.width, cube_texture.height, 0,
-			GL_RGB, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
+			GL_TEXTURE_2D, 0, format,
+			cube_texture.width / ((type == GL_UNSIGNED_BYTE) ? 1 : 2),
+			cube_texture.height, 0,
+			format, type, cube_texture.pixel_data));
 
 	/* Note: cube turned black until these were defined. */
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter));
@@ -321,12 +321,21 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 
 int main(int argc, char *argv[])
 {
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_REPEAT);
-	test_cube_textured(GL_NEAREST, GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_CLAMP_TO_EDGE);
-	test_cube_textured(GL_LINEAR,  GL_NEAREST, GL_CLAMP_TO_EDGE,   GL_REPEAT,          GL_MIRRORED_REPEAT);
-	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE,   GL_REPEAT);
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT,          GL_REPEAT);
-	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT, GL_REPEAT);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_LINEAR,  GL_REPEAT,          GL_REPEAT,          GL_CLAMP_TO_EDGE,   GL_RGB, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_LINEAR,  GL_NEAREST, GL_CLAMP_TO_EDGE,   GL_REPEAT,          GL_MIRRORED_REPEAT, GL_RGB, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE,   GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT,          GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT, GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
+
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_UNSIGNED_SHORT_5_6_5);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_UNSIGNED_BYTE);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_UNSIGNED_SHORT_4_4_4_4);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_UNSIGNED_SHORT_5_5_5_1);
 }
 
 #ifdef BIONIC
