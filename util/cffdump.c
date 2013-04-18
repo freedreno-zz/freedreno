@@ -580,6 +580,24 @@ static void dump_registers(uint32_t regbase,
 	}
 }
 
+static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
+		const char *name)
+{
+	struct rnndomain *dom = rnn_finddomain(db, name);
+	int i;
+
+	if (!dom)
+		return;
+
+	for (i = 0; i < sizedwords; i++) {
+		struct rnndecaddrinfo *info = rnndec_decodeaddr(vc, dom, i, 0);
+		if (!(info && info->typeinfo))
+			break;
+		printf("%s%s\n", levels[level],
+			rnndec_decodeval(vc, info->typeinfo, dwords[i], info->width));
+	}
+}
+
 static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t start = dwords[1] >> 16;
@@ -618,27 +636,13 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	const char *state_type_names[] = {
-			"shader", "constants",
-			"?2?", "?3?", "?4?", "?5?", "?6?",
-	};
-	const char *state_block_names[] = {
-			"?0?", "?1?", "texture", "mipmap", "vertex", "?5?", "fragment",
-	};
-	uint32_t dst_off = dwords[0] & 0xffff;
-	uint32_t state_src = (dwords[0] >> 16) & 0x7;
+//	uint32_t dst_off = dwords[0] & 0xffff;
+//	uint32_t state_src = (dwords[0] >> 16) & 0x7;
 	uint32_t state_block_id = (dwords[0] >> 19) & 0x7;
 	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
 	uint32_t state_type = dwords[1] & 0x3;
 	uint32_t ext_src_addr = dwords[1] & 0xfffffffc;
 	void *contents = NULL;
-
-	printf("%s%s %s, dst_off=%04x, state_src=%04x, state_block_id=%d, "
-			"num_unit=%d, state_type=%d, ext_src_addr=%08x, size=%04x\n",
-			levels[level], state_block_names[state_block_id],
-			state_type_names[state_type], dst_off, state_src,
-			state_block_id, num_unit, state_type, ext_src_addr,
-			sizedwords-2);
 
 	/* we could either have a ptr to other gpu buffer, or directly have
 	 * contents inline:
@@ -679,6 +683,24 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			sprintf(filename, "%04d.%s", n++, ext);
 			fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 			write(fd, dwords + 2, (sizedwords - 2) * 4);
+		}
+	} else if (state_block_id == HLSQ_BLOCK_ID_TP_MIPMAP) {
+		/* mipmap consts block just appears to be array of num_unit gpu addr's: */
+		dump_hex(contents, num_unit, level+1);
+	} else if (state_block_id == HLSQ_BLOCK_ID_TP_TEX) {
+		int i;
+		if (state_type == 0) {
+			for (i = 0; i < num_unit; i++) {
+				uint32_t *texsamp = &((uint32_t *)contents)[2 * i];
+				dump_domain(texsamp, 2, level+2, "A3XX_TEX_SAMP");
+				dump_hex(texsamp, 2, level+1);
+			}
+		} else {
+			for (i = 0; i < num_unit; i++) {
+				uint32_t *texconst = &((uint32_t *)contents)[4 * i];
+				dump_domain(texconst, 4, level+2, "A3XX_TEX_CONST");
+				dump_hex(texconst, 4, level+1);
+			}
 		}
 	} else {
 		/* uniforms/consts:
@@ -922,7 +944,7 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
 }
 
-#define CP(x, fxn)   [CP_ ## x] = { #x, fxn }
+#define CP(x, fxn)   [CP_ ## x] = { "CP_"#x, fxn }
 static const struct {
 	const char *name;
 	void (*fxn)(uint32_t *dwords, uint32_t sizedwords, int level);
@@ -975,6 +997,7 @@ static const struct {
 		/* for a3xx */
 		CP(LOAD_STATE, cp_load_state),
 		CP(SET_BIN_DATA, NULL),
+		CP(SET_BIN, NULL),
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -1015,9 +1038,11 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		case 0x3: /* type-3 */
 			count = ((dwords[0] >> 16) & 0x3fff) + 2;
 			val = GET_PM4_TYPE3_OPCODE(dwords);
-			printf("\t%sopcode: %s (%02x) (%d dwords)%s\n", levels[level],
-					type3_op[val].name, val, count,
-					(dwords[0] & 0x1) ? " (predicated)" : "");
+			printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
+					vc->colors->bctarg, type3_op[val].name, vc->colors->reset,
+					val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
+			if (type3_op[val].name)
+				dump_domain(dwords+1, count-1, level+2, type3_op[val].name);
 			if (type3_op[val].fxn)
 				type3_op[val].fxn(dwords+1, count-1, level+1);
 			dump_hex(dwords, count, level+1);

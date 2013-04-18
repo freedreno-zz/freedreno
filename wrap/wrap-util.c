@@ -138,6 +138,8 @@ void * _dlsym_helper(const char *name)
 #ifndef BIONIC
 	if (!libc_dl)
 		libc_dl = dlopen("/lib/arm-linux-gnueabihf/libc-2.15.so", RTLD_LAZY);
+	if (!libc_dl)
+		libc_dl = dlopen("/lib/libc-2.16.so", RTLD_LAZY);
 #endif
 	if (!libc_dl)
 		libc_dl = dlopen("libc.so", RTLD_LAZY);
