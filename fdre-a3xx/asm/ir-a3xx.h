@@ -214,7 +214,7 @@ struct ir3_uniform * ir3_uniform_create(struct ir3_shader *shader,
 		int cstart, int num, const char *name);
 struct ir3_varying * ir3_varying_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name);
-struct ir3_varying * ir3_out_create(struct ir3_shader *shader,
+struct ir3_out * ir3_out_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name);
 
 struct ir3_instruction * ir3_instr_create(struct ir3_shader *shader, int category, opc_t opc);

@@ -11,7 +11,7 @@ The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30212 bytes, from 2013-04-12 00:45:30)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9347 bytes, from 2013-04-14 14:36:42)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9476 bytes, from 2013-04-18 21:02:01)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -158,10 +158,12 @@ enum adreno_pm4_type3_packets {
 };
 
 enum adreno_state_block {
-	SB_TEXTURE = 2,
-	SB_MIPMAP = 3,
-	SB_VERTEX = 4,
-	SB_FRAGMENT = 6,
+	SB_VERT_TEX = 0,
+	SB_VERT_MIPADDR = 1,
+	SB_FRAG_TEX = 2,
+	SB_FRAG_MIPADDR = 3,
+	SB_VERT_SHADER = 4,
+	SB_FRAG_SHADER = 6,
 };
 
 enum adreno_state_type {
@@ -213,6 +215,8 @@ static inline uint32_t CP_LOAD_STATE_1_EXT_SRC_ADDR(uint32_t val)
 {
 	return ((val >> 2) << CP_LOAD_STATE_1_EXT_SRC_ADDR__SHIFT) & CP_LOAD_STATE_1_EXT_SRC_ADDR__MASK;
 }
+
+#define REG_CP_SET_BIN_0					0x00000000
 
 #define REG_CP_SET_BIN_1					0x00000001
 #define CP_SET_BIN_1_X1__MASK					0x0000ffff

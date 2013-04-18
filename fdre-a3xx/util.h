@@ -96,8 +96,8 @@ struct fd_param {
 	const char *name;
 	union {
 		struct {                  /* attributes */
-			struct fd_bo *bo;
-			enum a3xx_fmt fmt;
+			struct fd_bo     *bo;
+			enum a3xx_vtx_fmt fmt;
 		};
 		struct fd_surface *tex;   /* textures */
 		struct {                  /* uniforms */
@@ -144,7 +144,7 @@ static inline struct fd_param * find_param(struct fd_parameters *params,
 	return p;
 }
 
-static inline uint32_t fmt2size(enum a3xx_fmt fmt)
+static inline uint32_t fmt2size(enum a3xx_vtx_fmt fmt)
 {
 	switch (fmt) {
 	case FMT_UBYTE_8:

@@ -248,7 +248,7 @@ int main(int argc, char **argv)
 		ESMatrix projection;
 		ESMatrix modelviewprojection;
 		float normal[9];
-		float scale = 1.8;
+		float scale = 1.1;
 
 		esMatrixLoadIdentity(&modelview);
 		esTranslate(&modelview, 0.0f, 0.0f, -8.0f);
@@ -304,9 +304,10 @@ int main(int argc, char **argv)
 
 	fd_flush(state);
 
-	fd_dump_bmp(surface, "cube.bmp");
-
-	sleep(1);
+	if (n == 1) {
+		fd_dump_bmp(surface, "cube.bmp");
+		sleep(1);
+	}
 
 	fd_fini(state);
 

@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  35996 bytes, from 2013-04-16 20:11:04)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  38810 bytes, from 2013-04-19 01:59:40)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9347 bytes, from 2013-04-14 14:36:42)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9476 bytes, from 2013-04-18 21:02:01)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -77,7 +77,7 @@ enum a3xx_cache_opcode {
 	INVALIDATE = 1,
 };
 
-enum a3xx_fmt {
+enum a3xx_vtx_fmt {
 	FMT_FLOAT_32 = 0,
 	FMT_FLOAT_32_32 = 1,
 	FMT_FLOAT_32_32_32 = 2,
@@ -120,6 +120,19 @@ enum a3xx_fmt {
 	FMT_NORM_BYTE_8_8_8_8 = 55,
 };
 
+enum a3xx_tex_fmt {
+	TFMT_NORM_UINT8 = 76,
+	TFMT_NORM_UINT16 = 83,
+	TFMT_UINT8 = 110,
+	TFMT_INT8 = 111,
+	TFMT_UINT16 = 113,
+	TFMT_INT16 = 114,
+	TFMT_UINT32 = 118,
+	TFMT_INT32 = 119,
+	TFMT_HALF_FLOAT = 80,
+	TFMT_FLOAT = 117,
+};
+
 enum a3xx_msaa_samples {
 	MSAA_ONE = 0,
 	MSAA_TWO = 1,
@@ -129,6 +142,27 @@ enum a3xx_msaa_samples {
 enum adreno_rb_copy_control_mode {
 	RB_COPY_RESOLVE = 1,
 	RB_COPY_DEPTH_STENCIL = 5,
+};
+
+enum a3xx_tex_filter {
+	A3XX_TEX_NEAREST = 0,
+	A3XX_TEX_LINEAR = 1,
+};
+
+enum a3xx_tex_clamp {
+	A3XX_TEX_REPEAT = 0,
+	A3XX_TEX_CLAMP_TO_EDGE = 1,
+	A3XX_TEX_MIRROR_REPEAT = 2,
+	A3XX_TEX_CLAMP_NONE = 3,
+};
+
+enum a3xx_tex_swiz {
+	A3XX_TEX_X = 0,
+	A3XX_TEX_Y = 1,
+	A3XX_TEX_Z = 2,
+	A3XX_TEX_W = 3,
+	A3XX_TEX_ZERO = 4,
+	A3XX_TEX_ONE = 5,
 };
 
 #define REG_A3XX_RBBM_HW_VERSION				0x00000000
@@ -1015,7 +1049,7 @@ static inline uint32_t A3XX_VFD_DECODE_INSTR_WRITEMASK(uint32_t val)
 #define A3XX_VFD_DECODE_INSTR_CONSTFILL				0x00000010
 #define A3XX_VFD_DECODE_INSTR_FORMAT__MASK			0x00000fc0
 #define A3XX_VFD_DECODE_INSTR_FORMAT__SHIFT			6
-static inline uint32_t A3XX_VFD_DECODE_INSTR_FORMAT(enum a3xx_fmt val)
+static inline uint32_t A3XX_VFD_DECODE_INSTR_FORMAT(enum a3xx_vtx_fmt val)
 {
 	return ((val) << A3XX_VFD_DECODE_INSTR_FORMAT__SHIFT) & A3XX_VFD_DECODE_INSTR_FORMAT__MASK;
 }
@@ -1217,14 +1251,14 @@ static inline uint32_t A3XX_SP_VS_OUT_REG_A_COMPMASK(uint32_t val)
 {
 	return ((val) << A3XX_SP_VS_OUT_REG_A_COMPMASK__SHIFT) & A3XX_SP_VS_OUT_REG_A_COMPMASK__MASK;
 }
-#define A3XX_SP_VS_OUT_REG_B_REGID__MASK			0x000001ff
-#define A3XX_SP_VS_OUT_REG_B_REGID__SHIFT			0
+#define A3XX_SP_VS_OUT_REG_B_REGID__MASK			0x01ff0000
+#define A3XX_SP_VS_OUT_REG_B_REGID__SHIFT			16
 static inline uint32_t A3XX_SP_VS_OUT_REG_B_REGID(uint32_t val)
 {
 	return ((val) << A3XX_SP_VS_OUT_REG_B_REGID__SHIFT) & A3XX_SP_VS_OUT_REG_B_REGID__MASK;
 }
-#define A3XX_SP_VS_OUT_REG_B_COMPMASK__MASK			0x00001e00
-#define A3XX_SP_VS_OUT_REG_B_COMPMASK__SHIFT			9
+#define A3XX_SP_VS_OUT_REG_B_COMPMASK__MASK			0x1e000000
+#define A3XX_SP_VS_OUT_REG_B_COMPMASK__SHIFT			25
 static inline uint32_t A3XX_SP_VS_OUT_REG_B_COMPMASK(uint32_t val)
 {
 	return ((val) << A3XX_SP_VS_OUT_REG_B_COMPMASK__SHIFT) & A3XX_SP_VS_OUT_REG_B_COMPMASK__MASK;
@@ -1621,6 +1655,105 @@ static inline uint32_t A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(enum a3xx_cache_op
 #define REG_A3XX_UNKNOWN_0EE0					0x00000ee0
 
 #define REG_A3XX_UNKNOWN_0F03					0x00000f03
+
+#define REG_A3XX_TEX_SAMP_0					0x00000000
+#define A3XX_TEX_SAMP_0_XY_MAG__MASK				0x0000000c
+#define A3XX_TEX_SAMP_0_XY_MAG__SHIFT				2
+static inline uint32_t A3XX_TEX_SAMP_0_XY_MAG(enum a3xx_tex_filter val)
+{
+	return ((val) << A3XX_TEX_SAMP_0_XY_MAG__SHIFT) & A3XX_TEX_SAMP_0_XY_MAG__MASK;
+}
+#define A3XX_TEX_SAMP_0_XY_MIN__MASK				0x00000030
+#define A3XX_TEX_SAMP_0_XY_MIN__SHIFT				4
+static inline uint32_t A3XX_TEX_SAMP_0_XY_MIN(enum a3xx_tex_filter val)
+{
+	return ((val) << A3XX_TEX_SAMP_0_XY_MIN__SHIFT) & A3XX_TEX_SAMP_0_XY_MIN__MASK;
+}
+#define A3XX_TEX_SAMP_0_WRAP_S__MASK				0x000001c0
+#define A3XX_TEX_SAMP_0_WRAP_S__SHIFT				6
+static inline uint32_t A3XX_TEX_SAMP_0_WRAP_S(enum a3xx_tex_clamp val)
+{
+	return ((val) << A3XX_TEX_SAMP_0_WRAP_S__SHIFT) & A3XX_TEX_SAMP_0_WRAP_S__MASK;
+}
+#define A3XX_TEX_SAMP_0_WRAP_T__MASK				0x00000e00
+#define A3XX_TEX_SAMP_0_WRAP_T__SHIFT				9
+static inline uint32_t A3XX_TEX_SAMP_0_WRAP_T(enum a3xx_tex_clamp val)
+{
+	return ((val) << A3XX_TEX_SAMP_0_WRAP_T__SHIFT) & A3XX_TEX_SAMP_0_WRAP_T__MASK;
+}
+#define A3XX_TEX_SAMP_0_WRAP_R__MASK				0x00007000
+#define A3XX_TEX_SAMP_0_WRAP_R__SHIFT				12
+static inline uint32_t A3XX_TEX_SAMP_0_WRAP_R(enum a3xx_tex_clamp val)
+{
+	return ((val) << A3XX_TEX_SAMP_0_WRAP_R__SHIFT) & A3XX_TEX_SAMP_0_WRAP_R__MASK;
+}
+#define A3XX_TEX_SAMP_0_UNNORM_COORDS				0x80000000
+
+#define REG_A3XX_TEX_SAMP_1					0x00000001
+
+#define REG_A3XX_TEX_CONST_0					0x00000000
+#define A3XX_TEX_CONST_0_TILED					0x00000001
+#define A3XX_TEX_CONST_0_SWIZ_X__MASK				0x00000070
+#define A3XX_TEX_CONST_0_SWIZ_X__SHIFT				4
+static inline uint32_t A3XX_TEX_CONST_0_SWIZ_X(enum a3xx_tex_swiz val)
+{
+	return ((val) << A3XX_TEX_CONST_0_SWIZ_X__SHIFT) & A3XX_TEX_CONST_0_SWIZ_X__MASK;
+}
+#define A3XX_TEX_CONST_0_SWIZ_Y__MASK				0x00000380
+#define A3XX_TEX_CONST_0_SWIZ_Y__SHIFT				7
+static inline uint32_t A3XX_TEX_CONST_0_SWIZ_Y(enum a3xx_tex_swiz val)
+{
+	return ((val) << A3XX_TEX_CONST_0_SWIZ_Y__SHIFT) & A3XX_TEX_CONST_0_SWIZ_Y__MASK;
+}
+#define A3XX_TEX_CONST_0_SWIZ_Z__MASK				0x00001c00
+#define A3XX_TEX_CONST_0_SWIZ_Z__SHIFT				10
+static inline uint32_t A3XX_TEX_CONST_0_SWIZ_Z(enum a3xx_tex_swiz val)
+{
+	return ((val) << A3XX_TEX_CONST_0_SWIZ_Z__SHIFT) & A3XX_TEX_CONST_0_SWIZ_Z__MASK;
+}
+#define A3XX_TEX_CONST_0_SWIZ_W__MASK				0x0000e000
+#define A3XX_TEX_CONST_0_SWIZ_W__SHIFT				13
+static inline uint32_t A3XX_TEX_CONST_0_SWIZ_W(enum a3xx_tex_swiz val)
+{
+	return ((val) << A3XX_TEX_CONST_0_SWIZ_W__SHIFT) & A3XX_TEX_CONST_0_SWIZ_W__MASK;
+}
+#define A3XX_TEX_CONST_0_FMT__MASK				0xff000000
+#define A3XX_TEX_CONST_0_FMT__SHIFT				24
+static inline uint32_t A3XX_TEX_CONST_0_FMT(enum a3xx_tex_fmt val)
+{
+	return ((val) << A3XX_TEX_CONST_0_FMT__SHIFT) & A3XX_TEX_CONST_0_FMT__MASK;
+}
+
+#define REG_A3XX_TEX_CONST_1					0x00000001
+#define A3XX_TEX_CONST_1_HEIGHT__MASK				0x00003fff
+#define A3XX_TEX_CONST_1_HEIGHT__SHIFT				0
+static inline uint32_t A3XX_TEX_CONST_1_HEIGHT(uint32_t val)
+{
+	return ((val) << A3XX_TEX_CONST_1_HEIGHT__SHIFT) & A3XX_TEX_CONST_1_HEIGHT__MASK;
+}
+#define A3XX_TEX_CONST_1_WIDTH__MASK				0x0fffc000
+#define A3XX_TEX_CONST_1_WIDTH__SHIFT				14
+static inline uint32_t A3XX_TEX_CONST_1_WIDTH(uint32_t val)
+{
+	return ((val) << A3XX_TEX_CONST_1_WIDTH__SHIFT) & A3XX_TEX_CONST_1_WIDTH__MASK;
+}
+
+#define REG_A3XX_TEX_CONST_2					0x00000002
+#define A3XX_TEX_CONST_2_INDX__MASK				0x000000ff
+#define A3XX_TEX_CONST_2_INDX__SHIFT				0
+static inline uint32_t A3XX_TEX_CONST_2_INDX(uint32_t val)
+{
+	return ((val) << A3XX_TEX_CONST_2_INDX__SHIFT) & A3XX_TEX_CONST_2_INDX__MASK;
+}
+#define A3XX_TEX_CONST_2_PITCH__MASK				0x3ffff000
+#define A3XX_TEX_CONST_2_PITCH__SHIFT				12
+static inline uint32_t A3XX_TEX_CONST_2_PITCH(uint32_t val)
+{
+	return ((val) << A3XX_TEX_CONST_2_PITCH__SHIFT) & A3XX_TEX_CONST_2_PITCH__MASK;
+}
+#define A3XX_TEX_CONST_2_SWAP					0x40000000
+
+#define REG_A3XX_TEX_CONST_3					0x00000003
 
 
 #endif /* A3XX_XML */

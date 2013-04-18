@@ -567,7 +567,7 @@ struct ir3_varying * ir3_varying_create(struct ir3_shader *shader,
 	return v;
 }
 
-struct ir3_varying * ir3_out_create(struct ir3_shader *shader,
+struct ir3_out * ir3_out_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name)
 {
 	struct ir3_out *o = ir3_alloc(shader, sizeof(struct ir3_varying));

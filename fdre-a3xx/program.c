@@ -107,7 +107,7 @@ static uint32_t getpos(struct fd_shader *shader, const char *name,
 	uint32_t i;
 	for (i = 0; i < shader->ir->outs_count; i++)
 		if (!strcmp(shader->ir->outs[i]->name, name))
-			return shader->ir->outs[i]->num;
+			return shader->ir->outs[i]->rstart->num;
 	return default_regid;
 }
 
@@ -442,12 +442,12 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	OUT_RING(ring, A3XX_VFD_VS_THREADING_THRESHOLD_REGID_THRESHOLD(15) |
 			A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT(252));
 
-	emit_shader(ring, vs, SB_VERTEX);
+	emit_shader(ring, vs, SB_VERT_SHADER);
 
 	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
 	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
 
-	emit_shader(ring, fs, SB_FRAGMENT);
+	emit_shader(ring, fs, SB_FRAG_SHADER);
 
 	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
 	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
@@ -474,7 +474,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 
 	/* for RB_RESOLVE_PASS, I think the consts are not needed: */
 	if (uniforms) {
-		emit_uniconst(ring, vs, uniforms, SB_VERTEX);
-		emit_uniconst(ring, fs, uniforms, SB_FRAGMENT);
+		emit_uniconst(ring, vs, uniforms, SB_VERT_SHADER);
+		emit_uniconst(ring, fs, uniforms, SB_FRAG_SHADER);
 	}
 }

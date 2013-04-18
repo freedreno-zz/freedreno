@@ -76,7 +76,12 @@ struct fd_state {
 	struct fd_parameters attributes, solid_attributes;
 
 	/* texture related params: */
-	struct fd_parameters textures;
+	struct {
+		enum a3xx_tex_filter min_filter, mag_filter;
+		enum a3xx_tex_clamp clamp_s, clamp_t;
+
+		struct fd_parameters params;
+	} textures;
 
 	struct {
 		/* render target: */
@@ -130,8 +135,8 @@ static int color2cpp[] = {
 		[RB_R8G8B8A8_UNORM] = 4,
 };
 
-static enum a3xx_fmt color2fmt[] = {
-		[RB_R8G8B8A8_UNORM]        = FMT_UBYTE_8_8_8_8,
+static enum a3xx_tex_fmt color2fmt[] = {
+		[RB_R8G8B8A8_UNORM]        = TFMT_NORM_UINT8,
 };
 
 /* ************************************************************************* */
@@ -335,7 +340,7 @@ struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 }
 
 int fd_attribute_bo(struct fd_state *state, const char *name,
-		enum a3xx_fmt fmt, struct fd_bo * bo)
+		enum a3xx_vtx_fmt fmt, struct fd_bo * bo)
 {
 	struct fd_param *p = find_param(&state->attributes, name);
 	if (!p)
@@ -346,7 +351,7 @@ int fd_attribute_bo(struct fd_state *state, const char *name,
 }
 
 int fd_attribute_pointer(struct fd_state *state, const char *name,
-		enum a3xx_fmt fmt, uint32_t count, const void *data)
+		enum a3xx_vtx_fmt fmt, uint32_t count, const void *data)
 {
 	uint32_t size = fmt2size(fmt) * count;
 	struct fd_bo *bo = fd_bo_new(state->ws->dev, size,
@@ -372,7 +377,7 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 int fd_set_texture(struct fd_state *state, const char *name,
 		struct fd_surface *tex)
 {
-	struct fd_param *p = find_param(&state->textures, name);
+	struct fd_param *p = find_param(&state->textures.params, name);
 	if (!p)
 		return -1;
 	p->tex = tex;
@@ -821,12 +826,144 @@ int fd_stencil_mask(struct fd_state *state, GLuint mask)
 	return 0;
 }
 
+static int set_filter(enum a3xx_tex_filter *filter, GLint param)
+{
+	switch (param) {
+	case GL_LINEAR:
+		*filter = A3XX_TEX_LINEAR;
+		return 0;
+	case GL_NEAREST:
+		*filter = A3XX_TEX_NEAREST;
+		return 0;
+	default:
+		ERROR_MSG("unsupported param: 0x%04x", param);
+		return -1;
+	}
+}
+
+static int set_clamp(enum a3xx_tex_clamp *clamp, GLint param)
+{
+	switch (param) {
+	case GL_REPEAT:
+		*clamp = A3XX_TEX_REPEAT;
+		return 0;
+	case GL_MIRRORED_REPEAT:
+		*clamp = A3XX_TEX_MIRROR_REPEAT;
+		return 0;
+	case GL_CLAMP_TO_EDGE:
+		*clamp = A3XX_TEX_CLAMP_TO_EDGE;
+		return 0;
+	default:
+		ERROR_MSG("unsupported param: 0x%04x", param);
+		return -1;
+	}
+}
+
 int fd_tex_param(struct fd_state *state, GLenum name, GLint param)
 {
 	switch (name) {
 	default:
+	case GL_TEXTURE_MAG_FILTER:
+		return set_filter(&state->textures.mag_filter, param);
+	case GL_TEXTURE_MIN_FILTER:
+		return set_filter(&state->textures.min_filter, param);
+	case GL_TEXTURE_WRAP_S:
+		return set_clamp(&state->textures.clamp_s, param);
+	case GL_TEXTURE_WRAP_T:
+		return set_clamp(&state->textures.clamp_t, param);
 		ERROR_MSG("unsupported name: 0x%04x", name);
 		return -1;
+	}
+}
+
+static void emit_textures(struct fd_state *state)
+{
+	struct fd_ringbuffer *ring = state->ring;
+	struct ir3_sampler **samplers;
+	int n, samplers_count;
+
+	/* not entirely sure why dst-offset is 16... for vertex shader textures,
+	 * it is zero (so offset of 16, it makes sense).  But for opencl, only
+	 * frag-shaders are used and the offset is zero.  Meaning there must be
+	 * a register written somewhere which partitions things so the frag
+	 * shader knows that sampler #0 is at offset 16..
+	 */
+	int dst_off = 16;
+
+	samplers = fd_program_samplers(state->program,
+			FD_SHADER_FRAGMENT, &samplers_count);
+
+	if (!samplers_count)
+		return;
+
+	/* emit sampler state: */
+	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (2 * samplers_count));
+	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(dst_off) |
+			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+			CP_LOAD_STATE_0_STATE_BLOCK(SB_FRAG_TEX) |
+			CP_LOAD_STATE_0_NUM_UNIT(samplers_count));
+	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_SHADER) |
+			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+	for (n = 0; n < samplers_count; n++) {
+		OUT_RING(ring, A3XX_TEX_SAMP_0_XY_MAG(state->textures.mag_filter) |
+				A3XX_TEX_SAMP_0_XY_MIN(state->textures.min_filter) |
+				A3XX_TEX_SAMP_0_WRAP_S(state->textures.clamp_s) |
+				A3XX_TEX_SAMP_0_WRAP_T(state->textures.clamp_t) |
+				A3XX_TEX_SAMP_0_WRAP_R(A3XX_TEX_REPEAT));
+		OUT_RING(ring, 0x00000000);
+	}
+
+	/* emit texture state: */
+	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (4 * samplers_count));
+	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(dst_off) |
+			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+			CP_LOAD_STATE_0_STATE_BLOCK(SB_FRAG_TEX) |
+			CP_LOAD_STATE_0_NUM_UNIT(samplers_count));
+	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
+			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+	for (n = 0; n < samplers_count; n++) {
+		struct fd_param *p = find_param(&state->textures.params,
+				samplers[n]->name);
+		struct fd_surface *tex = p->tex;
+		OUT_RING(ring, 0x00c00000 | // XXX
+				A3XX_TEX_CONST_0_SWIZ_X(A3XX_TEX_X) |
+				A3XX_TEX_CONST_0_SWIZ_Y(A3XX_TEX_Y) |
+				A3XX_TEX_CONST_0_SWIZ_Z(A3XX_TEX_Z) |
+				A3XX_TEX_CONST_0_SWIZ_W(A3XX_TEX_W) |
+				A3XX_TEX_CONST_0_FMT(color2fmt[tex->color]));
+		OUT_RING(ring, 0x30000000 | // XXX
+				A3XX_TEX_CONST_1_WIDTH(tex->width) |
+				A3XX_TEX_CONST_1_HEIGHT(tex->height));
+		OUT_RING(ring, A3XX_TEX_CONST_2_INDX(14 * n) |
+				A3XX_TEX_CONST_2_PITCH(tex->pitch * tex->cpp));
+		OUT_RING(ring, 0x00000000);
+	}
+
+	/* emit mipaddrs: */
+	OUT_PKT3(ring, CP_LOAD_STATE, 2 + (14 * samplers_count));
+	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(14 * dst_off) |
+			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
+			CP_LOAD_STATE_0_STATE_BLOCK(SB_FRAG_MIPADDR) |
+			CP_LOAD_STATE_0_NUM_UNIT(14 * samplers_count));
+	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
+			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
+	for (n = 0; n < samplers_count; n++) {
+		struct fd_param *p = find_param(&state->textures.params,
+				samplers[n]->name);
+		OUT_RELOC(ring, p->tex->bo, 0, 0);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
 	}
 }
 
@@ -934,6 +1071,8 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);
 	OUT_RING(ring, state->gras_su_mode_control);
+
+	emit_textures(state);
 
 	emit_draw_indx(ring, mode2prim(mode), idx_type, count,
 			indx_bo, 0, idx_size);
