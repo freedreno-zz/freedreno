@@ -39,14 +39,16 @@
 
 const char *KernelSource = "\n"
 		"__kernel void                                                    \n"
-		"test_kernel(__read_only image2d_t input,                         \n"
+		"test_kernel(__read_only image2d_t input1,                        \n"
+		"            __read_only image2d_t input2,                        \n"
 		"            __write_only image2d_t output)                       \n"
 		"{                                                                \n"
 		"  const int2 pos = {get_global_id(0), get_global_id(1)};         \n"
 		"  float4 sum = (float4)(0.0f);                                   \n"
 		"  for(int y = -FILTER_SIZE; y <= FILTER_SIZE; y++) {             \n"
 		"    for(int x = -FILTER_SIZE; x <= FILTER_SIZE; x++) {           \n"
-		"      sum += read_imagef(input, SAMP_MODE, pos + (int2)(x,y));   \n"
+		"      sum += read_imagef(input1, SAMP_MODE, pos + (int2)(x,y));  \n"
+		"      sum += read_imagef(input2, SAMP_MODE, pos + (int2)(x,y));  \n"
 		"    }                                                            \n"
 		"  }                                                              \n"
 		"  write_imagef(output, (int2)(pos.x, pos.y), sum);               \n"
@@ -58,7 +60,7 @@ static void run_test(int image_width, int image_height, int image_pitch,
 		int chan_order, int chan_type)
 {
 	unsigned int num_platforms;
-	int err;
+	int err, i;
 #define NAME(x) [x & 0xf] = #x
 	static const char *channel_orders[] = {
 			NAME(CL_R),
@@ -106,7 +108,7 @@ static void run_test(int image_width, int image_height, int image_pitch,
 	cl_program program;                 // compute program
 	cl_kernel kernel;                   // compute kernel
 
-	cl_mem input;                       // device memory used for the input array
+	cl_mem input1, input2;              // device memory used for the input array
 	cl_mem output;                      // device memory used for the output array
 
 	RD_START("image", "width=%d, height=%d, pitch=%d, order=%s, type=%s",
@@ -134,17 +136,25 @@ static void run_test(int image_width, int image_height, int image_pitch,
 
 	kernel = clCreateKernel(program, "test_kernel", NULL);
 
+	/* fill buffer with dummy pattern: */
+	for (i = 0; i < 256; i++)
+		buffer[i] = i;
+
 	const cl_image_format format = { chan_order, chan_type };
-	input = clCreateImage2D(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, &format,
+	input1 = clCreateImage2D(context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, &format,
 			image_width, image_height, image_pitch, buffer, &err);
+	CCHK(err);
+	input2 = clCreateImage2D(context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, &format,
+			image_width+1, image_height+1, image_pitch, buffer + 4, &err);
 	CCHK(err);
 
 	output = clCreateImage2D(context, CL_MEM_WRITE_ONLY, &format,
 			image_width+2, image_height+2, 0, NULL, &err);
 	CCHK(err);
 
-	CCHK(clSetKernelArg(kernel, 0, sizeof(cl_mem), &input));
-	CCHK(clSetKernelArg(kernel, 1, sizeof(cl_mem), &output));
+	CCHK(clSetKernelArg(kernel, 0, sizeof(cl_mem), &input1));
+	CCHK(clSetKernelArg(kernel, 1, sizeof(cl_mem), &input2));
+	CCHK(clSetKernelArg(kernel, 2, sizeof(cl_mem), &output));
 
 	CCHK(clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE, sizeof(local), &local, NULL));
 
@@ -155,7 +165,8 @@ static void run_test(int image_width, int image_height, int image_pitch,
 
 //	CCHK(clEnqueueReadBuffer( commands, output, CL_TRUE, 0, sizeof(float) * count, results, 0, NULL, NULL));
 
-	clReleaseMemObject(input);
+	clReleaseMemObject(input1);
+	clReleaseMemObject(input2);
 	clReleaseMemObject(output);
 	clReleaseProgram(program);
 	clReleaseKernel(kernel);
