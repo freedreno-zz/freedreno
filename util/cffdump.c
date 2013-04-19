@@ -636,13 +636,12 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-//	uint32_t dst_off = dwords[0] & 0xffff;
-//	uint32_t state_src = (dwords[0] >> 16) & 0x7;
-	uint32_t state_block_id = (dwords[0] >> 19) & 0x7;
+	enum adreno_state_block state_block_id = (dwords[0] >> 19) & 0x7;
+	enum adreno_state_type state_type = dwords[1] & 0x3;
 	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
-	uint32_t state_type = dwords[1] & 0x3;
 	uint32_t ext_src_addr = dwords[1] & 0xfffffffc;
 	void *contents = NULL;
+	int i;
 
 	/* we could either have a ptr to other gpu buffer, or directly have
 	 * contents inline:
@@ -652,63 +651,99 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	else
 		contents = dwords + 2;
 
-	if ((state_type == 0) && ((state_block_id == HLSQ_BLOCK_ID_SP_VS) ||
-			(state_block_id == HLSQ_BLOCK_ID_SP_FS))) {
-		enum shader_t disasm_type;
-		const char *ext = NULL;
+	switch (state_block_id) {
+	case SB_FRAG_SHADER:
+	case SB_VERT_SHADER:
+		if (state_type == ST_SHADER) {
+			enum shader_t disasm_type;
+			const char *ext = NULL;
 
-		/* shaders:
-		 *
-		 * note: num_unit seems to be # of instruction groups, where
-		 * an instruction group has 4 64bit instructions.
-		 */
-		switch (state_block_id) {
-		case HLSQ_BLOCK_ID_SP_VS:
-			ext = "vo3";
-			disasm_type = SHADER_VERTEX;
-			break;
-		case HLSQ_BLOCK_ID_SP_FS:
-			ext = "fo3";
-			disasm_type = SHADER_FRAGMENT;
-			break;
+			/* shaders:
+			 *
+			 * note: num_unit seems to be # of instruction groups, where
+			 * an instruction group has 4 64bit instructions.
+			 */
+			if (state_block_id == SB_VERT_SHADER) {
+				ext = "vo3";
+				disasm_type = SHADER_VERTEX;
+			} else {
+				ext = "fo3";
+				disasm_type = SHADER_FRAGMENT;
+			}
+
+			disasm_a3xx(contents, num_unit * 4 * 2, level+2, disasm_type);
+
+			/* dump raw shader: */
+			if (ext && dump_shaders) {
+				static int n = 0;
+				char filename[8];
+				int fd;
+				sprintf(filename, "%04d.%s", n++, ext);
+				fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+				write(fd, dwords + 2, (sizedwords - 2) * 4);
+			}
+		} else {
+			/* uniforms/consts:
+			 *
+			 * note: num_unit seems to be # of pairs of dwords??
+			 */
+			dump_float(contents, num_unit*2, level+1);
+			dump_hex(contents, num_unit*2, level+1);
 		}
+		break;
+	case SB_VERT_MIPADDR:
+	case SB_FRAG_MIPADDR:
+		if (state_type == 1) {
+			uint32_t *addrs = contents;
 
-		disasm_a3xx(contents, num_unit * 4 * 2, level+2, disasm_type);
-
-		/* dump raw shader: */
-		if (ext && dump_shaders) {
-			static int n = 0;
-			char filename[8];
-			int fd;
-			sprintf(filename, "%04d.%s", n++, ext);
-			fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
-			write(fd, dwords + 2, (sizedwords - 2) * 4);
+			/* mipmap consts block just appears to be array of num_unit gpu addr's: */
+			for (i = 0; i < num_unit; i++) {
+				void *ptr = hostptr(addrs[i]);
+				printf("%s%2d: %08x\n", levels[level+1], i, addrs[i]);
+				if (ptr)
+					dump_hex(ptr, 16, level+1);
+			}
+		} else {
+			goto unknown;
 		}
-	} else if (state_block_id == HLSQ_BLOCK_ID_TP_MIPMAP) {
-		/* mipmap consts block just appears to be array of num_unit gpu addr's: */
-		dump_hex(contents, num_unit, level+1);
-	} else if (state_block_id == HLSQ_BLOCK_ID_TP_TEX) {
-		int i;
+		break;
+	case SB_FRAG_TEX:
+	case SB_VERT_TEX:
 		if (state_type == 0) {
 			for (i = 0; i < num_unit; i++) {
 				uint32_t *texsamp = &((uint32_t *)contents)[2 * i];
+
+				/* work-around to reduce noise for opencl blob which always
+				 * writes the max # regardless of # of textures used
+				 */
+				if ((num_unit == 16) && (texsamp[0] == 0) && (texsamp[1] == 0))
+					break;
+
 				dump_domain(texsamp, 2, level+2, "A3XX_TEX_SAMP");
 				dump_hex(texsamp, 2, level+1);
 			}
 		} else {
 			for (i = 0; i < num_unit; i++) {
 				uint32_t *texconst = &((uint32_t *)contents)[4 * i];
+
+				/* work-around to reduce noise for opencl blob which always
+				 * writes the max # regardless of # of textures used
+				 */
+				if ((num_unit == 16) &&
+					(texconst[0] == 0) && (texconst[1] == 0) &&
+					(texconst[2] == 0) && (texconst[3] == 0))
+					break;
+
 				dump_domain(texconst, 4, level+2, "A3XX_TEX_CONST");
 				dump_hex(texconst, 4, level+1);
 			}
 		}
-	} else {
-		/* uniforms/consts:
-		 *
-		 * note: num_unit seems to be # of pairs of dwords??
-		 */
-		dump_float(contents, num_unit*2, level+1);
-		dump_hex(contents, num_unit*2, level+1);
+		break;
+	default:
+unknown:
+		/* hmm.. */
+		dump_hex(contents, num_unit, level+1);
+		break;
 	}
 
 }
