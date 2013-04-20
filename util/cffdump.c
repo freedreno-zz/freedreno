@@ -221,6 +221,8 @@ static uint32_t gpuaddr(void *hostptr)
 static void *hostptr(uint32_t gpuaddr)
 {
 	int i;
+	if (!gpuaddr)
+		return 0;
 	for (i = 0; i < nbuffers; i++)
 		if (buffer_contains_gpuaddr(&buffers[i], gpuaddr, 0))
 			return buffers[i].hostptr + (gpuaddr - buffers[i].gpuaddr);
