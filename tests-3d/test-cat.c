@@ -31,7 +31,7 @@
 #include "esUtil.h"
 #include "esTransform.c"
 
-#include "../fdre/tests/cat-model.c"
+#include "../fdre-a2xx/tests/cat-model.c"
 
 static EGLint const config_attribute_list[] = {
 	EGL_RED_SIZE, 8,
@@ -115,6 +115,7 @@ void test_cat(void)
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
 	GLuint position_vbo, normal_vbo;
 	EGLSurface surface;
+	float scale = 1.3;
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("cat", "");
@@ -175,15 +176,16 @@ void test_cat(void)
 	ESMatrix modelview;
 	esMatrixLoadIdentity(&modelview);
 	esTranslate(&modelview, 0.0f, 0.0f, -8.0f);
-	esRotate(&modelview, 45.0f, 1.0f, 0.0f, 0.0f);
 	esRotate(&modelview, 45.0f, 0.0f, 1.0f, 0.0f);
-	esRotate(&modelview, 10.0f, 0.0f, 0.0f, 1.0f);
 
 	GLfloat aspect = (GLfloat)(height) / (GLfloat)(width);
 
 	ESMatrix projection;
 	esMatrixLoadIdentity(&projection);
-	esFrustum(&projection, -2.8f, +2.8f, -2.8f * aspect, +2.8f * aspect, 6.0f, 10.0f);
+	esFrustum(&projection,
+			-scale, +scale,
+			-scale * aspect, +scale * aspect,
+			5.5f, 10.0f);
 
 	ESMatrix modelviewprojection;
 	esMatrixLoadIdentity(&modelviewprojection);
