@@ -39,6 +39,7 @@ LDADD = \
 TESTS = \
 	cube-textured \
 	cube \
+	lolscat \
 	fan-smoothed \
 	strip-smoothed \
 	triangle-smoothed \
@@ -52,6 +53,7 @@ triangle_quad_SOURCES     = triangle-quad.c
 triangle_smoothed_SOURCES = triangle-smoothed.c
 strip_smoothed_SOURCES    = strip-smoothed.c
 fan_smoothed_SOURCES      = fan-smoothed.c
+lolscat_SOURCES           = cat.c esTransform.c cat-model.c lolstex1.c lolstex2.c
 cube_SOURCES              = cube.c esTransform.c
 cube_textured_SOURCES     = cube-textured.c esTransform.c cubetex.c
 

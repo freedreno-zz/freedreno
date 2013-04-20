@@ -8,7 +8,7 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  38810 bytes, from 2013-04-19 01:59:40)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  38877 bytes, from 2013-04-19 23:03:40)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9476 bytes, from 2013-04-18 21:02:01)
@@ -1375,6 +1375,12 @@ static inline uint32_t A3XX_SP_FS_CTRL_REG0_LENGTH(uint32_t val)
 static inline uint32_t A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(uint32_t val)
 {
 	return ((val) << A3XX_SP_FS_CTRL_REG1_CONSTLENGTH__SHIFT) & A3XX_SP_FS_CTRL_REG1_CONSTLENGTH__MASK;
+}
+#define A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT__MASK		0x000ffc00
+#define A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT__SHIFT		10
+static inline uint32_t A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(uint32_t val)
+{
+	return ((val) << A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT__SHIFT) & A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT__MASK;
 }
 #define A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING__MASK		0x00f00000
 #define A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING__SHIFT		20

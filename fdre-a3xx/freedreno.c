@@ -261,8 +261,7 @@ struct fd_state * fd_init(void)
 	state->rb_depth_control =
 			A3XX_RB_DEPTH_CONTROL_Z_WRITE_ENABLE |
 			A3XX_RB_DEPTH_CONTROL_EARLY_Z_ENABLE |
-			A3XX_RB_DEPTH_CONTROL_ZFUNC(g2a(GL_LESS)) |
-			A3XX_RB_DEPTH_CONTROL_BF_ENABLE;
+			A3XX_RB_DEPTH_CONTROL_ZFUNC(g2a(GL_LESS));
 	state->rb_stencil_control =
 			A3XX_RB_STENCIL_CONTROL_FUNC(g2a(GL_ALWAYS)) |
 			A3XX_RB_STENCIL_CONTROL_FUNC_BF(g2a(GL_ALWAYS));
@@ -414,14 +413,34 @@ static void emit_draw_indx(struct fd_ringbuffer *ring, enum pc_di_primtype primt
 	}
 }
 
+static void emit_mrt(struct fd_state *state,
+		struct fd_ringbuffer *ring, struct fd_surface *surface)
+{
+	uint32_t bw = state->render_target.bin_w;
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		uint32_t pitch = (i == 0) ? (bw * surface->cpp) : 0;
+		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
+
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
+		OUT_RING(ring, state->rb_mrt[i].control);
+		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
+		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
+		OUT_RING(ring, state->rb_mrt[i].blendcontrol);
+
+		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
+		OUT_RING(ring, A3XX_SP_FS_IMAGE_OUTPUT_REG_MRTFORMAT(format));
+	}
+}
+
 /* emit cmdstream to blit from GMEM back to the surface */
 static void emit_gmem2mem(struct fd_state *state,
 		struct fd_ringbuffer *ring, struct fd_surface *surface,
 		uint32_t xoff, uint32_t yoff)
 {
-	uint32_t bw = state->render_target.bin_w;
-	int i;
-
 	fd_program_emit_state(state->solid_program, 0,
 			NULL, &state->solid_attributes, ring);
 
@@ -488,26 +507,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);
 	OUT_RING(ring, state->gras_su_mode_control);
 
-	for (i = 0; i < 4; i++) {
-		uint32_t pitch = (i == 0) ? (bw * surface->cpp) : 0;
-		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
-
-		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
-		OUT_RING(ring, state->rb_mrt[i].control);
-		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
-		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
-		OUT_RING(ring, state->rb_mrt[i].blendcontrol);
-
-		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
-		OUT_RING(ring, A3XX_SP_FS_IMAGE_OUTPUT_REG_MRTFORMAT(format));
-	}
-
-	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
-	OUT_RING(ring, 0x2000 | /* XXX */
-			state->rb_render_control |
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(bw));
+	emit_mrt(state, ring, surface);
 
 	OUT_PKT0(ring, REG_A3XX_RB_STENCIL_CONTROL, 1);
 	OUT_RING(ring, state->rb_stencil_control);
@@ -545,10 +545,44 @@ void fd_clear_depth(struct fd_state *state, float depth)
 int fd_clear(struct fd_state *state, GLbitfield mask)
 {
 	struct fd_ringbuffer *ring = state->ring;
+	struct fd_surface *surface = state->render_target.surface;
+	uint32_t bw = state->render_target.bin_w;
+	int i;
 
 	state->dirty = true;
 
-	// TODO set state according to whether we clear color/depth/stencil..
+	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH(state->render_target.bin_w) |
+			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER) |
+			0x2000 /* XXX */);
+
+	if (mask & GL_DEPTH_BUFFER_BIT) {
+		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
+		OUT_RING(ring, A3XX_RB_DEPTH_CONTROL_Z_WRITE_ENABLE |
+				A3XX_RB_DEPTH_CONTROL_Z_ENABLE |
+				A3XX_RB_DEPTH_CONTROL_ZFUNC(FUNC_ALWAYS));
+	}
+
+	for (i = 0; i < 4; i++) {
+		uint32_t pitch = (i == 0) ? (bw * surface->cpp) : 0;
+		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
+
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
+		OUT_RING(ring, A3XX_RB_MRT_CONTROL_ROP_CODE(12) |
+				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS) |
+				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf));
+		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
+		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
+		OUT_RING(ring, A3XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(FACTOR_ONE) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(BLEND_DST_PLUS_SRC) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(FACTOR_ZERO) |
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_SRC_FACTOR(FACTOR_ONE) |
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_BLEND_OPCODE(BLEND_DST_PLUS_SRC) |
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(FACTOR_ZERO) |
+				A3XX_RB_MRT_BLEND_CONTROL_CLAMP_ENABLE);
+	}
 
 	fd_program_emit_state(state->solid_program, 0,
 			&state->solid_uniforms, &state->solid_attributes,
@@ -598,7 +632,8 @@ int fd_enable(struct fd_state *state, GLenum cap)
 		state->rb_mrt[0].control |= (A3XX_RB_MRT_CONTROL_BLEND | A3XX_RB_MRT_CONTROL_BLEND2);
 		return 0;
 	case GL_DEPTH_TEST:
-		state->rb_depth_control |= A3XX_RB_DEPTH_CONTROL_Z_ENABLE;
+		state->rb_depth_control |= (A3XX_RB_DEPTH_CONTROL_Z_ENABLE |
+				A3XX_RB_DEPTH_CONTROL_Z_TEST_ENABLE);
 		return 0;
 	case GL_STENCIL_TEST:
 		state->rb_stencil_control |= (A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE |
@@ -627,7 +662,8 @@ int fd_disable(struct fd_state *state, GLenum cap)
 		state->rb_mrt[0].control &= ~(A3XX_RB_MRT_CONTROL_BLEND | A3XX_RB_MRT_CONTROL_BLEND2);
 		return 0;
 	case GL_DEPTH_TEST:
-		state->rb_depth_control &= ~A3XX_RB_DEPTH_CONTROL_Z_ENABLE;
+		state->rb_depth_control &= ~(A3XX_RB_DEPTH_CONTROL_Z_ENABLE |
+				A3XX_RB_DEPTH_CONTROL_Z_TEST_ENABLE);
 		return 0;
 	case GL_STENCIL_TEST:
 		state->rb_stencil_control &= ~(A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE |
@@ -882,11 +918,7 @@ static void emit_textures(struct fd_state *state)
 	struct ir3_sampler **samplers;
 	int n, samplers_count;
 
-	/* not entirely sure why dst-offset is 16... for vertex shader textures,
-	 * it is zero (so offset of 16, it makes sense).  But for opencl, only
-	 * frag-shaders are used and the offset is zero.  Meaning there must be
-	 * a register written somewhere which partitions things so the frag
-	 * shader knows that sampler #0 is at offset 16..
+	/* this dst_off should align w/ values in TPL1_TP_FS_TEX_OFFSET:
 	 */
 	int dst_off = 16;
 
@@ -1016,6 +1048,8 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 		idx_size = 0;
 	}
 
+	state->dirty = true;
+
 	fd_program_emit_state(state->program, first, &state->uniforms,
 			&state->attributes, ring);
 
@@ -1072,7 +1106,17 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);
 	OUT_RING(ring, state->gras_su_mode_control);
 
+	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
+	OUT_RING(ring, state->rb_depth_control);
+
+	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
+	OUT_RING(ring, 0x2000 | /* XXX */
+			state->rb_render_control |
+			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(state->render_target.bin_w));
+
 	emit_textures(state);
+
+	emit_mrt(state, ring, state->render_target.surface);
 
 	emit_draw_indx(ring, mode2prim(mode), idx_type, count,
 			indx_bo, 0, idx_size);
@@ -1374,21 +1418,7 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_RENDERING_PASS) |
 			A3XX_RB_MODE_CONTROL_MARB_CACHE_SPLIT_MODE);
 
-	for (i = 0; i < 4; i++) {
-		uint32_t pitch = (i == 0) ? (bw * surface->cpp) : 0;
-		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
-
-		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
-		OUT_RING(ring, state->rb_mrt[i].control);
-		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
-		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
-		OUT_RING(ring, state->rb_mrt[i].blendcontrol);
-
-		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
-		OUT_RING(ring, A3XX_SP_FS_IMAGE_OUTPUT_REG_MRTFORMAT(format));
-	}
+	emit_mrt(state, ring, surface);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SC_CONTROL, 1);
 	OUT_RING(ring, A3XX_GRAS_SC_CONTROL_RENDER_MODE(RB_RENDERING_PASS) |
