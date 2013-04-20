@@ -561,6 +561,28 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 		OUT_RING(ring, A3XX_RB_DEPTH_CONTROL_Z_WRITE_ENABLE |
 				A3XX_RB_DEPTH_CONTROL_Z_ENABLE |
 				A3XX_RB_DEPTH_CONTROL_ZFUNC(FUNC_ALWAYS));
+
+		OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_ZOFFSET, 2);
+		OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZOFFSET(0.0));
+		OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZSCALE(state->clear.depth));
+	}
+
+	if (mask & GL_STENCIL_BUFFER_BIT) {
+		OUT_PKT0(ring, REG_A3XX_RB_STENCILREFMASK, 1);
+		OUT_RING(ring, A3XX_RB_STENCILREFMASK_STENCILREF(state->clear.stencil) |
+				A3XX_RB_STENCILREFMASK_STENCILMASK(state->clear.stencil) |
+				A3XX_RB_STENCILREFMASK_STENCILWRITEMASK(0xff));
+
+		OUT_PKT0(ring, REG_A3XX_RB_STENCIL_CONTROL, 1);
+		OUT_RING(ring, A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE |
+				A3XX_RB_STENCIL_CONTROL_FUNC(FUNC_ALWAYS) |
+				A3XX_RB_STENCIL_CONTROL_FAIL(STENCIL_KEEP) |
+				A3XX_RB_STENCIL_CONTROL_ZPASS(STENCIL_REPLACE) |
+				A3XX_RB_STENCIL_CONTROL_ZFAIL(STENCIL_KEEP) |
+				A3XX_RB_STENCIL_CONTROL_FUNC_BF(FUNC_NEVER) |
+				A3XX_RB_STENCIL_CONTROL_FAIL_BF(STENCIL_KEEP) |
+				A3XX_RB_STENCIL_CONTROL_ZPASS_BF(STENCIL_KEEP) |
+				A3XX_RB_STENCIL_CONTROL_ZFAIL_BF(STENCIL_KEEP));
 	}
 
 	for (i = 0; i < 4; i++) {
@@ -637,7 +659,7 @@ int fd_enable(struct fd_state *state, GLenum cap)
 		return 0;
 	case GL_STENCIL_TEST:
 		state->rb_stencil_control |= (A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE |
-				A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE2);
+				A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE_BF);
 		return 0;
 	case GL_DITHER:
 		state->rb_mrt[0].control |= A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS);
@@ -667,7 +689,7 @@ int fd_disable(struct fd_state *state, GLenum cap)
 		return 0;
 	case GL_STENCIL_TEST:
 		state->rb_stencil_control &= ~(A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE |
-				A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE2);
+				A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE_BF);
 		return 0;
 	case GL_DITHER:
 		state->rb_mrt[0].control &= ~A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS);
@@ -1114,6 +1136,21 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 			state->rb_render_control |
 			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(state->render_target.bin_w));
 
+	OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_XOFFSET, 6);
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XOFFSET(state->viewport.offset.x));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XSCALE(state->viewport.scale.x));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_YOFFSET(state->viewport.offset.y));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_YSCALE(state->viewport.scale.y));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZOFFSET(state->viewport.offset.z));
+	OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZSCALE(state->viewport.scale.z));
+
+	OUT_PKT0(ring, REG_A3XX_RB_STENCILREFMASK, 2);
+	OUT_RING(ring, state->rb_stencilrefmask);    /* RB_STENCILREFMASK */
+	OUT_RING(ring, state->rb_stencilrefmask);    /* RB_STENCILREFMASK_BF */
+
+	OUT_PKT0(ring, REG_A3XX_RB_STENCIL_CONTROL, 1);
+	OUT_RING(ring, state->rb_stencil_control);
+
 	emit_textures(state);
 
 	emit_mrt(state, ring, state->render_target.surface);
@@ -1523,9 +1560,16 @@ void fd_make_current(struct fd_state *state,
 	}
 
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_INFO, 2);
-	OUT_RING(ring, A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_16) |
-			A3XX_RB_DEPTH_INFO_DEPTH_BASE(bw * bh));
-	OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * surface->cpp));
+	if (state->rb_stencil_control & A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE) {
+		OUT_RING(ring, A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_24_8) |
+				A3XX_RB_DEPTH_INFO_DEPTH_BASE(bw * bh));
+		// XXX why is this the depth pitch?? maybe off by a bit?
+		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 8));
+	} else {
+		OUT_RING(ring, A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_16) |
+				A3XX_RB_DEPTH_INFO_DEPTH_BASE(bw * bh));
+		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 4));
+	}
 
 	OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);
 	OUT_RING(ring, A3XX_PA_SC_WINDOW_OFFSET_X(0) |
