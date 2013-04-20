@@ -702,8 +702,9 @@ dst_reg_flag:      T_EVEN         { rflags.flags |= IR3_REG_EVEN; }
 dst_reg_flags:     dst_reg_flag
 |                  dst_reg_flag dst_reg_flags
 
-dst_reg:           reg
-|                  dst_reg_flags reg
+                   /* note: destination registers are always incremented in repeat */
+dst_reg:           reg                 { $1->flags |= IR3_REG_R; }
+|                  dst_reg_flags reg   { $2->flags |= IR3_REG_R; }
 
 src_reg_flag:      T_ABSNEG       { rflags.flags |= IR3_REG_ABS|IR3_REG_NEGATE; }
 |                  T_NEG          { rflags.flags |= IR3_REG_NEGATE; }
