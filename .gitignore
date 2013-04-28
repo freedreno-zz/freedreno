@@ -49,6 +49,7 @@ redump
 zdump
 cffdump
 pgmdump
+fwdump
 *.so
 *.o
 *.vo*
