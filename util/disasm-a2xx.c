@@ -422,6 +422,9 @@ static void print_fetch_tex(instr_fetch_t *fetch)
 		printf(" LOD(%u)", tex->use_comp_lod);
 		printf(" LOD_BIAS(%u)", tex->lod_bias);
 	}
+	if (tex->use_reg_lod) {
+		printf(" REG_LOD(%u)", tex->use_reg_lod);
+	}
 	if (tex->use_reg_gradients)
 		printf(" USE_REG_GRADIENTS");
 	printf(" LOCATION(%s)", sample_loc[tex->sample_location]);

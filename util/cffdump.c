@@ -495,27 +495,19 @@ static struct rnndeccontext *vc;
 static struct rnndeccontext *vc_nocolor;
 static struct rnndb *db;
 struct rnndomain *dom;
+static bool initialized = false;
 
 static void init_rnn(char *file, char *domain)
 {
 	/* prepare rnn stuff for lookup */
-	rnn_init();
-	db = rnn_newdb();
 	rnn_parsefile(db, file);
 	rnn_prepdb(db);
-	vc_nocolor = rnndec_newcontext(db);
-	vc_nocolor->colors = &envy_null_colors;
-	if (no_color) {
-		vc = vc_nocolor;
-	} else {
-		vc = rnndec_newcontext(db);
-		vc->colors = &envy_def_colors;
-	}
 	dom = rnn_finddomain(db, domain);
 	if (!dom) {
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
 		exit(1);
 	}
+	initialized = true;
 }
 
 static void init_a2xx(void)
@@ -534,7 +526,7 @@ static const char *regname(uint32_t regbase, int color)
 {
 	struct rnndecaddrinfo *info;
 
-	if (!db) {
+	if (!initialized) {
 		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
 		init_a2xx();
 	}
@@ -547,7 +539,7 @@ static const char *regname(uint32_t regbase, int color)
 
 static void dump_register(uint32_t regbase, uint32_t dword, int level)
 {
-	if (!db) {
+	if (!initialized) {
 		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
 		init_a2xx();
 	}
@@ -585,8 +577,15 @@ static void dump_registers(uint32_t regbase,
 static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 		const char *name)
 {
-	struct rnndomain *dom = rnn_finddomain(db, name);
+	struct rnndomain *dom;
 	int i;
+
+	if (!initialized) {
+		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
+		init_a2xx();
+	}
+
+	dom = rnn_finddomain(db, name);
 
 	if (!dom)
 		return;
@@ -862,8 +861,7 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	case 0x4:
 		val += 0x2000;
-		if (!summary)
-			dump_registers(val, dwords+1, sizedwords-1, level+1);
+		dump_registers(val, dwords+1, sizedwords-1, level+1);
 		break;
 	}
 }
@@ -1139,6 +1137,17 @@ int main(int argc, char **argv)
 	fd = open(argv[n], O_RDONLY);
 	if (fd < 0)
 		fprintf(stderr, "could not open: %s\n", argv[1]);
+
+	rnn_init();
+	db = rnn_newdb();
+	vc_nocolor = rnndec_newcontext(db);
+	vc_nocolor->colors = &envy_null_colors;
+	if (no_color) {
+		vc = vc_nocolor;
+	} else {
+		vc = rnndec_newcontext(db);
+		vc->colors = &envy_def_colors;
+	}
 
 	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {
 		free(buf);
