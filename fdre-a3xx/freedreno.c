@@ -287,7 +287,6 @@ struct fd_state * fd_init(void)
 				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf);
 	}
 
-
 	return state;
 
 fail:
@@ -416,23 +415,13 @@ static void emit_draw_indx(struct fd_ringbuffer *ring, enum pc_di_primtype primt
 static void emit_mrt(struct fd_state *state,
 		struct fd_ringbuffer *ring, struct fd_surface *surface)
 {
-	uint32_t bw = state->render_target.bin_w;
 	int i;
 
 	for (i = 0; i < 4; i++) {
-		uint32_t pitch = (i == 0) ? (bw * surface->cpp) : 0;
-		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
-
-		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 1);
 		OUT_RING(ring, state->rb_mrt[i].control);
-		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
-		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_BLEND_CONTROL(i), 1);
 		OUT_RING(ring, state->rb_mrt[i].blendcontrol);
-
-		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
-		OUT_RING(ring, A3XX_SP_FS_IMAGE_OUTPUT_REG_MRTFORMAT(format));
 	}
 }
 
@@ -469,13 +458,16 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
 	OUT_RING(ring, 0x00000000);   /* GRAS_CL_CLIP_CNTL */
 
-	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 2);
+	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_RESOLVE_PASS) |
 			A3XX_RB_MODE_CONTROL_MARB_CACHE_SPLIT_MODE);
-	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH(state->render_target.bin_w) |
+
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK);
+	OUT_RING(ring, 0x2000 | /* XXX */
 			A3XX_RB_RENDER_CONTROL_DISABLE_COLOR_PIPE |
-			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER) |
-			0x2000 /* XXX */);
+			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER));
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SC_CONTROL, 1);
 	OUT_RING(ring, A3XX_GRAS_SC_CONTROL_RENDER_MODE(RB_RESOLVE_PASS) |
@@ -545,16 +537,15 @@ void fd_clear_depth(struct fd_state *state, float depth)
 int fd_clear(struct fd_state *state, GLbitfield mask)
 {
 	struct fd_ringbuffer *ring = state->ring;
-	struct fd_surface *surface = state->render_target.surface;
-	uint32_t bw = state->render_target.bin_w;
 	int i;
 
 	state->dirty = true;
 
-	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
-	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH(state->render_target.bin_w) |
-			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER) |
-			0x2000 /* XXX */);
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK);
+	OUT_RING(ring, 0x2000 | /* XXX */
+			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER));
 
 	if (mask & GL_DEPTH_BUFFER_BIT) {
 		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
@@ -586,17 +577,12 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 	}
 
 	for (i = 0; i < 4; i++) {
-		uint32_t pitch = (i == 0) ? (bw * surface->cpp) : 0;
-		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
-
-		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 4);
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 1);
 		OUT_RING(ring, A3XX_RB_MRT_CONTROL_ROP_CODE(12) |
 				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS) |
 				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf));
-		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
-				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
-		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
+
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_BLEND_CONTROL(i), 1);
 		OUT_RING(ring, A3XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(FACTOR_ONE) |
 				A3XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(BLEND_DST_PLUS_SRC) |
 				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(FACTOR_ZERO) |
@@ -1131,10 +1117,11 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 	OUT_RING(ring, state->rb_depth_control);
 
-	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK);
 	OUT_RING(ring, 0x2000 | /* XXX */
-			state->rb_render_control |
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(state->render_target.bin_w));
+			state->rb_render_control);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_XOFFSET, 6);
 	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XOFFSET(state->viewport.offset.x));
@@ -1186,6 +1173,32 @@ int fd_swap_buffers(struct fd_state *state)
 	return 0;
 }
 
+static void flush_setup(struct fd_state *state, struct fd_ringbuffer *ring)
+{
+	struct fd_surface *surface = state->render_target.surface;
+	uint32_t bin_w = state->render_target.bin_w;
+	int i;
+
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
+	OUT_RING(ring, ~A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH(bin_w));
+
+	for (i = 0; i < 4; i++) {
+		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
+		uint32_t pitch = (i == 0) ? (bin_w * surface->cpp) : 0;
+
+		OUT_PKT0(ring, REG_A3XX_RB_MRT_BUF_INFO(i), 2);
+		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(TILE_32X32) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(pitch));
+		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
+
+		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
+		OUT_RING(ring, A3XX_SP_FS_IMAGE_OUTPUT_REG_MRTFORMAT(format));
+	}
+}
+
 int fd_flush(struct fd_state *state)
 {
 	struct fd_surface *surface = state->render_target.surface;
@@ -1200,6 +1213,7 @@ int fd_flush(struct fd_state *state)
 			(state->render_target.nbins_y == 1)) {
 		/* no binning needed, just emit the primary ringbuffer: */
 		ring = state->ring;
+		flush_setup(state, ring);
 		emit_gmem2mem(state, ring, surface, 0, 0);
 	} else {
 		/* binning required, build cmds to setup for each tile in
@@ -1207,6 +1221,7 @@ int fd_flush(struct fd_state *state)
 		 */
 		uint32_t i, yoff = 0;
 		ring = state->ring_tile;
+		flush_setup(state, ring);
 
 		for (i = 0; i < state->render_target.nbins_y; i++) {
 			uint32_t j, xoff = 0;
@@ -1594,10 +1609,11 @@ void fd_make_current(struct fd_state *state,
 	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
 	OUT_RING(ring, 0x00000000);
 
-	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK);
 	OUT_RING(ring, 0x2000 | /* XXX */
-			state->rb_render_control |
-			A3XX_RB_RENDER_CONTROL_BIN_WIDTH(bw));
+			state->rb_render_control);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_XOFFSET, 6);
 	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XOFFSET(state->viewport.offset.x));
