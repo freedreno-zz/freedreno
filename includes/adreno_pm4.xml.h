@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a2xx.xml                (  30212 bytes, from 2013-04-12 00:45:30)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  38753 bytes, from 2013-05-02 19:22:14)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3136 bytes, from 2013-04-12 00:45:30)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9476 bytes, from 2013-04-18 21:02:01)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3094 bytes, from 2013-05-05 18:29:22)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9635 bytes, from 2013-05-05 18:28:24)
 
 Copyright (C) 2013 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -130,6 +130,7 @@ enum adreno_pm4_type3_packets {
 	CP_EVENT_WRITE_SHD = 88,
 	CP_EVENT_WRITE_CFL = 89,
 	CP_EVENT_WRITE_ZPD = 91,
+	CP_RUN_OPENCL = 49,
 	CP_DRAW_INDX = 34,
 	CP_DRAW_INDX_2 = 54,
 	CP_DRAW_INDX_BIN = 52,

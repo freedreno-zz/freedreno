@@ -694,7 +694,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	case SB_VERT_MIPADDR:
 	case SB_FRAG_MIPADDR:
-		if (state_type == 1) {
+		if (state_type == ST_CONSTANTS) {
 			uint32_t *addrs = contents;
 
 			/* mipmap consts block just appears to be array of num_unit gpu addr's: */
@@ -710,7 +710,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	case SB_FRAG_TEX:
 	case SB_VERT_TEX:
-		if (state_type == 0) {
+		if (state_type == ST_SHADER) {
 			for (i = 0; i < num_unit; i++) {
 				uint32_t *texsamp = &((uint32_t *)contents)[2 * i];
 
@@ -1004,6 +1004,7 @@ static const struct {
 		CP(EVENT_WRITE_SHD, NULL),
 		CP(EVENT_WRITE_CFL, NULL),
 		CP(EVENT_WRITE_ZPD, NULL),
+		CP(RUN_OPENCL, NULL),
 		CP(DRAW_INDX, cp_draw_indx),
 		CP(DRAW_INDX_2, NULL),
 		CP(DRAW_INDX_BIN, NULL),
