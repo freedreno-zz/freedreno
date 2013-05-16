@@ -977,6 +977,7 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t or  = dwords[2];
 	if (!summary)
 		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
+	type0_reg_vals[val] = (type0_reg_vals[val] & and) | or;
 }
 
 #define CP(x, fxn)   [CP_ ## x] = { "CP_"#x, fxn }
@@ -1103,6 +1104,7 @@ int main(int argc, char **argv)
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
 	int fd, sz, i, n = 1;
+	int got_gpu_id = 0;
 
 	while (1) {
 		if (!strcmp(argv[n], "--verbose")) {
@@ -1193,9 +1195,12 @@ int main(int argc, char **argv)
 			nbuffers = 0;
 			break;
 		case RD_GPU_ID:
-			printf("gpu_id: %d\n", *((unsigned int *)buf));
-			if (*((unsigned int *)buf) >= 300) {
-				init_a3xx();
+			if (!got_gpu_id) {
+				unsigned int gpu_id = *((unsigned int *)buf);
+				printf("gpu_id: %d\n", gpu_id);
+				if (gpu_id >= 300)
+					init_a3xx();
+				got_gpu_id = 1;
 			}
 			break;
 		default:
