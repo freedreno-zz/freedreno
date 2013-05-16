@@ -8,7 +8,7 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  38753 bytes, from 2013-05-02 19:22:14)
+- /home/robclark/src/freedreno/envytools/rnndb/a3xx.xml                (  38552 bytes, from 2013-05-16 13:54:10)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml (   1453 bytes, from 2013-03-31 16:51:27)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_common.xml       (   3094 bytes, from 2013-05-05 18:29:22)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno_pm4.xml          (   9635 bytes, from 2013-05-05 18:28:24)

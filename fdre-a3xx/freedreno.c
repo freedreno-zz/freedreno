@@ -172,9 +172,10 @@ const char *solid_fragment_shader_asm =
 		"nop                                                     \n";
 
 static const float init_shader_const[] = {
-		-1.000000, +1.000000, +1.000000, +1.000000,
-		-1.000000, +1.000000, +0.000000, +0.000000,
-		+1.000000, +1.000000
+		-1.000000, +1.000000, +1.000000,
+		+1.000000, -1.000000, +1.000000,
+		+0.000000, +0.000000, +1.000000,
+		+1.000000
 };
 
 /* ************************************************************************* */
@@ -1578,12 +1579,11 @@ void fd_make_current(struct fd_state *state,
 	if (state->rb_stencil_control & A3XX_RB_STENCIL_CONTROL_STENCIL_ENABLE) {
 		OUT_RING(ring, A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_24_8) |
 				A3XX_RB_DEPTH_INFO_DEPTH_BASE(bw * bh));
-		// XXX why is this the depth pitch?? maybe off by a bit?
-		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 8));
+		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 4));
 	} else {
 		OUT_RING(ring, A3XX_RB_DEPTH_INFO_DEPTH_FORMAT(DEPTHX_16) |
 				A3XX_RB_DEPTH_INFO_DEPTH_BASE(bw * bh));
-		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 4));
+		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 2));
 	}
 
 	OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);

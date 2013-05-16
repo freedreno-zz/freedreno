@@ -413,13 +413,10 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_MRT_REG(0), 4);
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(colorregid) |  /* SP_FS_MRT[0].REG */
-			A3XX_SP_FS_MRT_REG_PRECISION(1));
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0) |           /* SP_FS_MRT[1].REG */
-			A3XX_SP_FS_MRT_REG_PRECISION(0));
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0) |           /* SP_FS_MRT[2].REG */
-			A3XX_SP_FS_MRT_REG_PRECISION(0));
-	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0) |           /* SP_FS_MRT[3].REG */
-			A3XX_SP_FS_MRT_REG_PRECISION(0));
+			A3XX_SP_FS_MRT_REG_HALF_PRECISION);
+	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));           /* SP_FS_MRT[1].REG */
+	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));           /* SP_FS_MRT[2].REG */
+	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));           /* SP_FS_MRT[3].REG */
 
 	OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
 	OUT_RING(ring, A3XX_VPC_ATTR_TOTALATTR(numvar) |
