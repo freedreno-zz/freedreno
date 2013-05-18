@@ -50,6 +50,7 @@ typedef enum {
 static bool dump_shaders = false;
 static bool no_color = false;
 static bool summary = false;
+static bool allregs = false;
 
 static const char *levels[] = {
 		"\t",
@@ -393,6 +394,7 @@ static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 }
 
 static uint32_t type0_reg_vals[0x7fff];
+static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
 
 /*
  * Registers with special handling (rnndec_decode() handles rest):
@@ -568,6 +570,7 @@ static void dump_registers(uint32_t regbase,
 {
 	while (sizedwords--) {
 		type0_reg_vals[regbase] = *dwords;
+		type0_reg_written[regbase/8] |= (1 << (regbase % 8));
 		dump_register(regbase, *dwords, level);
 		regbase++;
 		dwords++;
@@ -924,7 +927,9 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 		uint32_t regbase = i;
 		uint32_t lastval = type0_reg_vals[regbase];
 		/* skip registers that have zero: */
-		if (!lastval)
+		if (!lastval && !allregs)
+			continue;
+		if (!(type0_reg_written[regbase/8] & (1 << (regbase % 8))))
 			continue;
 		dump_register(regbase, lastval, level+1);
 	}
@@ -978,6 +983,7 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	if (!summary)
 		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
 	type0_reg_vals[val] = (type0_reg_vals[val] & and) | or;
+	type0_reg_written[val/8] |= (1 << (val % 8));
 }
 
 #define CP(x, fxn)   [CP_ ## x] = { "CP_"#x, fxn }
@@ -1127,6 +1133,12 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[n], "--summary")) {
 			summary = true;
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--allregs")) {
+			allregs = true;
 			n++;
 			continue;
 		}
