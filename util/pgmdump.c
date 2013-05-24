@@ -715,31 +715,48 @@ static int check_extension(const char *path, const char *ext)
 int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
+	enum debug_t debug = 0;
 	void *buf = NULL;
 	int fd, sz, i;
 
 	/* lame argument parsing: */
-	if ((argc > 1) && !strcmp(argv[1], "--verbose")) {
-		disasm_set_debug(PRINT_RAW | PRINT_VERBOSE);
-		argv++;
-		argc--;
-	}
-	if ((argc > 1) && !strcmp(argv[1], "--short")) {
-		/* only short dump, original shader, symbol table, and disassembly */
-		full_dump = 0;
-		argv++;
-		argc--;
-	}
-	if ((argc > 1) && !strcmp(argv[1], "--dump-shaders")) {
-		dump_shaders = 1;
-		argv++;
-		argc--;
+
+	while (1) {
+		if ((argc > 1) && !strcmp(argv[1], "--verbose")) {
+			debug |= PRINT_RAW | PRINT_VERBOSE;
+			argv++;
+			argc--;
+			continue;
+		}
+		if ((argc > 1) && !strcmp(argv[1], "--expand")) {
+			debug |= EXPAND_REPEAT;
+			argv++;
+			argc--;
+			continue;
+		}
+		if ((argc > 1) && !strcmp(argv[1], "--short")) {
+			/* only short dump, original shader, symbol table, and disassembly */
+			full_dump = 0;
+			argv++;
+			argc--;
+			continue;
+		}
+		if ((argc > 1) && !strcmp(argv[1], "--dump-shaders")) {
+			dump_shaders = 1;
+			argv++;
+			argc--;
+			continue;
+		}
+
+		break;
 	}
 
 	if (argc != 2) {
 		fprintf(stderr, "usage: pgmdump [--verbose] [--short] [--dump-shaders] testlog.rd\n");
 		return -1;
 	}
+
+	disasm_set_debug(debug);
 
 	infile = argv[1];
 

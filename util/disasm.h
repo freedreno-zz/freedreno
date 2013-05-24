@@ -34,6 +34,7 @@ enum shader_t {
 enum debug_t {
 	PRINT_RAW      = 0x1,    /* dump raw hexdump */
 	PRINT_VERBOSE  = 0x2,
+	EXPAND_REPEAT  = 0x4,
 };
 
 int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type);

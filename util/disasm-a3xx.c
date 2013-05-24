@@ -111,7 +111,7 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im,
  * write-after-read (output.. but not 100%)..
  */
 
-#define MAX_REG 128
+#define MAX_REG 512
 
 typedef struct {
 	uint8_t full[MAX_REG/8];
@@ -145,6 +145,14 @@ static unsigned regmask_get(regmask_t *regmask, unsigned num, bool full)
 static unsigned regidx(reg_t reg)
 {
 	return (4 * reg.num) + reg.comp;
+}
+
+static reg_t idxreg(unsigned idx)
+{
+	return (reg_t){
+		.comp = idx & 0x3,
+		.num  = idx >> 2,
+	};
 }
 
 static struct {
@@ -227,6 +235,8 @@ static bool last_dst_valid = false;
 
 /* current instruction repeat flag: */
 static unsigned repeat;
+/* current instruction repeat indx/offset (for --expand): */
+static unsigned repeatidx;
 
 static void process_reg_dst(void)
 {
@@ -253,6 +263,7 @@ static void print_reg_dst(reg_t reg, bool full, bool addr_rel)
 		last_dst_full = full;
 		last_dst_valid = true;
 	}
+	reg = idxreg(regidx(reg) + repeatidx);
 	print_reg(reg, full, false, false, false, false, false, addr_rel);
 }
 
@@ -285,6 +296,9 @@ static void print_reg_src(reg_t reg, bool full, bool r, bool c, bool im,
 				break;
 		}
 	}
+
+	if (r)
+		reg = idxreg(regidx(reg) + repeatidx);
 
 	print_reg(reg, full, r, c, im, neg, abs, addr_rel);
 }
@@ -927,6 +941,25 @@ static bool print_instr(uint32_t *dwords, int level, int n)
 	printf("\n");
 
 	process_reg_dst();
+
+	if ((instr->opc_cat <= 4) && (debug & EXPAND_REPEAT)) {
+		int i;
+		for (i = 0; i < instr->repeat; i++) {
+			repeatidx = i + 1;
+			printf("%s%04d[                   ] ",
+					levels[level], n, dwords[1], dwords[0]);
+
+			if (name) {
+				printf("%s", name);
+				GETINFO(instr)->print(instr);
+			} else {
+				printf("unknown(%d,%d)", instr->opc_cat, opc);
+			}
+
+			printf("\n");
+		}
+		repeatidx = 0;
+	}
 
 	return (instr->opc_cat == 0) && (opc == OPC_END);
 }

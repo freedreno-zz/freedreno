@@ -232,7 +232,7 @@ typedef union PACKED {
 	/* normal gpr or const src register: */
 	struct PACKED {
 		uint32_t comp  : 2;
-		uint32_t num   : 9;
+		uint32_t num   : 6;
 	};
 	/* for immediate val: */
 	int32_t  iim_val   : 11;

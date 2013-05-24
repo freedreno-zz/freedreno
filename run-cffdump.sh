@@ -17,12 +17,20 @@ for f in $*; do
 		cffdump_args="$cffdump_args $f"
 		continue
 	fi
+	if [ $f = "--allregs" ]; then
+		cffdump_args="$cffdump_args $f"
+		continue
+	fi
 	if [ $f = "--verbose" ]; then
 		cffdump_args="$cffdump_args $f"
 		pgmdump_args="$pgmdump_args $f"
 		continue
 	fi
 	if [ $f = "--short" ]; then
+		pgmdump_args="$pgmdump_args $f"
+		continue
+	fi
+	if [ $f = "--expand" ]; then
 		pgmdump_args="$pgmdump_args $f"
 		continue
 	fi
