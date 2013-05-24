@@ -878,7 +878,7 @@ static uint32_t getopc(instr_t *instr)
 	}
 }
 
-static void print_instr(uint32_t *dwords, int level, int n)
+static bool print_instr(uint32_t *dwords, int level, int n)
 {
 	instr_t *instr = (instr_t *)dwords;
 	uint32_t opc = getopc(instr);
@@ -927,18 +927,21 @@ static void print_instr(uint32_t *dwords, int level, int n)
 	printf("\n");
 
 	process_reg_dst();
+
+	return (instr->opc_cat == 0) && (opc == OPC_END);
 }
 
 int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 {
+	bool end = false;
 	int i;
 
 	assert((sizedwords % 2) == 0);
 
 	memset(&regs, 0, sizeof(regs));
 
-	for (i = 0; i < sizedwords; i += 2)
-		print_instr(&dwords[i], level, i/2);
+	for (i = 0; i < sizedwords && !end; i += 2)
+		end = print_instr(&dwords[i], level, i/2);
 
 	print_reg_stats(level);
 

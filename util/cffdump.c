@@ -230,6 +230,17 @@ static void *hostptr(uint32_t gpuaddr)
 	return 0;
 }
 
+static unsigned hostlen(uint32_t gpuaddr)
+{
+	int i;
+	if (!gpuaddr)
+		return 0;
+	for (i = 0; i < nbuffers; i++)
+		if (buffer_contains_gpuaddr(&buffers[i], gpuaddr, 0))
+			return buffers[i].len + buffers[i].gpuaddr - gpuaddr;
+	return 0;
+}
+
 static void dump_hex(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	int i;
@@ -393,6 +404,23 @@ static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 	}
 }
 
+static void reg_dump_gpuaddr2(const char *name, uint32_t dword, int level)
+{
+	void *buf;
+
+	dword &= 0xfffffff0;
+
+	if (summary)
+		return;
+
+	buf = hostptr(dword);
+	if (buf) {
+		uint32_t sizedwords = hostlen(dword) / 4;
+		dump_hex(buf, 64, level+1);
+		disasm_a3xx(buf, sizedwords, level+2, SHADER_FRAGMENT);
+	}
+}
+
 static uint32_t type0_reg_vals[0x7fff];
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
 
@@ -488,8 +516,8 @@ static const const struct {
 		REG(VFD_FETCH_INSTR_1(15), reg_vfd_fetch_instr_1_x),
 		REG(SP_VS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
 		REG(SP_FS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
-		REG(SP_VS_OBJ_START_REG, reg_dump_gpuaddr),
-		REG(SP_FS_OBJ_START_REG, reg_dump_gpuaddr),
+		REG(SP_VS_OBJ_START_REG, reg_dump_gpuaddr2),
+		REG(SP_FS_OBJ_START_REG, reg_dump_gpuaddr2),
 #undef REG
 }, *type0_reg;
 
@@ -1151,7 +1179,7 @@ int main(int argc, char **argv)
 
 	fd = open(argv[n], O_RDONLY);
 	if (fd < 0)
-		fprintf(stderr, "could not open: %s\n", argv[1]);
+		fprintf(stderr, "could not open: %s\n", argv[n]);
 
 	rnn_init();
 	db = rnn_newdb();
