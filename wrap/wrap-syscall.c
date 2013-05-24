@@ -25,8 +25,13 @@
  * various syscalls and log what happens
  */
 
-#include "wrap.h"
+#ifdef BIONIC
+#  define assert(X)
+#else
+#  include <assert.h>
+#endif
 
+#include "wrap.h"
 
 struct device_info {
 	const char *name;
@@ -124,14 +129,24 @@ static struct device_info drm_info = {
 		},
 };
 
-static int kgsl_3d0 = -1, kgsl_2d0 = -1, kgsl_2d1 = -1, drm = -1;
+static struct {
+	int is_3d, is_2d, is_drm;
+} file_table[256];
 
+static int is_drm(int fd)
+{
+	if (fd >= ARRAY_SIZE(file_table))
+		return 0;
+	return file_table[fd].is_drm;
+}
 
 static struct device_info * get_kgsl_info(int fd)
 {
-	if ((fd == kgsl_2d0) || (fd == kgsl_2d1))
+	if (fd >= ARRAY_SIZE(file_table))
+		return NULL;
+	if (file_table[fd].is_2d)
 		return &kgsl_2d_info;
-	else if (fd == kgsl_3d0)
+	else if (file_table[fd].is_3d)
 		return &kgsl_3d_info;
 	return NULL;
 }
@@ -334,18 +349,19 @@ int open(const char* path, int flags, ...)
 	}
 
 	if (ret != -1) {
+		assert(ret < ARRAY_SIZE(file_table));
 		if (!strcmp(path, "/dev/kgsl-3d0")) {
-			kgsl_3d0 = ret;
-			printf("found kgsl_3d0: %d\n", kgsl_3d0);
+			file_table[ret].is_3d = 1;
+			printf("found kgsl_3d0: %d\n", ret);
 		} else if (!strcmp(path, "/dev/kgsl-2d0")) {
-			kgsl_2d0 = ret;
-			printf("found kgsl_2d0: %d\n", kgsl_2d0);
+			file_table[ret].is_2d = 1;
+			printf("found kgsl_2d0: %d\n", ret);
 		} else if (!strcmp(path, "/dev/kgsl-2d1")) {
-			kgsl_2d1 = ret;
-			printf("found kgsl_2d1: %d\n", kgsl_2d1);
+			file_table[ret].is_2d = 1;
+			printf("found kgsl_2d1: %d\n", ret);
 		} else if (!strcmp(path, "/dev/dri/card0")) {
-			drm = ret;
-			printf("found drm: %d\n", drm);
+			file_table[ret].is_drm = 1;
+			printf("found drm: %d\n", ret);
 		} else if (strstr(path, "/dev/")) {
 			printf("#### missing device, path: %s: %d\n", path, ret);
 		}
@@ -358,14 +374,11 @@ int close(int fd)
 {
 	PROLOG(close);
 
-	if (fd == kgsl_3d0)
-		kgsl_3d0 = -1;
-	else if (fd == kgsl_2d0)
-		kgsl_2d0 = -1;
-	else if (fd == kgsl_2d1)
-		kgsl_2d1 = -1;
-	else if (fd == drm)
-		drm = -1;
+	if (fd < ARRAY_SIZE(file_table)) {
+		file_table[fd].is_3d = 0;
+		file_table[fd].is_2d = 0;
+		file_table[fd].is_drm = 0;
+	}
 
 	return orig_close(fd);
 }
@@ -882,7 +895,7 @@ int ioctl(int fd, unsigned long int request, ...)
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_pre(fd, request, ptr);
-	else if (fd == drm)
+	else if (is_drm(fd))
 		drm_ioctl_pre(fd, request, ptr);
 	else
 		printf("> [%4d]         : <unknown> (%08lx)\n", fd, request);
@@ -905,7 +918,7 @@ int ioctl(int fd, unsigned long int request, ...)
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_post(fd, request, ptr, ret);
-	else if (fd == drm)
+	else if (is_drm(fd))
 		drm_ioctl_post(fd, request, ptr, ret);
 	else
 		printf("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, request, ret);
@@ -924,7 +937,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	void *ret = NULL;
 	PROLOG(mmap);
 
-	if (get_kgsl_info(fd) || (fd == drm)) {
+	if (get_kgsl_info(fd) || is_drm(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0);
 
 		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
@@ -939,7 +952,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	if (!ret)
 		ret = orig_mmap(addr, length, prot, flags, fd, offset);
 
-	if (get_kgsl_info(fd) || (fd == drm)) {
+	if (get_kgsl_info(fd) || is_drm(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0);
 		if (buf)
 			buf->hostptr = ret;
