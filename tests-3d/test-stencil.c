@@ -119,7 +119,6 @@ void test_stencil(void)
 	};
 	int i;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("stencil", "");
 
 	display = get_display();

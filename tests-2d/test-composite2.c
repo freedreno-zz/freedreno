@@ -41,7 +41,6 @@ void test_composite(uint32_t blend_mode,
 	C2D_OBJECT blit = {};
 	c2d_ts_handle curTimestamp;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("composite2: blend_mode:%08x, dst_format:%08x, dst_width:%x, dst_height=%x, "
 			"src_format:%08x, src_width:%x, src_height:%x, "
 			"mask_format:%08x, mask_width:%x, mask_height:%x, "
@@ -113,12 +112,6 @@ void test_composite(uint32_t blend_mode,
 
 int main(int argc, char **argv)
 {
-	/* create dummy pixmap to get initialization out of the way */
-	c2d_ts_handle curTimestamp;
-	PixmapPtr tmp = create_pixmap(64, 64, xRGB);
-	CHK(c2dFlush(tmp->id, &curTimestamp));
-	CHK(c2dWaitTimestamp(curTimestamp));
-
 /*
 [  1340.257] (II) freedreno(0): MSMCheckComposite:590 op:12: 0x2eb268 {20028888, 0} <- 0x2eb3a8 {08018000, 0} ((nil) {00000000, 0})
 [  1340.257] (II) freedreno(0): MSMPrepareComposite:694 0x2eb178 {35x8,256} <- 0x2eb2c8 {1024x320,1024} ((nil) {0x0,0})

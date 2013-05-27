@@ -59,6 +59,49 @@
 		DEBUG_MSG("<<< %s: succeeded", #x); \
 	} while (0)
 
+#define ENUM(x) case x: return #x
+static inline const char *
+typename(GLenum type)
+{
+	switch(type) {
+	ENUM(GL_BYTE);
+	ENUM(GL_UNSIGNED_BYTE);
+	ENUM(GL_SHORT);
+	ENUM(GL_UNSIGNED_SHORT);
+	ENUM(GL_INT);
+	ENUM(GL_UNSIGNED_INT);
+	ENUM(GL_FIXED);
+	ENUM(GL_FLOAT);
+	ENUM(GL_UNSIGNED_INT_10_10_10_2_OES);
+	ENUM(GL_INT_10_10_10_2_OES);
+	ENUM(GL_UNSIGNED_SHORT_5_6_5);
+	ENUM(GL_UNSIGNED_SHORT_4_4_4_4);
+	ENUM(GL_UNSIGNED_SHORT_5_5_5_1);
+	ENUM(GL_HALF_FLOAT_OES);
+	ENUM(GL_BGRA_EXT);
+	ENUM(GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+	}
+	ERROR_MSG("invalid type: %04x", type);
+	exit(1);
+	return NULL;
+}
+
+static inline const char *
+formatname(GLenum format)
+{
+	switch (format) {
+	ENUM(GL_RGB);
+	ENUM(GL_RGBA);
+	ENUM(GL_ALPHA);
+	ENUM(GL_LUMINANCE);
+	ENUM(GL_LUMINANCE_ALPHA);
+	ENUM(GL_DEPTH_COMPONENT);
+	}
+	ERROR_MSG("invalid format: %04x", format);
+	exit(1);
+	return NULL;
+}
+
 static char *
 eglStrError(EGLint error)
 {

@@ -35,7 +35,6 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format, unsigned long phys)
 	C2D_RECT rect;
 	c2d_ts_handle curTimestamp;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("fb: %04dx%04d-%08x", w, h, format);
 	RD_START("fb", "%dx%d-%08x", w, h, format);
 

@@ -75,8 +75,6 @@ const char *fragment_shader_source =
 static void
 test_clear(GLbitfield b, GLfloat clearcolor[4], GLint clearstencil, GLfloat cleardepth)
 {
-	DEBUG_MSG("----------------------------------------------------------------");
-
 	RD_START("clear", "%08x: color={%f,%f,%f,%f}, stencil=0x%x, depth=%f",
 		b, clearcolor[0], clearcolor[1], clearcolor[2], clearcolor[3],
 		clearstencil, cleardepth);

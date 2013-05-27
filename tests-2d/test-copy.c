@@ -27,35 +27,58 @@
 			   C2D_NO_PIXEL_ALPHA_BIT | C2D_NO_BILINEAR_BIT | \
 			   C2D_NO_ANTIALIASING_BIT | C2D_ALPHA_BLEND_NONE)
 
-void test_copy(uint32_t w, uint32_t h, uint32_t format)
+static const struct {
+	const char *name;
+	uint32_t fmt;
+} formats[] = {
+#define FMT(x) { #x, x }
+		FMT(xRGB),
+		FMT(ARGB),
+		FMT(RGBx),
+		FMT(RGBA),
+		FMT(BGRx),
+		FMT(BGRA),
+		FMT(xBGR),
+		FMT(ABGR),
+		FMT(A8),
+		//FMT(C2D_COLOR_FORMAT_444_RGB),
+		FMT(C2D_COLOR_FORMAT_565_RGB),
+		FMT(C2D_COLOR_FORMAT_888_RGB),
+};
+
+static const char *fmtname(uint32_t format)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(formats); i++)
+		if (formats[i].fmt == format)
+			return formats[i].name;
+	return "????";
+}
+
+void test_copy(uint32_t w, uint32_t h, uint32_t sformat, uint32_t dformat)
 {
 	PixmapPtr src, dest;
 	C2D_OBJECT blit = {};
 	C2D_RECT rect;
 	c2d_ts_handle curTimestamp;
 
-	DEBUG_MSG("----------------------------------------------------------------");
-	DEBUG_MSG("copy: %04dx%04d-%08x", w, h, format);
-	RD_START("copy", "%dx%d format:%08x", w, h, format);
+	RD_START("copy", "%dx%d format:%s->%s", w, h,
+			fmtname(sformat), fmtname(dformat));
 
-	dest = create_pixmap(w, h, format);
-	src  = create_pixmap(13, 17, format);
+	dest = create_pixmap(w, h, dformat);
+	src  = create_pixmap(13, 17, sformat);
 
 	rect.x = 1;
 	rect.y = 2;
 	rect.width = w - 2;
 	rect.height = h - 3;
 	CHK(c2dFillSurface(dest->id, 0xff556677, &rect));
-	CHK(c2dFlush(dest->id, &curTimestamp));
-	CHK(c2dWaitTimestamp(curTimestamp));
 
 	rect.x = 0;
 	rect.y = 0;
 	rect.width = 13;
 	rect.height = 17;
 	CHK(c2dFillSurface(src->id, 0xff223344, &rect));
-	CHK(c2dFlush(src->id, &curTimestamp));
-	CHK(c2dWaitTimestamp(curTimestamp));
 
 	blit.surface_id = src->id;
 	blit.config_mask = DEFAULT_BLIT_MASK;
@@ -74,23 +97,28 @@ void test_copy(uint32_t w, uint32_t h, uint32_t format)
 	CHK(c2dFlush(dest->id, &curTimestamp));
 	CHK(c2dWaitTimestamp(curTimestamp));
 
+	free_pixmap(src);
+	free_pixmap(dest);
+
 	RD_END();
 
-	dump_pixmap(dest, "copy-%04dx%04d-%08x.bmp", w, h, format);
+//	dump_pixmap(dest, "copy-%04dx%04d-%08x.bmp", w, h, dformat);
 }
 
 int main(int argc, char **argv)
 {
-	/* create dummy pixmap to get initialization out of the way */
-	c2d_ts_handle curTimestamp;
-	PixmapPtr tmp = create_pixmap(64, 64, xRGB);
-	CHK(c2dFlush(tmp->id, &curTimestamp));
-	CHK(c2dWaitTimestamp(curTimestamp));
+	int i, j;
 
-	test_copy(63, 65, xRGB);
-	test_copy(127, 260, xRGB);
-	test_copy(62, 66, ARGB);
-	test_copy(59, 69, C2D_COLOR_FORMAT_565_RGB);
+	for (i = 0; i < ARRAY_SIZE(formats); i++) {
+		for (j = 0; j < ARRAY_SIZE(formats); j++) {
+			test_copy(63, 67, formats[i].fmt, formats[j].fmt);
+		}
+	}
+
+	test_copy(63, 65, xRGB, RGBx);
+	test_copy(127, 260, xRGB, xRGB);
+	test_copy(62, 66, ARGB, C2D_COLOR_FORMAT_565_RGB);
+	test_copy(59, 69, C2D_COLOR_FORMAT_565_RGB, ARGB);
 
 	return 0;
 }

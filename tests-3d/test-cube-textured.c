@@ -31,7 +31,6 @@
 
 #include "esUtil.h"
 #include "esTransform.c"
-#include "cubetex.h"
 
 static EGLint const config_attribute_list[] = {
 	EGL_RED_SIZE, 8,
@@ -198,10 +197,21 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 			+0.0f, -1.0f, +0.0f  // down
 	};
 	EGLSurface surface;
+	const int texwidth = 333;
+	const int texheight = 222;
+	static uint8_t *buf = NULL;
+
+	if (!buf) {
+		int i;
+		buf = malloc(texwidth * texheight * 16);
+		for (i = 0; i < (texwidth * texheight * 16); i++)
+			buf[i] = i;
+	}
 
 	RD_START("cube-textured", "mag_filter=%04x, min_filter=%04x, "
-			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x, format=%04x, type=%04x",
-			mag_filter, min_filter, wrap_s, wrap_t, wrap_r, format, type);
+			"wrap_s=%04x, wrap_t=%04x, wrap_r=%04x, format=%s, type=%s",
+			mag_filter, min_filter, wrap_s, wrap_t, wrap_r,
+			formatname(format), typename(type));
 
 	display = get_display();
 
@@ -212,7 +222,7 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	surface = make_window(display, config, 400, 240);
+	surface = make_window(display, config, 256, 256);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
@@ -277,11 +287,8 @@ void test_cube_textured(GLint mag_filter, GLint min_filter,
 	GCHK(glActiveTexture(GL_TEXTURE0));
 	GCHK(glGenTextures(1, &texturename));
 	GCHK(glBindTexture(GL_TEXTURE_2D, texturename));
-	GCHK(glTexImage2D(
-			GL_TEXTURE_2D, 0, format,
-			cube_texture.width / ((type == GL_UNSIGNED_BYTE) ? 1 : 2),
-			cube_texture.height, 0,
-			format, type, cube_texture.pixel_data));
+	GCHK(glTexImage2D(GL_TEXTURE_2D, 0, format, texwidth, texheight,
+			0, format, type, buf));
 
 	/* Note: cube turned black until these were defined. */
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter));
@@ -327,7 +334,6 @@ int main(int argc, char *argv[])
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT,          GL_CLAMP_TO_EDGE,   GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
 	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_MIRRORED_REPEAT, GL_REPEAT,          GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
 	test_cube_textured(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE,   GL_MIRRORED_REPEAT, GL_REPEAT,          GL_RGB, GL_UNSIGNED_BYTE);
-
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_UNSIGNED_BYTE);
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_UNSIGNED_BYTE);
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE);
@@ -341,6 +347,43 @@ int main(int argc, char *argv[])
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_FLOAT);
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_FLOAT);
 	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_FLOAT);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT);
+
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_HALF_FLOAT_OES);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_HALF_FLOAT_OES);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_HALF_FLOAT_OES);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_HALF_FLOAT_OES);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_HALF_FLOAT_OES);
+
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_BGRA_EXT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_BGRA_EXT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_BGRA_EXT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_BGRA_EXT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_BGRA_EXT);
+
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_UNSIGNED_SHORT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_UNSIGNED_SHORT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_UNSIGNED_SHORT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_UNSIGNED_SHORT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_UNSIGNED_SHORT);
+
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_UNSIGNED_INT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_UNSIGNED_INT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_UNSIGNED_INT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_UNSIGNED_INT);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_UNSIGNED_INT);
+
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_ALPHA,     GL_FIXED);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE, GL_FIXED);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_LUMINANCE_ALPHA, GL_FIXED);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGB,       GL_FIXED);
+//	test_cube_textured(GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_RGBA,      GL_FIXED);
 }
 
 #ifdef BIONIC

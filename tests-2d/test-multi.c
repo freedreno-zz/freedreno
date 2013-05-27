@@ -40,7 +40,6 @@ void test_multi(void)
 	uint32_t w = 1920, h = 1080, format = xRGB;
 	int i;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("multi: %04dx%04d-%08x", w, h, format);
 	RD_START("multi", "%dx%d format:%08x", w, h, format);
 

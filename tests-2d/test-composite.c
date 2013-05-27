@@ -69,7 +69,6 @@ void test_composite(const char *name, const struct blend_mode *blend,
 	C2D_OBJECT blit = {};
 	c2d_ts_handle curTimestamp;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("%s: op:%s src:%s (repeat:%d) mask=%s (repeat:%d) dst:%s",
 			name, blend->name, src_format->name, src_repeat,
 			mask_format ? mask_format->name : "none", mask_repeat,
@@ -148,12 +147,6 @@ void test_composite(const char *name, const struct blend_mode *blend,
 int main(int argc, char **argv)
 {
 	uint32_t i, j, k, l;
-
-	/* create dummy pixmap to get initialization out of the way */
-	c2d_ts_handle curTimestamp;
-	PixmapPtr tmp = create_pixmap(64, 64, xRGB);
-	CHK(c2dFlush(tmp->id, &curTimestamp));
-	CHK(c2dWaitTimestamp(curTimestamp));
 
 	/* NOTE: my assumption here is that repeat, op, and color formats
 	 * are rather independent, so we don't need to dump every possible

@@ -74,8 +74,6 @@ const char *fragment_shader_source =
  */
 void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices)
 {
-	DEBUG_MSG("----------------------------------------------------------------");
-
 	RD_START("quad-flat", "");
 	display = get_display();
 

@@ -117,7 +117,6 @@ void test_cat(void)
 	EGLSurface surface;
 	float scale = 1.3;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("cat", "");
 
 	display = get_display();

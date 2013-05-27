@@ -121,8 +121,6 @@ int main(int argc, char *argv[])
 		"    gl_FragColor = uColor;   \n"
 		"}                            \n";
 
-	DEBUG_MSG("----------------------------------------------------------------");
-
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */

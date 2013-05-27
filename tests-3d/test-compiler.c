@@ -52,7 +52,6 @@ int test_compiler(int i)
 		return ret;
 	frag_shader[ret] = '\0';
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("compiler", "%d", i);
 
 	program = get_program(vert_shader, frag_shader);

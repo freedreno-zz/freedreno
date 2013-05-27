@@ -189,7 +189,6 @@ void test_tex(int nvtex, int nftex)
 	EGLSurface surface;
 	int n;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("tex", "%d vtex, %d ftex", nvtex, nftex);
 
 	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));

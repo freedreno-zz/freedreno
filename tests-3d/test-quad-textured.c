@@ -96,7 +96,6 @@ void test_quad_textured(void)
 
 	EGLSurface surface;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("quad-textured", "");
 
 	display = get_display();

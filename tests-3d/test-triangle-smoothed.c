@@ -85,7 +85,6 @@ void test_triangle_smoothed(void)
 			0.0f, 0.0f, 1.0f, 1.0f};
 	EGLSurface surface;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("triangle-smoothed", "");
 
 	display = get_display();

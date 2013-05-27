@@ -90,7 +90,6 @@ void test_strip_smoothed(void)
 			0.9, 0.9, 0.9, 1.0};
 	EGLSurface surface;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("strip-smoothed", "");
 
 	display = get_display();

@@ -81,7 +81,6 @@ void test_caps(void)
 	EGLSurface surface;
 	int i;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("caps", "");
 
 	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));

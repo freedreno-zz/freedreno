@@ -638,8 +638,6 @@ gears_init(void)
 int
 main(int argc, char *argv[])
 {
-	DEBUG_MSG("----------------------------------------------------------------");
-
 	RD_START("es2gears", "");
 	display = get_display();
 

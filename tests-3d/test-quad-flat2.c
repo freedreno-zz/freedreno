@@ -86,7 +86,6 @@ void test_quad_flat2(int w, int h)
 			 0.45,  0.75, 0.0 };
 	EGLSurface surface;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("quad-flat2", "%dx%d", w, h);
 
 	display = get_display();

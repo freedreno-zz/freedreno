@@ -29,7 +29,6 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 	C2D_RECT rect;
 	c2d_ts_handle curTimestamp;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	DEBUG_MSG("fill: %04dx%04d-%08x", w, h, format);
 	RD_START("fill", "%dx%d-%08x", w, h, format);
 
@@ -61,12 +60,6 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format)
 
 int main(int argc, char **argv)
 {
-	/* create dummy pixmap to get initialization out of the way */
-	c2d_ts_handle curTimestamp;
-	PixmapPtr tmp = create_pixmap(64, 64, xRGB);
-	CHK(c2dFlush(tmp->id, &curTimestamp));
-	CHK(c2dWaitTimestamp(curTimestamp));
-
 	test_fill(63, 65, xRGB);
 	test_fill(63, 65, xRGB);
 	test_fill(127, 260, xRGB);

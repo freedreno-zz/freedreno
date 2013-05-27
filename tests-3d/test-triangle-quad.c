@@ -86,8 +86,6 @@ void test_triangle_quad(int samples, int depth, int stencil)
 	GLfloat triangle_color[] = {0.0, 1.0, 0.0, 1.0 };
 	GLfloat quad_color[] = {1.0, 0.0, 0.0, 1.0 };
 
-
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("triangle-quad", "samples=%d, depth=%d, stencil=%d", samples, depth, stencil);
 
 	display = get_display();

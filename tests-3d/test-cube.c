@@ -191,7 +191,6 @@ void test_cat(void)
 	};
 	EGLSurface surface;
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("cube", "");
 
 	display = get_display();

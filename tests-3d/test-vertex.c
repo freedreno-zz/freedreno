@@ -104,48 +104,39 @@ void test_vertex(GLint *sizes, GLenum *types)
 			 0.0f,  0.5f, 0.0f,
 			-0.5f, -0.5f, 0.0f,
 			 0.5f, -0.5f, 0.0f };
-	GLfloat vColors1[] = {
-			1.0f, 0.0f, 0.0f, 1.0f,
-			0.0f, 1.0f, 0.0f, 1.0f,
-			0.0f, 0.0f, 1.0f, 1.0f};
-	GLfloat vColors2[] = {
-			1.1f, 0.0f, 0.0f, 1.0f,
-			0.0f, 1.0f, 0.0f, 1.0f,
-			0.0f, 0.0f, 1.0f, 1.0f};
-	GLfloat vColors3[] = {
-			1.2f, 0.0f, 0.0f, 1.0f,
-			0.0f, 1.0f, 0.0f, 1.0f,
-			0.0f, 0.0f, 1.0f, 1.0f};
-	GLfloat vColors4[] = {
-			1.3f, 0.0f, 0.0f, 1.0f,
-			0.0f, 1.0f, 0.0f, 1.0f,
-			0.0f, 0.0f, 1.0f, 1.0f};
+	uint8_t vColors1[] = {
+			0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+			0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+			0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f };
+	uint8_t vColors2[] = {
+			0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+			0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+			0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f };
+	uint8_t vColors3[] = {
+			0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+			0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+			0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f };
+	uint8_t vColors4[] = {
+			0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+			0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+			0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+			0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f };
 	EGLSurface surface;
 
 	void _glVertexAttribPointer (GLuint indx, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid* ptr)
 	{
-		static const char *typename[] = {
-#define NAME(x) [x & 0xf] = #x
-				NAME(GL_BYTE),
-				NAME(GL_UNSIGNED_BYTE),
-				NAME(GL_SHORT),
-				NAME(GL_UNSIGNED_SHORT),
-				NAME(GL_INT),
-				NAME(GL_UNSIGNED_INT),
-				NAME(GL_FLOAT),
-				NAME(GL_FIXED),
-#undef NAME
-		};
 		DEBUG_MSG("indx=%d, size=%d, type=%s, normalized=%d, stride=%d, ptr=%p",
-				indx, size, typename[type&0xf], normalized, stride, ptr);
+				indx, size, typename(type), normalized, stride, ptr);
 		glVertexAttribPointer (indx, size, type, normalized, stride, ptr);
 		glEnableVertexAttribArray(indx);
 	}
 
-	DEBUG_MSG("----------------------------------------------------------------");
-	RD_START("vertex", "sizes: %d, %d, %d, %d, types: %04x, %04x, %04x, %04x",
+	RD_START("vertex", "sizes: %d, %d, %d, %d, types: %s, %s, %s, %s",
 			sizes[0], sizes[1], sizes[2], sizes[3],
-			types[0], types[1], types[2], types[3]);
+			typename(types[0]), typename(types[1]), typename(types[2]), typename(types[3]));
 
 	ECHK(surface = eglCreatePbufferSurface(display, config, pbuffer_attribute_list));
 
@@ -234,12 +225,6 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	/* ignore first test, to get rid of initial context setup */
-	test_vertex((GLint[]){ 4, 4, 4, 4 },
-			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT });
-
-	test_vertex((GLint[]){ 4, 4, 4, 4 },
-			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT });
 	test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT });
 	test_vertex((GLint[]){ 1, 2, 3, 4 },
@@ -250,16 +235,21 @@ int main(int argc, char *argv[])
 			(GLenum[]){ GL_SHORT, GL_SHORT, GL_SHORT, GL_SHORT });
 	test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT });
+//	test_vertex((GLint[]){ 1, 2, 3, 4 },
+//			(GLenum[]){ GL_INT, GL_INT, GL_INT, GL_INT });
+//	test_vertex((GLint[]){ 1, 2, 3, 4 },
+//			(GLenum[]){ GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT });
 	test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_FIXED, GL_FIXED, GL_FIXED, GL_FIXED });
 	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_BYTE, GL_UNSIGNED_BYTE, GL_SHORT, GL_UNSIGNED_SHORT });
+			(GLenum[]){ GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES });
 	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FIXED });
+			(GLenum[]){ GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES });
+	test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES });
 
 	ECHK(eglTerminate(display));
 }
-
 #ifdef BIONIC
 void _start(int argc, char **argv)
 {

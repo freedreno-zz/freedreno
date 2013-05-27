@@ -545,7 +545,6 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("replay", "replay");
 
 	init();
