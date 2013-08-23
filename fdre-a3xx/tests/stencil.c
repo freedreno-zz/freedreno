@@ -139,7 +139,7 @@ int main(int argc, char **argv)
 	fd_clear(state, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 	fd_attribute_pointer(state, "aPosition",
-			FMT_FLOAT_32_32_32, 20, vertices);
+			VFMT_FLOAT_32_32_32, 20, vertices);
 
 	fd_uniform_attach(state, "uColor", 4, 1, (GLfloat[]){
 		0.0, 0.0, 0.0, 0.0,

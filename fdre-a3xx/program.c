@@ -295,11 +295,11 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	 * emits as part of the program state (it seems)..
 	 */
 	for (i = 0; i < 6; i++) {
-		OUT_PKT0(ring, REG_A3XX_UNKNOWN_0EC4, 1);
-		OUT_RING(ring, 0x00000000);    /* UNKNOWN_0EC4 */
+		OUT_PKT0(ring, REG_A3XX_SP_PERFCOUNTER0_SELECT, 1);
+		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER0_SELECT */
 
-		OUT_PKT0(ring, REG_A3XX_UNKNOWN_0EC8, 1);
-		OUT_RING(ring, 0x00000000);    /* UNKNOWN_0EC8 */
+		OUT_PKT0(ring, REG_A3XX_SP_PERFCOUNTER3_SELECT, 1);
+		OUT_RING(ring, 0x00000000);    /* SP_PERFCOUNTER3_SELECT */
 	}
 
 	OUT_PKT0(ring, REG_A3XX_SP_VS_LENGTH_REG, 1);

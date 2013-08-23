@@ -279,11 +279,11 @@ int main(int argc, char **argv)
 		fd_clear(state, GL_COLOR_BUFFER_BIT);
 
 		fd_attribute_pointer(state, "in_position",
-				FMT_FLOAT_32_32_32, 24, vVertices);
+				VFMT_FLOAT_32_32_32, 24, vVertices);
 		fd_attribute_pointer(state, "in_normal",
-				FMT_FLOAT_32_32_32, 24, vNormals);
+				VFMT_FLOAT_32_32_32, 24, vNormals);
 		fd_attribute_pointer(state, "in_color",
-				FMT_FLOAT_32_32_32, 24, vColors);
+				VFMT_FLOAT_32_32_32, 24, vColors);
 
 		fd_uniform_attach(state, "modelviewMatrix",
 				4, 4, &modelview.m[0][0]);

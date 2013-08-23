@@ -42,20 +42,13 @@ struct fd_state {
 	uint32_t gmemsize_bytes;
 	uint32_t device_id;
 
-	/* primary cmdstream buffer with render commands: */
+	/* cmdstream buffer with render commands: */
 	struct fd_ringbuffer *ring;
 	struct fd_ringmarker *draw_start, *draw_end;
 
 	struct {
 		struct fd_bo *bo;
 	} vsc_pipe[8];
-
-	/* if render target needs to be broken into tiles/bins, this cmd
-	 * buffer contains the per-tile setup, and then IB calls to the
-	 * primary cmdstream buffer for each tile.  The primary cmdstream
-	 * buffer is executed for each tile.
-	 */
-	struct fd_ringbuffer *ring_tile;
 
 	/* program used internally for blits/fills */
 	struct fd_program *solid_program;
@@ -125,7 +118,7 @@ struct fd_state {
 struct fd_shader_const {
 	uint32_t offset, sz;
 	struct fd_bo *bo;
-	enum a3xx_color_format format;
+	enum a3xx_color_fmt format;
 };
 
 /* ************************************************************************* */
@@ -136,7 +129,7 @@ static int color2cpp[] = {
 };
 
 static enum a3xx_tex_fmt color2fmt[] = {
-		[RB_R8G8B8A8_UNORM]        = TFMT_NORM_UINT8,
+		[RB_R8G8B8A8_UNORM]        = TFMT_NORM_UINT_8_8_8_8,
 };
 
 /* ************************************************************************* */
@@ -208,7 +201,6 @@ struct fd_state * fd_init(void)
 	state->ring = fd_ringbuffer_new(state->ws->pipe, 0x10000);
 	state->draw_start = fd_ringmarker_new(state->ring);
 	state->draw_end = fd_ringmarker_new(state->ring);
-	state->ring_tile = fd_ringbuffer_new(state->ws->pipe, 0x10000);
 
 	state->solid_const = fd_bo_new(state->ws->dev, 0x1000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
@@ -239,7 +231,7 @@ struct fd_state * fd_init(void)
 
 	/* manually setup the solid-program attribute/uniform: */
 	p = find_param(&state->solid_attributes, "aPosition");
-	p->fmt = FMT_FLOAT_32_32_32;
+	p->fmt = VFMT_FLOAT_32_32_32;
 	p->bo  = state->solid_const;
 
 	p = find_param(&state->solid_uniforms, "uColor");
@@ -299,7 +291,6 @@ void fd_fini(struct fd_state *state)
 {
 	fd_surface_del(state, state->render_target.surface);
 	fd_ringbuffer_del(state->ring);
-	fd_ringbuffer_del(state->ring_tile);
 	state->ws->destroy(state->ws);
 	free(state);
 }
@@ -482,7 +473,7 @@ static void emit_gmem2mem(struct fd_state *state,
 	OUT_RELOCS(ring, surface->bo, 0, 0, -1);     /* RB_COPY_DEST_BASE */
 	OUT_RING(ring, A3XX_RB_COPY_DEST_PITCH_PITCH(surface->pitch * surface->cpp));
 	OUT_RING(ring, A3XX_RB_COPY_DEST_INFO_TILE(LINEAR) |
-			A3XX_RB_COPY_DEST_INFO_FORMAT(RB_R8G8B8A8_UNORM) |
+			A3XX_RB_COPY_DEST_INFO_FORMAT(surface->color) |
 			A3XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |
 			A3XX_RB_COPY_DEST_INFO_ENDIAN(ENDIAN_NONE));
 
@@ -1186,7 +1177,7 @@ static void flush_setup(struct fd_state *state, struct fd_ringbuffer *ring)
 	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH(bin_w));
 
 	for (i = 0; i < 4; i++) {
-		enum a3xx_color_format format = (i == 0) ? surface->color : 0;
+		enum a3xx_color_fmt format = (i == 0) ? surface->color : 0;
 		uint32_t pitch = (i == 0) ? (bin_w * surface->cpp) : 0;
 
 		OUT_PKT0(ring, REG_A3XX_RB_MRT_BUF_INFO(i), 2);
@@ -1203,90 +1194,79 @@ static void flush_setup(struct fd_state *state, struct fd_ringbuffer *ring)
 int fd_flush(struct fd_state *state)
 {
 	struct fd_surface *surface = state->render_target.surface;
-	struct fd_ringbuffer *ring;
+	struct fd_ringbuffer *ring = state->ring;
+	uint32_t i, yoff = 0;
 
 	if (!state->dirty)
 		return 0;
 
 	fd_ringmarker_mark(state->draw_end);
 
-	if ((state->render_target.nbins_x == 1) &&
-			(state->render_target.nbins_y == 1)) {
-		/* no binning needed, just emit the primary ringbuffer: */
-		ring = state->ring;
-		flush_setup(state, ring);
-		emit_gmem2mem(state, ring, surface, 0, 0);
-	} else {
-		/* binning required, build cmds to setup for each tile in
-		 * the tile ringbuffer, w/ IB's to the primary ringbuffer:
-		 */
-		uint32_t i, yoff = 0;
-		ring = state->ring_tile;
-		flush_setup(state, ring);
+	flush_setup(state, ring);
 
-		for (i = 0; i < state->render_target.nbins_y; i++) {
-			uint32_t j, xoff = 0;
-			uint32_t bin_h = state->render_target.bin_h;
+	for (i = 0; i < state->render_target.nbins_y; i++) {
+		uint32_t j, xoff = 0;
+		uint32_t bin_h = state->render_target.bin_h;
 
-			/* clip bin height: */
-			bin_h = min(bin_h, surface->height - yoff);
+		/* clip bin height: */
+		bin_h = min(bin_h, surface->height - yoff);
 
-			for (j = 0; j < state->render_target.nbins_x; j++) {
-				uint32_t bin_w = state->render_target.bin_w;
+		for (j = 0; j < state->render_target.nbins_x; j++) {
+			uint32_t bin_w = state->render_target.bin_w;
+			uint32_t x1, y1, x2, y2;
 
-				uint32_t x1 = xoff;
-				uint32_t y1 = yoff;
-				uint32_t x2 = xoff + bin_w - 1;
-				uint32_t y2 = yoff + bin_h - 1;
+			/* clip bin width: */
+			bin_w = min(bin_w, surface->width - xoff);
 
-				/* clip bin width: */
-				bin_w = min(bin_w, surface->width - xoff);
+			x1 = xoff;
+			y1 = yoff;
+			x2 = xoff + bin_w - 1;
+			y2 = yoff + bin_h - 1;
 
-				DEBUG_MSG("bin_h=%d, yoff=%d, bin_w=%d, xoff=%d",
-						bin_h, yoff, bin_w, xoff);
+			DEBUG_MSG("bin_h=%d, yoff=%d, bin_w=%d, xoff=%d",
+					bin_h, yoff, bin_w, xoff);
 
-				OUT_PKT3(ring, CP_SET_BIN, 3);
-				OUT_RING(ring, 0x00000000);
-				OUT_RING(ring, CP_SET_BIN_1_X1(x1) | CP_SET_BIN_1_Y1(y1));
-				OUT_RING(ring, CP_SET_BIN_2_X2(x2) | CP_SET_BIN_2_Y2(y2));
+			OUT_PKT3(ring, CP_SET_BIN, 3);
+			OUT_RING(ring, 0x00000000);
+			OUT_RING(ring, CP_SET_BIN_1_X1(x1) | CP_SET_BIN_1_Y1(y1));
+			OUT_RING(ring, CP_SET_BIN_2_X2(x2) | CP_SET_BIN_2_Y2(y2));
 
-				/* setup scissor/offset for current tile: */
-				OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);
-				OUT_RING(ring, A3XX_PA_SC_WINDOW_OFFSET_X(xoff) |
-						A3XX_PA_SC_WINDOW_OFFSET_Y(yoff));
+			/* setup scissor/offset for current tile: */
+			OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);
+			OUT_RING(ring, A3XX_PA_SC_WINDOW_OFFSET_X(xoff) |
+					A3XX_PA_SC_WINDOW_OFFSET_Y(yoff));
 
-				OUT_PKT0(ring, REG_A3XX_GRAS_SC_WINDOW_SCISSOR_TL, 2);
-				OUT_RING(ring, A3XX_GRAS_SC_WINDOW_SCISSOR_TL_X(0) |
-						A3XX_GRAS_SC_WINDOW_SCISSOR_TL_Y(0));
-				OUT_RING(ring, A3XX_GRAS_SC_WINDOW_SCISSOR_BR_X(surface->width - 1) |
-						A3XX_GRAS_SC_WINDOW_SCISSOR_BR_Y(surface->height - 1));
+			OUT_PKT0(ring, REG_A3XX_GRAS_SC_WINDOW_SCISSOR_TL, 2);
+			OUT_RING(ring, A3XX_GRAS_SC_WINDOW_SCISSOR_TL_X(0) |
+					A3XX_GRAS_SC_WINDOW_SCISSOR_TL_Y(0));
+			OUT_RING(ring, A3XX_GRAS_SC_WINDOW_SCISSOR_BR_X(surface->width - 1) |
+					A3XX_GRAS_SC_WINDOW_SCISSOR_BR_Y(surface->height - 1));
 
-				OUT_PKT0(ring, REG_A3XX_GRAS_SC_SCREEN_SCISSOR_TL, 2);
-				OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_TL_X(x1) |
-						A3XX_GRAS_SC_SCREEN_SCISSOR_TL_Y(y1));
-				OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_BR_X(x2) |
-						A3XX_GRAS_SC_SCREEN_SCISSOR_BR_Y(y2));
+			OUT_PKT0(ring, REG_A3XX_GRAS_SC_SCREEN_SCISSOR_TL, 2);
+			OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_TL_X(x1) |
+					A3XX_GRAS_SC_SCREEN_SCISSOR_TL_Y(y1));
+			OUT_RING(ring, A3XX_GRAS_SC_SCREEN_SCISSOR_BR_X(x2) |
+					A3XX_GRAS_SC_SCREEN_SCISSOR_BR_Y(y2));
 
-				/* emit IB to drawcmds: */
-				OUT_IB  (ring, state->draw_start, state->draw_end);
+			/* emit IB to drawcmds: */
+			OUT_IB  (ring, state->draw_start, state->draw_end);
 
-				/* emit gmem2mem to transfer tile back to system memory: */
-				emit_gmem2mem(state, ring, surface, xoff, yoff);
+			/* emit gmem2mem to transfer tile back to system memory: */
+			emit_gmem2mem(state, ring, surface, xoff, yoff);
 
-				OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
-				OUT_RING(ring, 0x00000000);
+			OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
+			OUT_RING(ring, 0x00000000);
 
-				xoff += bin_w;
-			}
-
-			yoff += bin_h;
+			xoff += bin_w;
 		}
+
+		yoff += bin_h;
 	}
 
+	fd_ringmarker_flush(state->draw_end);
 	fd_ringbuffer_flush(ring);
 	fd_pipe_wait(state->ws->pipe, fd_ringbuffer_timestamp(ring));
 	fd_ringbuffer_reset(state->ring);
-	fd_ringbuffer_reset(state->ring_tile);
 
 	fd_ringmarker_mark(state->draw_start);
 
@@ -1298,7 +1278,7 @@ int fd_flush(struct fd_state *state)
 /* ************************************************************************* */
 
 struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
-		uint32_t width, uint32_t height, enum a3xx_color_format color_format)
+		uint32_t width, uint32_t height, enum a3xx_color_fmt color_format)
 {
 	struct fd_surface *surface;
 	int cpp = color2cpp[color_format];
@@ -1639,9 +1619,9 @@ int fd_dump_hex(struct fd_surface *surface)
 {
 	uint32_t *dbuf = fd_bo_map(surface->bo);
 	float   *fbuf = fd_bo_map(surface->bo);
-	uint32_t i;
+	uint32_t i, sz = surface->width * surface->height * surface->cpp;
 
-	for (i = 0; i < fd_bo_size(surface->bo) / 4; i+=4) {
+	for (i = 0; i < ALIGN(sz, 4) / 4; i+=4) {
 		printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
 				(unsigned int) i*4,
 				dbuf[i], dbuf[i+1], dbuf[i+2], dbuf[i+3],

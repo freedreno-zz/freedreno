@@ -105,8 +105,8 @@ int main(int argc, char **argv)
 	fd_clear_color(state, (float[]){ 0.0, 0.0, 0.0, 1.0 });
 	fd_clear(state, GL_COLOR_BUFFER_BIT);
 
-	fd_attribute_pointer(state, "aPosition", FMT_FLOAT_32_32_32, 6, vertices);
-	fd_attribute_pointer(state, "aColor", FMT_FLOAT_32_32_32_32, 6, colors);
+	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 6, vertices);
+	fd_attribute_pointer(state, "aColor", VFMT_FLOAT_32_32_32_32, 6, colors);
 
 	fd_draw_arrays(state, GL_TRIANGLE_FAN, 0, 6);
 

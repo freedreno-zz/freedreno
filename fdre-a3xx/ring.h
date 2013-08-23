@@ -54,7 +54,12 @@ OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
 		DEBUG_MSG("ring[%p]: OUT_RELOC  %04x:  %p+%u", ring,
 				(uint32_t)(ring->cur - ring->last_start), bo, offset);
 	}
-	fd_ringbuffer_emit_reloc(ring, bo, offset, or);
+	fd_ringbuffer_reloc(ring, &(struct fd_reloc){
+		.bo = bo,
+		.flags = FD_RELOC_READ | FD_RELOC_WRITE,
+		.offset = offset,
+		.or = or,
+	});
 }
 
 /* shifted reloc: */
@@ -66,7 +71,13 @@ OUT_RELOCS(struct fd_ringbuffer *ring, struct fd_bo *bo,
 		DEBUG_MSG("ring[%p]: OUT_RELOCS  %04x:  %p+%u << %d", ring,
 				(uint32_t)(ring->cur - ring->last_start), bo, offset, shift);
 	}
-	fd_ringbuffer_emit_reloc_shift(ring, bo, offset, or, shift);
+	fd_ringbuffer_reloc(ring, &(struct fd_reloc){
+		.bo = bo,
+		.flags = FD_RELOC_READ | FD_RELOC_WRITE,
+		.offset = offset,
+		.or = or,
+		.shift = shift,
+	});
 }
 
 static inline void BEGIN_RING(struct fd_ringbuffer *ring, uint32_t ndwords)
@@ -99,7 +110,7 @@ OUT_IB(struct fd_ringbuffer *ring, struct fd_ringmarker *start,
 		struct fd_ringmarker *end)
 {
 	OUT_PKT3(ring, CP_INDIRECT_BUFFER, 2);
-	fd_ringbuffer_emit_reloc_ring(ring, start);
+	fd_ringbuffer_emit_reloc_ring(ring, start, end);
 	OUT_RING(ring, fd_ringmarker_dwords(start, end));
 }
 

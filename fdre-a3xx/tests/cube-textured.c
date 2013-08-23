@@ -303,11 +303,11 @@ int main(int argc, char **argv)
 		fd_set_texture(state, "uTexture", tex);
 
 		fd_attribute_pointer(state, "in_position",
-				FMT_FLOAT_32_32_32, 24, vVertices);
+				VFMT_FLOAT_32_32_32, 24, vVertices);
 		fd_attribute_pointer(state, "in_normal",
-				FMT_FLOAT_32_32_32, 24, vNormals);
+				VFMT_FLOAT_32_32_32, 24, vNormals);
 		fd_attribute_pointer(state, "in_TexCoord",
-				FMT_FLOAT_32_32, 24, vTexCoords);
+				VFMT_FLOAT_32_32, 24, vTexCoords);
 
 		fd_uniform_attach(state, "modelviewMatrix",
 				4, 4, &modelview.m[0][0]);

@@ -32,7 +32,7 @@ struct fd_surface {
 	struct fd_bo *bo;
 	uint32_t cpp;	/* bytes per pixel */
 	uint32_t width, height, pitch;	/* width/height/pitch in pixels */
-	enum a3xx_color_format color;
+	enum a3xx_color_fmt color;
 };
 
 struct fd_winsys {

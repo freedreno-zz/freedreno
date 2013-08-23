@@ -291,9 +291,9 @@ void main(void)
 		fd_clear(state, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		fd_attribute_bo(state, "normal",
-				FMT_FLOAT_32_32_32, normal_vbo);
+				VFMT_FLOAT_32_32_32, normal_vbo);
 		fd_attribute_bo(state, "position",
-				FMT_FLOAT_32_32_32, position_vbo);
+				VFMT_FLOAT_32_32_32, position_vbo);
 
 		fd_uniform_attach(state, "ModelViewMatrix",
 				4, 4, &modelview.m[0][0]);
@@ -311,18 +311,18 @@ void main(void)
 		fd_enable(state, GL_BLEND);
 		fd_set_program(state, tex_program);
 		fd_attribute_pointer(state, "aTexCoord",
-				FMT_FLOAT_32_32, 4, texcoords);
+				VFMT_FLOAT_32_32, 4, texcoords);
 
 		/* draw tex1: */
 		fd_set_texture(state, "uTexture", lolstex1);
 		fd_attribute_pointer(state, "aPosition",
-				FMT_FLOAT_32_32_32, 4, tex1_vertices);
+				VFMT_FLOAT_32_32_32, 4, tex1_vertices);
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
 		/* draw tex2: */
 		fd_set_texture(state, "uTexture", lolstex2);
 		fd_attribute_pointer(state, "aPosition",
-				FMT_FLOAT_32_32_32, 4, tex2_vertices);
+				VFMT_FLOAT_32_32_32, 4, tex2_vertices);
 		fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
 		fd_swap_buffers(state);
