@@ -543,13 +543,13 @@ static void init_rnn(char *file, char *domain)
 static void init_a2xx(void)
 {
 	type0_reg = reg_a2xx;
-	init_rnn("a2xx.xml", "A2XX");
+	init_rnn("a2xx/a2xx.xml", "A2XX");
 }
 
 static void init_a3xx(void)
 {
 	type0_reg = reg_a3xx;
-	init_rnn("a3xx.xml", "A3XX");
+	init_rnn("a3xx/a3xx.xml", "A3XX");
 }
 
 static const char *regname(uint32_t regbase, int color)
