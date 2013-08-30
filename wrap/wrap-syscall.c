@@ -48,6 +48,7 @@ static struct device_info kgsl_3d_info = {
 		.ioctl_info = {
 				IOCTL_INFO(IOCTL_KGSL_DEVICE_GETPROPERTY),
 				IOCTL_INFO(IOCTL_KGSL_DEVICE_WAITTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID),
 				IOCTL_INFO(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS),
 				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_READTIMESTAMP),
 				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP),
@@ -73,6 +74,7 @@ static struct device_info kgsl_2d_info = {
 		.ioctl_info = {
 				IOCTL_INFO(IOCTL_KGSL_DEVICE_GETPROPERTY),
 				IOCTL_INFO(IOCTL_KGSL_DEVICE_WAITTIMESTAMP),
+				IOCTL_INFO(IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID),
 				IOCTL_INFO(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS),
 				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_READTIMESTAMP),
 				IOCTL_INFO(IOCTL_KGSL_CMDSTREAM_FREEMEMONTIMESTAMP),
@@ -906,7 +908,9 @@ int ioctl(int fd, unsigned long int request, ...)
 		sleep(1);
 	}
 
-	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
+	if (((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) ||
+			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP)) ||
+			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID))) &&
 			get_kgsl_info(fd) && (wrap_gpu_id() || wrap_gmem_size())) {
 		/* don't actually submit cmds to hw.. because we are pretending to
 		 * be something different from the actual hw

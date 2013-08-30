@@ -230,6 +230,16 @@ struct kgsl_device_waittimestamp {
 	_IOW(KGSL_IOC_TYPE, 0x6, struct kgsl_device_waittimestamp)
 
 
+struct kgsl_device_waittimestamp_ctxtid {
+	unsigned int context_id;
+	unsigned int timestamp;
+	unsigned int timeout;
+};
+
+#define IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID \
+	_IOW(KGSL_IOC_TYPE, 0x7, struct kgsl_device_waittimestamp_ctxtid)
+
+
 /* issue indirect commands to the GPU.
  * drawctxt_id must have been created with IOCTL_KGSL_DRAWCTXT_CREATE
  * ibaddr and sizedwords must specify a subset of a buffer created
