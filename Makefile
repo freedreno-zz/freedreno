@@ -19,6 +19,7 @@ TESTS_3D = \
 	test-es2gears \
 	test-caps \
 	test-stencil \
+	test-mipmap \
 	test-compiler \
 	test-enable-disable \
 	test-quad-flat \
@@ -67,8 +68,9 @@ WRAP_C2D2 = wrap-c2d2.o
 else ifeq ($(strip $(BUILD)),glibc)
 LFLAGS_3D = -lEGL -lGLESv2
 LFLAGS_2D =
-LFLAGS_CL = -lOpenCL
+#LFLAGS_CL = -lOpenCL
 LDFLAGS_MISC = -lX11 -lm
+CFLAGS += -DSUPPORT_X11
 CC = gcc -L /usr/lib
 LD = gcc -L /usr/lib
 WRAP_C2D2 =
