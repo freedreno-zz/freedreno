@@ -20,6 +20,7 @@ TESTS_3D = \
 	test-caps \
 	test-stencil \
 	test-mipmap \
+	test-cubemap \
 	test-compiler \
 	test-enable-disable \
 	test-quad-flat \

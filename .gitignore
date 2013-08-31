@@ -26,6 +26,7 @@ test-enable-disable
 test-compiler
 test-stencil
 test-mipmap
+test-cubemap
 test-es2gears
 
 # misc:
