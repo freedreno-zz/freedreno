@@ -93,10 +93,12 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_shader_info *info,
 
 		if (reg->flags & IR3_REG_CONST) {
 			info->max_const = max(info->max_const, max);
-		} else if (reg->flags & IR3_REG_HALF) {
-			info->max_half_reg = max(info->max_half_reg, max);
-		} else {
-			info->max_reg = max(info->max_reg, max);
+		} else if ((max != REG_A0) && (max != REG_P0)) {
+			if (reg->flags & IR3_REG_HALF) {
+				info->max_half_reg = max(info->max_half_reg, max);
+			} else {
+				info->max_reg = max(info->max_reg, max);
+			}
 		}
 	}
 
@@ -452,7 +454,7 @@ int ir3_shader_assemble(struct ir3_shader *shader,
 
 	info->max_reg       = -1;
 	info->max_half_reg  = -1;
-	info->max_const     = 0;
+	info->max_const     = -1;
 
 	/* need to include the attributes/vbo's in the register accounting,
 	 * since they use registers, but are fetched outside of the shader

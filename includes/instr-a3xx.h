@@ -232,7 +232,7 @@ typedef union PACKED {
 	/* normal gpr or const src register: */
 	struct PACKED {
 		uint32_t comp  : 2;
-		uint32_t num   : 6;
+		uint32_t num   : 9;
 	};
 	/* for immediate val: */
 	int32_t  iim_val   : 11;
@@ -241,6 +241,15 @@ typedef union PACKED {
 	uint32_t dummy11   : 11;
 	uint32_t dummy8    : 8;
 } reg_t;
+
+/* special registers: */
+#define REG_A0 61       /* address register */
+#define REG_P0 62       /* predicate register */
+
+static inline int reg_special(reg_t reg)
+{
+	return (reg.num == REG_A0) || (reg.num == REG_P0);
+}
 
 typedef struct PACKED {
 	/* dword0: */

@@ -32,7 +32,7 @@
 
 
 struct fd_shader {
-	uint32_t bin[256];
+	uint32_t bin[512];
 	uint32_t sizedwords;
 	struct ir3_shader_info info;
 	struct ir3_shader *ir;
@@ -317,7 +317,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 
 	OUT_RING(ring, A3XX_SP_VS_CTRL_REG1_CONSTLENGTH(vsconstlen) |
 			A3XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(totalattr(vs)) |
-			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(vsi->max_const));
+			A3XX_SP_VS_CTRL_REG1_CONSTFOOTPRINT(max(vsi->max_const, 0)));
 	OUT_RING(ring, A3XX_SP_VS_PARAM_REG_POSREGID(posregid) |
 			A3XX_SP_VS_PARAM_REG_PSIZEREGID(psizeregid) |
 			A3XX_SP_VS_PARAM_REG_TOTALVSOUTVAR(fs->ir->varyings_count));
@@ -399,7 +399,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 			A3XX_SP_FS_CTRL_REG0_LENGTH(instrlen(fs)));
 	OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(fsconstlen) |
 			A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(0) |
-			A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(fsi->max_const) |
+			A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(max(fsi->max_const, 0)) |
 			A3XX_SP_FS_CTRL_REG1_HALFPRECVAROFFSET(63));
 
 	// TODO SP_FS_OBJ_OFFSET_REG / SP_FS_OBJ_START_REG
