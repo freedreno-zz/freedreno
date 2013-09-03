@@ -17,6 +17,8 @@ TESTS_2D = \
 TESTS_3D = \
 	test-clear \
 	test-es2gears \
+	test-piglit-bad \
+	test-piglit-good \
 	test-caps \
 	test-stencil \
 	test-mipmap \

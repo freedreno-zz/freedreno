@@ -28,6 +28,8 @@ test-stencil
 test-mipmap
 test-cubemap
 test-es2gears
+test-piglit-bad
+test-piglit-good
 
 # misc:
 redump
