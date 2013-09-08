@@ -182,6 +182,8 @@ int main(int argc, char *argv[])
 	test_enable_disable(GL_BLEND, glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA));
 	test_enable_disable(GL_BLEND, glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR));
 	test_enable_disable(GL_SAMPLE_ALPHA_TO_COVERAGE, 0);
+	test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_ALWAYS, 0.5));
+	test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_LEQUAL, 0.5));
 	test_enable_disable(GL_SAMPLE_COVERAGE, 0);
 	test_enable_disable(GL_STENCIL_TEST, 0);
 	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_NEVER));
