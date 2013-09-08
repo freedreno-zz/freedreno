@@ -182,7 +182,7 @@ GLubyte* GenCheckImage( int width, int height, int checkSize )
 ///
 // Create a mipmapped 2D texture image
 //
-GLuint CreateMipMappedTexture2D(int maxlevels, int width, int height)
+GLuint CreateMipMappedTexture2D(int maxlevels, int width, int height, unsigned filt)
 {
    // Texture object handle
    GLuint textureId;
@@ -237,7 +237,7 @@ GLuint CreateMipMappedTexture2D(int maxlevels, int width, int height)
    free ( newImage );
 
    // Set the filtering mode
-   glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST );
+   glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filt );
    glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 
    return textureId;
@@ -298,7 +298,7 @@ static void Draw(void)
 
 }
 
-static void test_mipmap(int maxlevels, int w, int h)
+static void test_mipmap(int maxlevels, int w, int h, unsigned filt)
 {
 	RD_START("mipmap", "maxlevels=%d, texsize=%dx%d", maxlevels, w, h);
 
@@ -335,7 +335,7 @@ static void test_mipmap(int maxlevels, int w, int h)
 	GCHK(offsetLoc = glGetUniformLocation(programObject, "u_offset"));
 
 	// Load the texture
-	GCHK(textureId = CreateMipMappedTexture2D(maxlevels, w, h));
+	GCHK(textureId = CreateMipMappedTexture2D(maxlevels, w, h, filt));
 
 	GCHK(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 
@@ -358,10 +358,10 @@ static void test_mipmap(int maxlevels, int w, int h)
 
 int main(int argc, char *argv[])
 {
-	test_mipmap(0, 64, 64);
-	test_mipmap(3, 64, 64);
-	test_mipmap(8, 256, 256);
-	test_mipmap(10, 1024, 1024);
+	test_mipmap(0, 64, 64, GL_NEAREST_MIPMAP_NEAREST);
+	test_mipmap(3, 64, 64, GL_LINEAR_MIPMAP_NEAREST);
+	test_mipmap(8, 256, 256, GL_NEAREST_MIPMAP_LINEAR);
+	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR);
 }
 
 #ifdef BIONIC
