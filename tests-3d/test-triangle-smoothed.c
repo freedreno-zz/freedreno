@@ -71,7 +71,7 @@ const char *fragment_shader_source =
 		"}                            \n";
 
 
-void test_triangle_smoothed(void)
+void test_triangle_smoothed(GLenum mode)
 {
 	GLint width, height;
 
@@ -115,6 +115,8 @@ void test_triangle_smoothed(void)
 
 	GCHK(glViewport(0, 0, width, height));
 
+	GCHK(glFrontFace(mode));
+
 	/* clear the color buffer */
 	GCHK(glClearColor(0.0, 0.0, 0.0, 1.0));
 	GCHK(glClear(GL_COLOR_BUFFER_BIT));
@@ -139,7 +141,8 @@ void test_triangle_smoothed(void)
 
 int main(int argc, char *argv[])
 {
-	test_triangle_smoothed();
+	test_triangle_smoothed(GL_CCW);
+	test_triangle_smoothed(GL_CW);
 }
 
 #ifdef BIONIC
