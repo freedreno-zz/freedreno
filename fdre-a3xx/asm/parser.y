@@ -734,7 +734,8 @@ offset:            { $$ = 0; }
 |                  '+' integer { $$ = $2; }
 |                  '-' integer { $$ = -$2; }
 
-relative:          'c' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV)->offset = $4; }
+relative:          'r' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV)->offset = $4; }
+|                  'c' '<' T_A0 offset '>'  { new_reg(0, IR3_REG_RELATIV | IR3_REG_CONST)->offset = $4; }
 
 immediate:         integer             { new_reg(0, IR3_REG_IMMED)->iim_val = $1; }
 |                  '(' integer ')'     { new_reg(0, IR3_REG_IMMED)->fim_val = $2; }
