@@ -276,12 +276,16 @@ typedef struct PACKED {
 		/* for normal src register: */
 		struct PACKED {
 			uint32_t src : 11;
+			/* at least low bit of pad must be zero or it will
+			 * look like a address relative src
+			 */
 			uint32_t pad : 21;
 		};
 		/* for address relative: */
 		struct PACKED {
 			int32_t  off : 10;
-			uint32_t must_be_3 : 2;
+			uint32_t src_rel_c : 1;
+			uint32_t src_rel : 1;
 			uint32_t unknown : 20;
 		};
 		/* for immediate: */
@@ -294,7 +298,7 @@ typedef struct PACKED {
 	uint32_t repeat     : 3;
 	uint32_t src_r      : 1;
 	uint32_t ss         : 1;
-	uint32_t src_rel    : 1;
+	uint32_t ul         : 1;
 	uint32_t dst_type   : 3;
 	uint32_t dst_rel    : 1;
 	uint32_t src_type   : 3;

@@ -291,6 +291,7 @@ static int parse_reg(const char *str)
 "+"                               return '+';
 "|"                               return '|';
 "c"                               return 'c';
+"r"                               return 'r';
 "g"                               return 'g';
 "l"                               return 'l';
 "<"                               return '<';

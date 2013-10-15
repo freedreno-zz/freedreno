@@ -331,8 +331,7 @@ static void print_instr_cat1(instr_t *instr)
 {
 	instr_cat1_t *cat1 = &instr->cat1;
 
-	// XXX maybe a bug in libllvm disassembler?
-	if (cat1->src_rel)
+	if (cat1->ul)
 		printf("(ul)");
 
 	if (cat1->src_type == cat1->dst_type) {
@@ -369,10 +368,11 @@ static void print_instr_cat1(instr_t *instr)
 		/* I would just use %+d but trying to make it diff'able with
 		 * libllvm-a3xx...
 		 */
+		char type = cat1->src_rel_c ? 'c' : 'r';
 		if (cat1->off < 0)
-			printf("c<a0.x - %d>", -cat1->off);
+			printf("%c<a0.x - %d>", type, -cat1->off);
 		else if (cat1->off > 0)
-			printf("c<a0.x + %d>", cat1->off);
+			printf("%c<a0.x + %d>", type, cat1->off);
 		else
 			printf("c<a0.x>");
 	} else {

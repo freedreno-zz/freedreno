@@ -146,11 +146,12 @@ static int emit_cat1(struct ir3_instruction *instr, void *ptr,
 	} else if (src->flags & IR3_REG_RELATIV) {
 		cat1->off       = src->offset;
 		cat1->src_rel   = 1;
-		cat1->must_be_3 = 3;
+		cat1->src_rel_c = !!(src->flags & IR3_REG_CONST);
 	} else {
 		cat1->src  = reg(src, info, instr->repeat,
-				IR3_REG_IMMED | IR3_REG_RELATIV |
-				IR3_REG_R | IR3_REG_CONST | IR3_REG_HALF);
+				IR3_REG_IMMED | IR3_REG_R |
+				IR3_REG_CONST | IR3_REG_HALF);
+		cat1->src_c     = !!(src->flags & IR3_REG_CONST);
 	}
 
 	cat1->dst      = reg(dst, info, instr->repeat,
@@ -159,10 +160,10 @@ static int emit_cat1(struct ir3_instruction *instr, void *ptr,
 	cat1->repeat   = instr->repeat;
 	cat1->src_r    = !!(src->flags & IR3_REG_R);
 	cat1->ss       = !!(instr->flags & IR3_INSTR_SS);
+	cat1->ul       = !!(instr->flags & IR3_INSTR_UL);
 	cat1->dst_type = instr->cat1.dst_type;
 	cat1->dst_rel  = !!(dst->flags & IR3_REG_RELATIV);
 	cat1->src_type = instr->cat1.src_type;
-	cat1->src_c    = !!(src->flags & IR3_REG_CONST);
 	cat1->even     = !!(dst->flags & IR3_REG_EVEN);
 	cat1->pos_inf  = !!(dst->flags & IR3_REG_POS_INF);
 	cat1->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
