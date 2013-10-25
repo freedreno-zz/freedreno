@@ -9,6 +9,7 @@ test-multi
 test-fb
 
 # 3d tests:
+test-draw
 test-clear
 test-caps
 test-triangle-quad
