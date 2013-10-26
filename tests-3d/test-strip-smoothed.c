@@ -35,7 +35,7 @@ static EGLint const config_attribute_list[] = {
 	EGL_BLUE_SIZE, 8,
 	EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
 	EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-	EGL_DEPTH_SIZE, 8,
+	EGL_DEPTH_SIZE, 0,
 	EGL_NONE
 };
 
@@ -70,8 +70,64 @@ const char *fragment_shader_source =
 		"    gl_FragColor = vColor;   \n"
 		"}                            \n";
 
+static GLuint framebuffer;
+//static GLuint depthRenderbuffer;
+static GLuint texture;
 
-void test_strip_smoothed(void)
+static void setup_fbo(int texWidth, int texHeight)
+{
+	GLint  maxRenderbufferSize;
+	GLenum status;
+
+	// generate the framebuffer, renderbuffer, and texture object names
+	glGenFramebuffers(1, &framebuffer);
+//	glGenRenderbuffers(1, &depthRenderbuffer);
+	glGenTextures(1, &texture);
+
+	// bind texture and load the texture mip-level 0
+	// texels are RGB565
+	// no texels need to be specified as we are going to draw into
+	// the texture
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texWidth, texHeight,
+			0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	// bind renderbuffer and create a 16-bit depth buffer
+	// width and height of renderbuffer = width and height of
+	// the texture
+//	glBindRenderbuffer(GL_RENDERBUFFER, depthRenderbuffer);
+//	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
+//			texWidth, texHeight);
+
+	// bind the framebuffer
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+	// specify texture as color attachment
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+			GL_TEXTURE_2D, texture, 0);
+
+//	// specify depth_renderbufer as depth attachment
+//	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+//			GL_RENDERBUFFER, depthRenderbuffer);
+
+	// check for framebuffer complete
+	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+DEBUG_MSG("status=%04x", status);
+}
+
+static void cleanup_fbo(void)
+{
+//	glDeleteRenderbuffers(1, &depthRenderbuffer);
+	glDeleteFramebuffers(1, &framebuffer);
+	glDeleteTextures(1, &texture);
+}
+
+void test_strip_smoothed(int fbo)
 {
 	GLint width, height;
 	GLfloat vVertices[] = {
@@ -90,7 +146,7 @@ void test_strip_smoothed(void)
 			0.9, 0.9, 0.9, 1.0};
 	EGLSurface surface;
 
-	RD_START("strip-smoothed", "");
+	RD_START("strip-smoothed", "fbo=%d", fbo);
 
 	display = get_display();
 
@@ -101,7 +157,7 @@ void test_strip_smoothed(void)
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	surface = make_window(display, config, 400, 240);
+	surface = make_window(display, config, 256, 256);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
@@ -120,6 +176,8 @@ void test_strip_smoothed(void)
 
 	GCHK(glViewport(0, 0, width, height));
 
+	if (fbo)
+		GCHK(setup_fbo(width, height));
 
 	/* clear the color buffer */
 	GCHK(glClearColor(0.3125, 0.3125, 0.3125, 1.0));
@@ -136,6 +194,9 @@ void test_strip_smoothed(void)
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
 
+	if (fbo)
+		GCHK(cleanup_fbo());
+
 	ECHK(eglDestroySurface(display, surface));
 
 	ECHK(eglTerminate(display));
@@ -145,7 +206,9 @@ void test_strip_smoothed(void)
 
 int main(int argc, char *argv[])
 {
-	test_strip_smoothed();
+	test_strip_smoothed(0);
+	test_strip_smoothed(0);
+	test_strip_smoothed(1);
 }
 
 #ifdef BIONIC
