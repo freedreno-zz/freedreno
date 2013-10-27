@@ -98,9 +98,9 @@ static void print_reg(reg_t reg, bool full, bool r, bool c, bool im,
 			printf("%s%c<a0.x + %d>", full ? "" : "h", type, reg.iim_val);
 		else
 			printf("%s%c<a0.x>", full ? "" : "h", type);
-	} else if ((reg.num == 61) && !c) {
+	} else if ((reg.num == REG_A0) && !c) {
 		printf("a0.%c", component[reg.comp]);
-	} else if ((reg.num == 62) && !c) {
+	} else if ((reg.num == REG_P0) && !c) {
 		printf("p0.%c", component[reg.comp]);
 	} else {
 		printf("%s%c%d.%c", full ? "" : "h", type, reg.num, component[reg.comp]);
@@ -335,7 +335,7 @@ static void print_instr_cat1(instr_t *instr)
 		printf("(ul)");
 
 	if (cat1->src_type == cat1->dst_type) {
-		if ((cat1->src_type == TYPE_S16) && (((reg_t)cat1->dst).num == 61)) {
+		if ((cat1->src_type == TYPE_S16) && (((reg_t)cat1->dst).num == REG_A0)) {
 			/* special case (nmemonic?): */
 			printf("mova");
 		} else {
@@ -999,8 +999,7 @@ static bool print_instr(uint32_t *dwords, int level, int n)
 		int i;
 		for (i = 0; i < instr->repeat; i++) {
 			repeatidx = i + 1;
-			printf("%s%04d[                   ] ",
-					levels[level], n, dwords[1], dwords[0]);
+			printf("%s%04d[                   ] ", levels[level], n);
 
 			if (name) {
 				printf("%s", name);
