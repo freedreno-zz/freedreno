@@ -72,29 +72,6 @@ static const char *levels[] = {
 
 #define NAME(x)	[x] = #x
 
-static const char *event_name[] = {
-		NAME(VS_DEALLOC),
-		NAME(PS_DEALLOC),
-		NAME(VS_DONE_TS),
-		NAME(PS_DONE_TS),
-		NAME(CACHE_FLUSH_TS),
-		NAME(CONTEXT_DONE),
-		NAME(CACHE_FLUSH),
-		NAME(VIZQUERY_START),
-		NAME(VIZQUERY_END),
-		NAME(SC_WAIT_WC),
-		NAME(RST_PIX_CNT),
-		NAME(RST_VTX_CNT),
-		NAME(TILE_FLUSH),
-		NAME(CACHE_FLUSH_AND_INV_TS_EVENT),
-		NAME(ZPASS_DONE),
-		NAME(CACHE_FLUSH_AND_INV_EVENT),
-		NAME(PERFCOUNTER_START),
-		NAME(PERFCOUNTER_STOP),
-		NAME(VS_FETCH_DONE),
-		NAME(FACENESS_FLUSH),
-};
-
 static const char *fmt_name[] = {
 		NAME(FMT_1_REVERSE),
 		NAME(FMT_1),
@@ -157,34 +134,6 @@ static const char *fmt_name[] = {
 		NAME(FMT_DXT5A),
 		NAME(FMT_CTX1),
 		NAME(FMT_DXT3A_AS_1_1_1_1),
-};
-
-static const char *vgt_prim_types[32] = {
-		NAME(DI_PT_NONE),
-		NAME(DI_PT_POINTLIST),
-		NAME(DI_PT_LINELIST),
-		NAME(DI_PT_LINESTRIP),
-		NAME(DI_PT_TRILIST),
-		NAME(DI_PT_TRIFAN),
-		NAME(DI_PT_TRISTRIP),
-		NAME(DI_PT_RECTLIST),
-		NAME(DI_PT_QUADLIST),
-		NAME(DI_PT_QUADSTRIP),
-		NAME(DI_PT_POLYGON),
-		NAME(DI_PT_2D_COPY_RECT_LIST_V0),
-		NAME(DI_PT_2D_COPY_RECT_LIST_V1),
-		NAME(DI_PT_2D_COPY_RECT_LIST_V2),
-		NAME(DI_PT_2D_COPY_RECT_LIST_V3),
-		NAME(DI_PT_2D_FILL_RECT_LIST),
-		NAME(DI_PT_2D_LINE_STRIP),
-		NAME(DI_PT_2D_TRI_STRIP),
-};
-
-static const char *vgt_source_select[4] = {
-		NAME(DI_SRC_SEL_DMA),
-		NAME(DI_SRC_SEL_IMMEDIATE),
-		NAME(DI_SRC_SEL_AUTO_INDEX),
-		NAME(DI_SRC_SEL_RESERVED),
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
@@ -519,12 +468,13 @@ static const const struct {
 		REG(SP_VS_OBJ_START_REG, reg_dump_gpuaddr2),
 		REG(SP_FS_OBJ_START_REG, reg_dump_gpuaddr2),
 #undef REG
+#endif
 }, *type0_reg;
 
 static struct rnndeccontext *vc;
 static struct rnndeccontext *vc_nocolor;
 static struct rnndb *db;
-struct rnndomain *dom;
+struct rnndomain *dom[2];
 static bool initialized = false;
 
 static void init_rnn(char *file, char *domain)
@@ -532,8 +482,9 @@ static void init_rnn(char *file, char *domain)
 	/* prepare rnn stuff for lookup */
 	rnn_parsefile(db, file);
 	rnn_prepdb(db);
-	dom = rnn_finddomain(db, domain);
-	if (!dom) {
+	dom[0] = rnn_finddomain(db, domain);
+	dom[1] = rnn_finddomain(db, "AXXX");
+	if (!dom[0] && dom[1]) {
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
 		exit(1);
 	}
@@ -552,6 +503,13 @@ static void init_a3xx(void)
 	init_rnn("a3xx/a3xx.xml", "A3XX");
 }
 
+static struct rnndomain *finddom(uint32_t regbase)
+{
+	if (rnndec_checkaddr(vc, dom[0], regbase, 0))
+		return dom[0];
+	return dom[1];
+}
+
 static const char *regname(uint32_t regbase, int color)
 {
 	struct rnndecaddrinfo *info;
@@ -561,7 +519,7 @@ static const char *regname(uint32_t regbase, int color)
 		init_a2xx();
 	}
 
-	info = rnndec_decodeaddr(color ? vc : vc_nocolor, dom, regbase, 0);
+	info = rnndec_decodeaddr(color ? vc : vc_nocolor, finddom(regbase), regbase, 0);
 	if (info)
 		return info->name;
 	return NULL;
@@ -576,7 +534,7 @@ static void dump_register(uint32_t regbase, uint32_t dword, int level)
 
 	if (!summary) {
 		struct rnndecaddrinfo *info =
-				rnndec_decodeaddr(vc, dom, regbase, 0);
+				rnndec_decodeaddr(vc, finddom(regbase), regbase, 0);
 
 		if (info && info->typeinfo) {
 			printf("%s%s: %s\n", levels[level], info->name,
@@ -899,7 +857,8 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	printf("%sevent %s\n", levels[level], event_name[dwords[0]]);
+	printf("%sevent %s\n", levels[level],
+			rnndec_decode_enum(vc, "vgt_event_type", dwords[0]));
 }
 
 static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -913,9 +872,11 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 	summary = false;
 
 	printf("%sprim_type:     %s (%d)\n", levels[level],
-			vgt_prim_types[prim_type], prim_type);
+			rnndec_decode_enum(vc, "pc_di_primtype", prim_type),
+			prim_type);
 	printf("%ssource_select: %s (%d)\n", levels[level],
-			vgt_source_select[source_select], source_select);
+			rnndec_decode_enum(vc, "pc_di_src_sel", source_select),
+			source_select);
 	printf("%snum_indices:   %d\n", levels[level], num_indices);
 
 	if (sizedwords == 5) {
