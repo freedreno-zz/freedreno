@@ -37,7 +37,7 @@ struct pgm_header {
 	uint32_t size;
 	uint32_t unknown1;
 	uint32_t unknown2;
-	uint32_t unknown3;
+	uint32_t revision;
 	uint32_t unknown4;
 	uint32_t unknown5;
 	uint32_t unknown6;
@@ -87,7 +87,17 @@ struct uniform {
 	uint32_t unknown7;
 	uint32_t unknown8;
 	uint32_t unknown9;
-	char name[];
+	union {
+		struct {
+			char name[1];
+		} v1;
+		struct {
+			uint32_t unknown10;
+			uint32_t unknown11;
+			uint32_t unknown12;
+			char name[];
+		} v2;
+	};
 };
 
 struct sampler {
@@ -110,6 +120,18 @@ struct varying {
 	char name[];
 };
 
+struct output {
+	uint32_t type_info;
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t unknown4;
+	uint32_t unknown5;
+	uint32_t unknown6;
+	uint32_t unknown7;
+	uint32_t unknown8;
+	char name[];
+};
+
 struct constant {
 	uint32_t unknown1;
 	uint32_t unknown2;
@@ -126,6 +148,7 @@ struct state {
 	struct uniform *uniforms[32];
 	struct sampler *samplers[32];
 	struct varying *varyings[32];
+	struct output  *outputs[0];  /* I guess only one?? */
 };
 
 const char *infile;
@@ -259,6 +282,54 @@ static void dump_ascii(char *buf, int sz)
 	printf("\n");
 }
 
+static void dump_hex_ascii(char *buf, int sz)
+{
+	uint8_t *ptr = (uint8_t *)buf;
+	uint8_t *end = ptr + sz;
+	uint8_t *ascii = ptr;
+	int i = 0;
+
+	printf("-----------------------------------------------\n");
+	printf("%d (0x%x) bytes\n", sz, sz);
+
+	while (ptr < end) {
+		uint32_t d = 0;
+
+		printf((i % 4) ? " " : "\t");
+
+		d |= *(ptr++) <<  0;
+		d |= *(ptr++) <<  8;
+		d |= *(ptr++) << 16;
+		d |= *(ptr++) << 24;
+
+		printf("%08x", d);
+
+		if ((i % 4) == 3) {
+			int j;
+			printf("\t|");
+			for (j = 0; j < 16; j++) {
+				uint8_t c = *(ascii++);
+				c ^= 0xff;
+				printf("%c", (isascii(c) && !iscntrl(c)) ? c : '.');
+			}
+			printf("|\n");
+		}
+
+		i++;
+	}
+
+	if (i % 8) {
+		int j;
+		printf("\t|");
+		while (ascii < end) {
+			uint8_t c = *(ascii++);
+			c ^= 0xff;
+			printf("%c", (isascii(c) && !iscntrl(c)) ? c : '.');
+		}
+		printf("|\n");
+	}
+}
+
 void *next_sect(struct state *state, int *sect_size)
 {
 	char *end = find_sect_end(state->buf, state->sz);
@@ -293,12 +364,21 @@ static void dump_attribute(struct attribute *attrib)
 			attrib->const_idx, attrib->name);
 }
 
+static inline int is_uniform_v2(struct uniform *uniform)
+{
+	/* TODO maybe this should be based on revision #? */
+	if (uniform->v2.unknown10 == 0)
+		return 1;
+	return 0;
+}
+
 static void dump_uniform(struct uniform *uniform)
 {
+	char *name = is_uniform_v2(uniform) ? uniform->v2.name : uniform->v1.name;
 	if (uniform->const_reg == -1) {
-		printf("\tC%d+: %s\n", uniform->const_base, uniform->name);
+		printf("\tC%d+: %s\n", uniform->const_base, name);
 	} else {
-		printf("\tC%d: %s\n", uniform->const_reg, uniform->name);
+		printf("\tC%d: %s\n", uniform->const_reg, name);
 	}
 }
 
@@ -310,6 +390,11 @@ static void dump_sampler(struct sampler *sampler)
 static void dump_varying(struct varying *varying)
 {
 	printf("\tR%d: %s\n", varying->reg, varying->name);
+}
+
+static void dump_output(struct output *output)
+{
+	printf("\tR?: %s\n", output->name);
 }
 
 static void dump_constant(struct constant *constant)
@@ -470,6 +555,7 @@ static void dump_shaders_a3xx(struct state *state)
 		uint8_t *instrs = NULL;
 
 		vs_hdr = next_sect(state, &hdr_size);
+printf("hdr_size=%d\n", hdr_size);
 
 		/* seems like there are two cases, either:
 		 *  1) 152 byte header,
@@ -478,16 +564,22 @@ static void dump_shaders_a3xx(struct state *state)
 		 * or, if there are no compiler consts, this can be
 		 * all smashed in one large section
 		 */
-
-		if (hdr_size > 152) {
-			instrs = &vs_hdr[152];
-			instrs_size = hdr_size - 152;
-			hdr_size = 152;
+		int n;
+		if (state->hdr->revision >= 7)
+			n = 156;
+		else
+			n = 152;
+		if (hdr_size > n) {
+			instrs = &vs_hdr[n];
+			instrs_size = hdr_size - n;
+			hdr_size = n;
 			compact = 1;
 		} else {
 			while (1) {
 				void *ptr = next_sect(state, &sect_size);
-				if (sect_size != 32) {
+
+dump_hex_ascii(ptr, sect_size);
+				if ((sect_size != 32) && (sect_size != 44)) {
 					/* end of constants: */
 					instrs = ptr;
 					instrs_size = sect_size;
@@ -519,9 +611,14 @@ static void dump_shaders_a3xx(struct state *state)
 		}
 
 		if (!compact) {
+			if (state->hdr->revision >= 7) {
+				instrs += ALIGN(instrs_size, 8) - instrs_size;
+				instrs_size = ALIGN(instrs_size, 8);
+			}
 			instrs += 32;
 			instrs_size -= 32;
 		}
+
 		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level+1, SHADER_VERTEX);
 		dump_raw_shader((uint32_t *)instrs, instrs_size / 4, i, "vo3");
 		free(vs_hdr);
@@ -536,16 +633,28 @@ static void dump_shaders_a3xx(struct state *state)
 
 		fs_hdr = next_sect(state, &hdr_size);
 
-		/* two cases, similar to vertex shader, but magic # is 200.. */
+printf("hdr_size=%d\n", hdr_size);
+		/* two cases, similar to vertex shader, but magic # is 200
+		 * (or 208 for newer?)..
+		 */
+		int n;
+		if (state->hdr->revision >= 8)
+			n = 208;
+		else if (state->hdr->revision == 7)
+			n = 204;
+		else
+			n = 200;
 
-		if (hdr_size > 200) {
-			instrs = &fs_hdr[200];
-			instrs_size = hdr_size - 200;
-			hdr_size = 200;
+		if (hdr_size > n) {
+			instrs = &fs_hdr[n];
+			instrs_size = hdr_size - n;
+			hdr_size = n;
 			compact = 1;
 		} else {
 			while (1) {
 				void *ptr = next_sect(state, &sect_size);
+
+dump_hex_ascii(ptr, sect_size);
 				if (sect_size != 32) {
 					/* end of constants: */
 					instrs = ptr;
@@ -578,8 +687,13 @@ static void dump_shaders_a3xx(struct state *state)
 		}
 
 		if (!compact) {
-			instrs += 32;
-			instrs_size -= 32;
+			if (state->hdr->revision >= 7) {
+				instrs += 44;
+				instrs_size -= 44;
+			} else {
+				instrs += 32;
+				instrs_size -= 32;
+			}
 		}
 		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level+1, SHADER_FRAGMENT);
 		dump_raw_shader((uint32_t *)instrs, instrs_size / 4, i, "fo3");
@@ -596,6 +710,7 @@ void dump_program(struct state *state)
 
 	printf("######## HEADER: (size %d)\n", sect_size);
 	printf("\tsize:       %d\n", state->hdr->size);
+	printf("\trevision:   %d\n", state->hdr->revision);
 	printf("\tattributes: %d\n", state->hdr->num_attribs);
 	printf("\tuniforms:   %d\n", state->hdr->num_uniforms);
 	printf("\tsamplers:   %d\n", state->hdr->num_samplers);
@@ -607,7 +722,10 @@ void dump_program(struct state *state)
 	/* there seems to be two 0xba5eba11's at the end of the header, possibly
 	 * with some other stuff between them:
 	 */
-	next_sect(state, &sect_size);
+	ptr = next_sect(state, &sect_size);
+	if (full_dump) {
+		dump_hex_ascii(ptr, sect_size);
+	}
 
 	for (i = 0; (i < state->hdr->num_attribs) && (state->sz > 0); i++) {
 		state->attribs[i] = next_sect(state, &sect_size);
@@ -615,8 +733,10 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->attribs[i]->type_info))
+		while (!valid_type(state->attribs[i]->type_info)) {
+			dump_hex_ascii(state->attribs[i], sect_size);
 			state->attribs[i] = next_sect(state, &sect_size);
+		}
 
 		clean_ascii(state->attribs[i]->name, sect_size - 28);
 		if (full_dump) {
@@ -632,10 +752,17 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->uniforms[i]->type_info))
+		while (!valid_type(state->uniforms[i]->type_info)) {
+			dump_hex_ascii(state->uniforms[i], sect_size);
 			state->uniforms[i] = next_sect(state, &sect_size);
+		}
 
-		clean_ascii(state->uniforms[i]->name, sect_size - 41);
+		if (is_uniform_v2(state->uniforms[i])) {
+			clean_ascii(state->uniforms[i]->v2.name, sect_size - 53);
+		} else {
+			clean_ascii(state->uniforms[i]->v1.name, sect_size - 41);
+		}
+
 		if (full_dump) {
 			printf("######## UNIFORM: (size %d)\n", sect_size);
 			dump_uniform(state->uniforms[i]);
@@ -649,14 +776,23 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->samplers[i]->type_info))
+		while (!valid_type(state->samplers[i]->type_info)) {
+			dump_hex_ascii(state->samplers[i], sect_size);
 			state->samplers[i] = next_sect(state, &sect_size);
+		}
 
 		clean_ascii(state->samplers[i]->name, sect_size - 33);
 		if (full_dump) {
 			printf("######## SAMPLER: (size %d)\n", sect_size);
 			dump_sampler(state->samplers[i]);
 			dump_hex((char *)state->samplers[i], sect_size);
+		}
+
+		// need to test with multiple samplers to see if we get one
+		// of these extra sections for each sampler:
+		if (state->hdr->revision >= 7) {
+			ptr = next_sect(state, &sect_size);
+			dump_hex_ascii(ptr, sect_size);
 		}
 	}
 
@@ -666,14 +802,31 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->varyings[i]->type_info))
+		while (!valid_type(state->varyings[i]->type_info)) {
+			dump_hex_ascii(state->varyings[i], sect_size);
 			state->varyings[i] = next_sect(state, &sect_size);
+		}
 
 		clean_ascii(state->varyings[i]->name, sect_size - 16);
 		if (full_dump) {
 			printf("######## VARYING: (size %d)\n", sect_size);
 			dump_varying(state->varyings[i]);
 			dump_hex((char *)state->varyings[i], sect_size);
+		}
+	}
+
+	/* not sure exactly which revision started this, but seems at least
+	 * rev7 and rev8 implicitly include a new section for gl_FragColor:
+	 */
+	if (state->hdr->revision >= 7) {
+		/* I guess only one? */
+		state->outputs[0] = next_sect(state, &sect_size);
+
+		clean_ascii(state->outputs[0]->name, sect_size - 32);
+		if (full_dump) {
+			printf("######## OUTPUT: (size %d)\n", sect_size);
+			dump_output(state->outputs[0]);
+			dump_hex((char *)state->outputs[0], sect_size);
 		}
 	}
 
