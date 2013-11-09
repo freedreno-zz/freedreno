@@ -37,7 +37,7 @@ struct pgm_header {
 	uint32_t size;
 	uint32_t unknown1;
 	uint32_t unknown2;
-	uint32_t unknown3;
+	uint32_t revision;
 	uint32_t unknown4;
 	uint32_t unknown5;
 	uint32_t unknown6;
@@ -47,6 +47,7 @@ struct pgm_header {
 	uint32_t num_uniforms;
 	uint32_t num_samplers;
 	uint32_t num_varyings;
+	uint32_t num_uniformblocks;
 };
 
 struct vs_header {
@@ -64,7 +65,57 @@ struct vs_header {
 struct fs_header {
 	uint32_t unknown1;
 };
-
+/*
+	// Covers a lot of type_info
+	// varying, attribute, uniform, sampler
+	type_info & 0xFF
+	if ((type_info >> 8) == 0x8b) // vector
+		0x50 = vec2
+		0x51 = vec3
+		0x52 = vec4
+		0x53 = ivec2
+		0x54 = ivec3
+		0x55 = ivec4
+		0x56 = bool // Why is this in vector?
+		0x57 = bvec2
+		0x58 = bvec3
+		0x59 = bvec4
+		0x5a = mat2
+		0x5b = mat3
+		0x5c = mat4
+		0x5a = mat2x2 // Same as mat2
+		0x65 = mat2x3
+		0x66 = mat2x4
+		0x67 = mat3x2
+		0x5b = mat3x3 // Same as mat3
+		0x68 = mat3x4
+		0x69 = mat4x2
+		0x6a = mat4x3
+		0x5c = mat4x4 // same as mat4
+		0x5e = sampler2D
+		0x5f = sampler3D
+		0x60 = samplerCube // XXX: Doesn't work
+		0x62 = sampler2DShadow
+		0xc6 = uvec2
+		0xc7 = uvec3
+		0xc8 = uvec4
+	else if ((type_info >> 8) == 0x8d) // GLES3 samplers
+		0xC1 = sampler2DArray
+		0xC4 = sampler2DArrayShadow
+		0xC5 = samplerCubeShadow
+		0xCA = isampler2D
+		0xCB = isampler3D
+		0xCC = isamplerCube
+		0xD2 = usampler2D
+		0xD3 = usampler3D
+		0xD4 = usamplerCube
+		0xD7 = isampler2DArray
+		0xD7 = usampler2DArray // Is the same as isampler2DArray?
+	else // 0x14 = single
+		0x04 = int
+		0x05 = uint
+		0x06 = float
+*/
 struct attribute {
 	uint32_t type_info;
 	uint32_t reg;       /* seems to be the register the fetch instruction loads to */
@@ -87,14 +138,58 @@ struct uniform {
 	uint32_t unknown7;
 	uint32_t unknown8;
 	uint32_t unknown9;
+	union {
+		struct {
+			char name[1];
+		} v1;
+		struct {
+			uint32_t unknown10;
+			uint32_t unknown11;
+			uint32_t unknown12;
+			char name[];
+		} v2;
+	};
+};
+
+struct uniformblockmember {
+	uint32_t type_info;
+	uint32_t is_array;
+	uint32_t array_size; /* elements in the array */
+	uint32_t unknown2; /* Same as array_size */
+	uint32_t unknown3; /* Seems to be a offset within UBO in vertex (by components) */
+	uint32_t unknown4;
+	uint32_t unknown5; /* Seems to be a offset within UBO in fragment (by vec4) */
+	uint32_t unknown6;
+	uint32_t unknown7;
+	uint32_t unknown8;
+	uint32_t unknown9; /* UBO block index? */
+	uint32_t unknown10;
+	uint32_t unknown11;
+	uint32_t unknown12;
 	char name[];
 };
 
-struct sampler {
+struct uniformblock
+{
 	uint32_t type_info;
+	uint32_t unknown1;
 	uint32_t unknown2;
 	uint32_t unknown3;
 	uint32_t unknown4;
+	uint32_t num_members;
+	uint32_t num_members2;
+	uint32_t unknown5;
+	uint32_t unknown6;
+	uint32_t unknown7;
+	char name[];
+};
+
+
+struct sampler {
+	uint32_t type_info;
+	uint32_t is_array;
+	uint32_t array_size; /* elements in the array */
+	uint32_t unknown4; /* same as array_size */
 	uint32_t unknown5;
 	uint32_t unknown6;
 	uint32_t const_idx; /* the CONST() indx value for the sampler */
@@ -107,6 +202,18 @@ struct varying {
 	uint32_t unknown2;
 	uint32_t unknown3;
 	uint32_t reg;       /* the register holding the value (on entry to the shader) */
+	char name[];
+};
+
+struct output {
+	uint32_t type_info;
+	uint32_t unknown2;
+	uint32_t unknown3;
+	uint32_t unknown4;
+	uint32_t unknown5;
+	uint32_t unknown6;
+	uint32_t unknown7;
+	uint32_t unknown8;
 	char name[];
 };
 
@@ -126,6 +233,11 @@ struct state {
 	struct uniform *uniforms[32];
 	struct sampler *samplers[32];
 	struct varying *varyings[32];
+	struct {
+		struct uniformblock *header;
+		struct uniformblockmember **members; /* GL ES 3.0 spec mandates minimum 16K support. a3xx supports 65K */
+	} uniformblocks[24]; /* Maximum a330 supports */
+	struct output  *outputs[0];  /* I guess only one?? */
 };
 
 const char *infile;
@@ -259,6 +371,54 @@ static void dump_ascii(char *buf, int sz)
 	printf("\n");
 }
 
+static void dump_hex_ascii(char *buf, int sz)
+{
+	uint8_t *ptr = (uint8_t *)buf;
+	uint8_t *end = ptr + sz;
+	uint8_t *ascii = ptr;
+	int i = 0;
+
+	printf("-----------------------------------------------\n");
+	printf("%d (0x%x) bytes\n", sz, sz);
+
+	while (ptr < end) {
+		uint32_t d = 0;
+
+		printf((i % 4) ? " " : "\t");
+
+		d |= *(ptr++) <<  0;
+		d |= *(ptr++) <<  8;
+		d |= *(ptr++) << 16;
+		d |= *(ptr++) << 24;
+
+		printf("%08x", d);
+
+		if ((i % 4) == 3) {
+			int j;
+			printf("\t|");
+			for (j = 0; j < 16; j++) {
+				uint8_t c = *(ascii++);
+				c ^= 0xff;
+				printf("%c", (isascii(c) && !iscntrl(c)) ? c : '.');
+			}
+			printf("|\n");
+		}
+
+		i++;
+	}
+
+	if (i % 8) {
+		int j;
+		printf("\t|");
+		while (ascii < end) {
+			uint8_t c = *(ascii++);
+			c ^= 0xff;
+			printf("%c", (isascii(c) && !iscntrl(c)) ? c : '.');
+		}
+		printf("|\n");
+	}
+}
+
 void *next_sect(struct state *state, int *sect_size)
 {
 	char *end = find_sect_end(state->buf, state->sz);
@@ -280,11 +440,19 @@ static int valid_type(uint32_t type_info)
 {
 	switch ((type_info >> 8) & 0xff) {
 	case 0x8b:     /* vector */
+	case 0x8d:     /* GLES3 samplers */
 	case 0x14:     /* float */
 		return 1;
 	default:
 		return 0;
 	}
+}
+
+static int valid_uniformblock(uint32_t type_info)
+{
+	if (type_info == 0x128)
+		return 1;
+	return 0;
 }
 
 static void dump_attribute(struct attribute *attrib)
@@ -293,12 +461,21 @@ static void dump_attribute(struct attribute *attrib)
 			attrib->const_idx, attrib->name);
 }
 
+static inline int is_uniform_v2(struct uniform *uniform)
+{
+	/* TODO maybe this should be based on revision #? */
+	if (uniform->v2.unknown10 == 0)
+		return 1;
+	return 0;
+}
+
 static void dump_uniform(struct uniform *uniform)
 {
+	char *name = is_uniform_v2(uniform) ? uniform->v2.name : uniform->v1.name;
 	if (uniform->const_reg == -1) {
-		printf("\tC%d+: %s\n", uniform->const_base, uniform->name);
+		printf("\tC%d+: %s\n", uniform->const_base, name);
 	} else {
-		printf("\tC%d: %s\n", uniform->const_reg, uniform->name);
+		printf("\tC%d: %s\n", uniform->const_reg, name);
 	}
 }
 
@@ -310,6 +487,21 @@ static void dump_sampler(struct sampler *sampler)
 static void dump_varying(struct varying *varying)
 {
 	printf("\tR%d: %s\n", varying->reg, varying->name);
+}
+
+static void dump_uniformblock(struct uniformblock *uniformblock)
+{
+	printf("\tUniform Block: %s(%d)\n", uniformblock->name, uniformblock->num_members);
+}
+
+static void dump_uniformblockmember(struct uniformblockmember *member)
+{
+	printf("Uniform Block member: %s\n", member->name);
+}
+
+static void dump_output(struct output *output)
+{
+	printf("\tR?: %s\n", output->name);
 }
 
 static void dump_constant(struct constant *constant)
@@ -470,6 +662,7 @@ static void dump_shaders_a3xx(struct state *state)
 		uint8_t *instrs = NULL;
 
 		vs_hdr = next_sect(state, &hdr_size);
+printf("hdr_size=%d\n", hdr_size);
 
 		/* seems like there are two cases, either:
 		 *  1) 152 byte header,
@@ -478,21 +671,29 @@ static void dump_shaders_a3xx(struct state *state)
 		 * or, if there are no compiler consts, this can be
 		 * all smashed in one large section
 		 */
-
-		if (hdr_size > 152) {
-			instrs = &vs_hdr[152];
-			instrs_size = hdr_size - 152;
-			hdr_size = 152;
+		int n;
+		if (state->hdr->revision >= 0xb)
+			n = 160;
+		else if (state->hdr->revision >= 7)
+			n = 156;
+		else
+			n = 152;
+		if (hdr_size > n) {
+			instrs = &vs_hdr[n];
+			instrs_size = hdr_size - n;
+			hdr_size = n;
 			compact = 1;
 		} else {
 			while (1) {
 				void *ptr = next_sect(state, &sect_size);
-				if (sect_size != 32) {
+
+				if ((sect_size != 32) && (sect_size != 44)) {
 					/* end of constants: */
 					instrs = ptr;
 					instrs_size = sect_size;
 					break;
 				}
+				dump_hex_ascii(ptr, sect_size);
 				constants[nconsts++] = ptr;
 			}
 		}
@@ -519,9 +720,14 @@ static void dump_shaders_a3xx(struct state *state)
 		}
 
 		if (!compact) {
+			if (state->hdr->revision >= 7) {
+				instrs += ALIGN(instrs_size, 8) - instrs_size;
+				instrs_size = ALIGN(instrs_size, 8);
+			}
 			instrs += 32;
 			instrs_size -= 32;
 		}
+
 		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level+1, SHADER_VERTEX);
 		dump_raw_shader((uint32_t *)instrs, instrs_size / 4, i, "vo3");
 		free(vs_hdr);
@@ -536,22 +742,37 @@ static void dump_shaders_a3xx(struct state *state)
 
 		fs_hdr = next_sect(state, &hdr_size);
 
-		/* two cases, similar to vertex shader, but magic # is 200.. */
+printf("hdr_size=%d\n", hdr_size);
+		/* two cases, similar to vertex shader, but magic # is 200
+		 * (or 208 for newer?)..
+		 */
+		int n;
+		if (state->hdr->revision >= 0xb)
+			n = 256;
+		else if (state->hdr->revision >= 8)
+			n = 208;
+		else if (state->hdr->revision == 7)
+			n = 204;
+		else
+			n = 200;
 
-		if (hdr_size > 200) {
-			instrs = &fs_hdr[200];
-			instrs_size = hdr_size - 200;
-			hdr_size = 200;
+		if (hdr_size > n) {
+			instrs = &fs_hdr[n];
+			instrs_size = hdr_size - n;
+			hdr_size = n;
 			compact = 1;
 		} else {
 			while (1) {
 				void *ptr = next_sect(state, &sect_size);
-				if (sect_size != 32) {
+
+				if ((sect_size != 32) && (sect_size != 44)) {
 					/* end of constants: */
 					instrs = ptr;
 					instrs_size = sect_size;
 					break;
 				}
+
+				dump_hex_ascii(ptr, sect_size);
 				constants[nconsts++] = ptr;
 			}
 		}
@@ -578,8 +799,13 @@ static void dump_shaders_a3xx(struct state *state)
 		}
 
 		if (!compact) {
-			instrs += 32;
-			instrs_size -= 32;
+			if (state->hdr->revision >= 7) {
+				instrs += 44;
+				instrs_size -= 44;
+			} else {
+				instrs += 32;
+				instrs_size -= 32;
+			}
 		}
 		disasm_a3xx((uint32_t *)instrs, instrs_size / 4, level+1, SHADER_FRAGMENT);
 		dump_raw_shader((uint32_t *)instrs, instrs_size / 4, i, "fo3");
@@ -595,11 +821,13 @@ void dump_program(struct state *state)
 	state->hdr = next_sect(state, &sect_size);
 
 	printf("######## HEADER: (size %d)\n", sect_size);
-	printf("\tsize:       %d\n", state->hdr->size);
-	printf("\tattributes: %d\n", state->hdr->num_attribs);
-	printf("\tuniforms:   %d\n", state->hdr->num_uniforms);
-	printf("\tsamplers:   %d\n", state->hdr->num_samplers);
-	printf("\tvaryings:   %d\n", state->hdr->num_varyings);
+	printf("\tsize:           %d\n", state->hdr->size);
+	printf("\trevision:       %d\n", state->hdr->revision);
+	printf("\tattributes:     %d\n", state->hdr->num_attribs);
+	printf("\tuniforms:       %d\n", state->hdr->num_uniforms);
+	printf("\tsamplers:       %d\n", state->hdr->num_samplers);
+	printf("\tvaryings:       %d\n", state->hdr->num_varyings);
+	printf("\tuniform blocks: %d\n", state->hdr->num_uniformblocks);
 	if (full_dump)
 		dump_hex((void *)state->hdr, sect_size);
 	printf("\n");
@@ -607,7 +835,10 @@ void dump_program(struct state *state)
 	/* there seems to be two 0xba5eba11's at the end of the header, possibly
 	 * with some other stuff between them:
 	 */
-	next_sect(state, &sect_size);
+	ptr = next_sect(state, &sect_size);
+	if (full_dump) {
+		dump_hex_ascii(ptr, sect_size);
+	}
 
 	for (i = 0; (i < state->hdr->num_attribs) && (state->sz > 0); i++) {
 		state->attribs[i] = next_sect(state, &sect_size);
@@ -615,8 +846,10 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->attribs[i]->type_info))
+		while (!valid_type(state->attribs[i]->type_info)) {
+			dump_hex_ascii(state->attribs[i], sect_size);
 			state->attribs[i] = next_sect(state, &sect_size);
+		}
 
 		clean_ascii(state->attribs[i]->name, sect_size - 28);
 		if (full_dump) {
@@ -632,10 +865,17 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->uniforms[i]->type_info))
+		while (!valid_type(state->uniforms[i]->type_info)) {
+			dump_hex_ascii(state->uniforms[i], sect_size);
 			state->uniforms[i] = next_sect(state, &sect_size);
+		}
 
-		clean_ascii(state->uniforms[i]->name, sect_size - 41);
+		if (is_uniform_v2(state->uniforms[i])) {
+			clean_ascii(state->uniforms[i]->v2.name, sect_size - 53);
+		} else {
+			clean_ascii(state->uniforms[i]->v1.name, sect_size - 41);
+		}
+
 		if (full_dump) {
 			printf("######## UNIFORM: (size %d)\n", sect_size);
 			dump_uniform(state->uniforms[i]);
@@ -649,8 +889,10 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->samplers[i]->type_info))
+		while (!valid_type(state->samplers[i]->type_info)) {
+			dump_hex_ascii(state->samplers[i], sect_size);
 			state->samplers[i] = next_sect(state, &sect_size);
+		}
 
 		clean_ascii(state->samplers[i]->name, sect_size - 33);
 		if (full_dump) {
@@ -658,7 +900,18 @@ void dump_program(struct state *state)
 			dump_sampler(state->samplers[i]);
 			dump_hex((char *)state->samplers[i], sect_size);
 		}
+
 	}
+
+	// These sections show up after all of the other sampler sections
+	// Loops through them all since we don't deal with them
+	if (state->hdr->revision >= 7) {
+		for (i = 0; (i < state->hdr->num_samplers) && (state->sz > 0); i++) {
+			ptr = next_sect(state, &sect_size);
+			dump_hex_ascii(ptr, sect_size);
+		}
+	}
+
 
 	for (i = 0; (i < state->hdr->num_varyings) && (state->sz > 0); i++) {
 		state->varyings[i] = next_sect(state, &sect_size);
@@ -666,14 +919,74 @@ void dump_program(struct state *state)
 		/* hmm, for a3xx (or maybe just newer driver version), we have some
 		 * extra sections that don't seem useful, so skip these:
 		 */
-		while (!valid_type(state->varyings[i]->type_info))
+		while (!valid_type(state->varyings[i]->type_info)) {
+			dump_hex_ascii(state->varyings[i], sect_size);
 			state->varyings[i] = next_sect(state, &sect_size);
+		}
 
 		clean_ascii(state->varyings[i]->name, sect_size - 16);
 		if (full_dump) {
 			printf("######## VARYING: (size %d)\n", sect_size);
 			dump_varying(state->varyings[i]);
 			dump_hex((char *)state->varyings[i], sect_size);
+		}
+	}
+
+	/* not sure exactly which revision started this, but seems at least
+	 * rev7 and rev8 implicitly include a new section for gl_FragColor:
+	 */
+	if (state->hdr->revision >= 7) {
+		/* I guess only one? */
+		state->outputs[0] = next_sect(state, &sect_size);
+
+		clean_ascii(state->outputs[0]->name, sect_size - 32);
+		if (full_dump) {
+			printf("######## OUTPUT: (size %d)\n", sect_size);
+			dump_output(state->outputs[0]);
+			dump_hex((char *)state->outputs[0], sect_size);
+		}
+	}
+
+	for (i = 0; (i < state->hdr->num_uniformblocks) && (state->sz > 0); i++) {
+		state->uniformblocks[i].header = next_sect(state, &sect_size);
+
+		clean_ascii(state->uniformblocks[i].header->name, sect_size - 40);
+		if (full_dump) {
+			printf("######## UNIFORM BLOCK: (size %d)\n", sect_size);
+			dump_uniformblock(state->uniformblocks[i].header);
+			dump_hex((char *)state->uniformblocks[i].header, sect_size);
+		}
+
+		/*
+		 * OpenGL ES 3.0 spec mandates a minimum amount of 16K members supported
+		 * a330 supports a minimum of 65K
+		 */
+		state->uniformblocks[i].members = malloc(state->uniformblocks[i].header->num_members * sizeof(void*));
+
+		int member = 0;
+		for (member = 0; (member < state->uniformblocks[i].header->num_members) && (state->sz > 0); member++) {
+			state->uniformblocks[i].members[member] = next_sect(state, &sect_size);
+
+			clean_ascii(state->uniformblocks[i].members[member]->name, sect_size - 56);
+			if (full_dump) {
+				printf("######## UNIFORM BLOCK MEMBER: (size %d)\n", sect_size);
+				dump_uniformblockmember(state->uniformblocks[i].members[member]);
+				dump_hex((char *)state->uniformblocks[i].members[member], sect_size);
+			}
+		}
+		/*
+		 * Qualcomm saves the UBO members twice for each UBO
+		 * Don't ask me why
+		 */
+		for (member = 0; (member < state->uniformblocks[i].header->num_members) && (state->sz > 0); member++) {
+			state->uniformblocks[i].members[member] = next_sect(state, &sect_size);
+
+			clean_ascii(state->uniformblocks[i].members[member]->name, sect_size - 56);
+			if (full_dump) {
+				printf("######## UNIFORM BLOCK MEMBER2: (size %d)\n", sect_size);
+				dump_uniformblockmember(state->uniformblocks[i].members[member]);
+				dump_hex((char *)state->uniformblocks[i].members[member], sect_size);
+			}
 		}
 	}
 
@@ -705,6 +1018,9 @@ void dump_program(struct state *state)
 		dump_ascii(ptr, sect_size);
 		free(ptr);
 	}
+	/* cleanup the uniform buffer members we allocated */
+	if (state->hdr->num_uniformblocks > 0)
+		free (state->uniformblocks[i].members);
 }
 
 static int check_extension(const char *path, const char *ext)
@@ -718,6 +1034,7 @@ int main(int argc, char **argv)
 	enum debug_t debug = 0;
 	void *buf = NULL;
 	int fd, sz, i;
+	int raw_program = 0;
 
 	/* lame argument parsing: */
 
@@ -747,7 +1064,18 @@ int main(int argc, char **argv)
 			argc--;
 			continue;
 		}
-
+		if ((argc > 1) && !strcmp(argv[1], "--raw")) {
+			raw_program = 1;
+			argv++;
+			argc--;
+			continue;
+		}
+		if ((argc > 1) && !strcmp(argv[1], "--gpu300")) {
+			gpu_id = 320;
+			argv++;
+			argc--;
+			continue;
+		}
 		break;
 	}
 
@@ -766,12 +1094,34 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	if (raw_program)
+	{
+		read(fd, &sz, 4);
+		free(buf);
+
+		/* note: allow hex dumps to go a bit past the end of the buffer..
+		 * might see some garbage, but better than missing the last few bytes..
+		 */
+		buf = calloc(1, sz + 3);
+		read(fd, buf + 4, sz);
+		(*(int*)buf) = sz;
+
+		struct state state = {
+				.buf = buf,
+				.sz = sz,
+		};
+		printf("############################################################\n");
+		printf("program:\n");
+		dump_program(&state);
+		printf("############################################################\n");
+		return 0;
+	}
+
 	/* figure out what sort of input we are dealing with: */
 	if (!check_extension(infile, ".rd")) {
 		int (*disasm)(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
 		enum shader_t shader = 0;
 		int ret;
-
 		if (check_extension(infile, ".vo")) {
 			disasm = disasm_a2xx;
 			shader = SHADER_VERTEX;
