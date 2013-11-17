@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1">
+<!-- errg, it would be nice if rx/ry could be specified in the CSS.. -->
+<defs>
+	<linearGradient id="component-gradient" x1="0" x2="0" y1="0" y2="1">
+		<stop class="comp-stop1" offset="20%"/>
+		<stop class="comp-stop2" offset="100%"/>
+	</linearGradient>
+	<linearGradient id="subcomponent-gradient" x1="0" x2="0" y1="0" y2="1">
+		<stop class="subcomp-stop1" offset="20%"/>
+		<stop class="subcomp-stop2" offset="100%"/>
+	</linearGradient>
+	<style type="text/css"><![CDATA[
+		text#comp {
+			fill: black;
+			font-family: Helvetica;
+			font-weight: Bold;
+			font-size:  20px;
+			text-anchor: middle;
+		}
+		rect#comp { 
+			fill: url(#component-gradient);
+			stroke: black;
+		}
+		.comp-stop1 { stop-color: #ffffff; }
+		.comp-stop2 { stop-color: #ffff88; }
+
+		text#subcomp {
+			fill: black;
+			font-family: Helvetica;
+			font-weight: Bold;
+			font-size:  12px;
+			text-anchor: middle;
+		}
+		rect#subcomp { 
+			fill: url(#subcomponent-gradient);
+			stroke: black;
+		}
+		.subcomp-stop1 { stop-color: #ffffff; }
+		.subcomp-stop2 { stop-color: #ff88ff; }
+		line#arrow {
+			stroke: black;
+			stroke-width: 2;
+			marker-end: url(#arrow);
+		}
+		text#arrow {
+			fill: black;
+			font-family: Helvetica;
+			font-size: 20px;
+			text-anchor: start;
+		}
+	]]></style>
+	<marker id="arrow" viewBox="0 0 10 10" refX="1" refY="5"
+			markerUnits="strokeWidth" orient="auto"
+			markerWidth="4" markerHeight="30">
+		<polyline points="0,0 10,5 0,10 1,5" fill="black"/>
+	</marker>
+</defs>
+
+<!-- shouldn't there be some way to inherit comp/subcomp from the parent svg element?? -->
+ 
+ <svg x="20" y="20">
+	<svg x="0" y="0">
+		<rect id="comp" rx="10" ry="10" width="250" height="80"/>
+		<text id="comp" x="125" y="40">X11 Application</text>
+		<line id="arrow" x1="125" y1="80" x2="125" y2="140"/>
+	</svg>
+
+	<svg x="300" y="0">
+		<rect id="comp" rx="10" ry="10" width="250" height="80"/>
+		<text id="comp" x="125" y="40">OpenGL Application</text>
+		<line id="arrow" x1="50" y1="80" x2="50" y2="140"/>
+		<text id="arrow" x="55" y="120">GLX</text>
+		<line id="arrow" x1="200" y1="80" x2="200" y2="290"/>
+		<text id="arrow" x="205" y="185">DRI</text>
+	</svg>
+
+	<svg x="0" y="150">
+		<rect id="comp" rx="10" ry="10" width="450" height="80"/>
+		<text id="comp" x="225" y="40">X.Org</text>
+		<line id="arrow" x1="125" y1="80" x2="125" y2="140"/>
+		<line id="arrow" x1="350" y1="80" x2="350" y2="140"/>
+		<text id="arrow" x="355" y="120">AIGLX</text>
+	</svg>
+
+	<svg x="0" y="300">
+		<rect id="comp" rx="10" ry="10" width="250" height="80"/>
+		<text id="comp" x="125" y="40">xf86-video-freedreno</text>
+		<svg x="20" y="50">
+			<rect id="subcomp" rx="5" ry="5" width="70" height="40"/>
+			<text id="subcomp" x="35" y="20">fbmode</text>
+			<line id="arrow" x1="35" y1="40" x2="35" y2="240"/>
+		</svg>
+		<svg x="100" y="50">
+			<rect id="subcomp" rx="5" ry="5" width="70" height="40"/>
+			<text id="subcomp" x="35" y="20">drmmode</text>
+		</svg>
+		<line id="arrow" x1="215" y1="80" x2="215" y2="140"/>
+	</svg>
+
+	<svg x="300" y="300">
+		<rect id="comp" rx="10" ry="10" width="250" height="80"/>
+		<text id="comp" x="125" y="40">freedreno (mesa/gallium)</text>
+		<line id="arrow" x1="125" y1="80" x2="125" y2="140"/>
+	</svg>
+
+	<svg x="180" y="450">
+		<rect id="comp" rx="10" ry="10" width="370" height="80"/>
+		<text id="comp" x="185" y="40">libdrm_freedreno</text>
+		<svg x="20" y="50">
+			<rect id="subcomp" rx="5" ry="5" width="150" height="40"/>
+			<text id="subcomp" x="75" y="20">msm</text>
+		</svg>
+		<svg x="200" y="50">
+			<rect id="subcomp" rx="5" ry="5" width="150" height="40"/>
+			<text id="subcomp" x="75" y="20">kgsl</text>
+			<line id="arrow" x1="75" y1="40" x2="75" y2="90"/>
+		</svg>
+	</svg>
+
+	<svg x="0" y="600">
+		<rect id="comp" rx="10" ry="10" width="250" height="80"/>
+		<text id="comp" x="125" y="40">msm fbdev</text>
+	</svg>
+
+	<svg x="300" y="600">
+		<rect id="comp" rx="10" ry="10" width="250" height="80"/>
+		<text id="comp" x="125" y="40">kgsl + kgsl_drm shim</text>
+	</svg>
+</svg>
+
+<text id="arrow" x="90" y="575">User Space</text>
+<line x1="0" y1="585" x2="590" y2="585" stroke="black" stroke-dasharray="5,5"/>
+<text id="arrow" x="90" y="605">Kernel</text>
+
+</svg>
+
