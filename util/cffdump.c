@@ -480,6 +480,8 @@ static const const struct {
 		REG(SP_VS_OBJ_START_REG, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START_REG, reg_disasm_gpuaddr),
 #undef REG
+}, reg_a4xx[0x7fff] = {
+		/* TODO */
 }, *type0_reg;
 
 static struct rnndeccontext *vc;
@@ -494,7 +496,12 @@ static void init_rnn(char *file, char *domain)
 	rnn_parsefile(db, file);
 	rnn_prepdb(db);
 	dom[0] = rnn_finddomain(db, domain);
-	dom[1] = rnn_finddomain(db, "AXXX");
+	if (!strcmp(domain, "A4XX")) {
+		/* I think even the common registers move around in A4XX.. */
+		dom[1] = dom[0];
+	} else {
+		dom[1] = rnn_finddomain(db, "AXXX");
+	}
 	if (!dom[0] && dom[1]) {
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
 		exit(1);
@@ -505,13 +512,19 @@ static void init_rnn(char *file, char *domain)
 static void init_a2xx(void)
 {
 	type0_reg = reg_a2xx;
-	init_rnn("a2xx/a2xx.xml", "A2XX");
+	init_rnn("adreno/a2xx.xml", "A2XX");
 }
 
 static void init_a3xx(void)
 {
 	type0_reg = reg_a3xx;
-	init_rnn("a3xx/a3xx.xml", "A3XX");
+	init_rnn("adreno/a3xx.xml", "A3XX");
+}
+
+static void init_a4xx(void)
+{
+	type0_reg = reg_a4xx;
+	init_rnn("adreno/a4xx.xml", "A4XX");
 }
 
 static struct rnndomain *finddom(uint32_t regbase)
@@ -672,7 +685,8 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 				disasm_type = SHADER_FRAGMENT;
 			}
 
-			disasm_a3xx(contents, num_unit * 4 * 2, level+2, disasm_type);
+			if (contents)
+				disasm_a3xx(contents, num_unit * 4 * 2, level+2, disasm_type);
 
 			/* dump raw shader: */
 			if (ext && dump_shaders) {
@@ -1037,9 +1051,8 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	type0_reg_written[val/8] |= (1 << (val % 8));
 }
 
-#define CP(x, fxn)   [CP_ ## x] = { "CP_"#x, fxn }
+#define CP(x, fxn)   [CP_ ## x] = { fxn }
 static const struct {
-	const char *name;
 	void (*fxn)(uint32_t *dwords, uint32_t sizedwords, int level);
 } type3_op[0xff] = {
 		CP(ME_INIT, NULL),
@@ -1099,6 +1112,7 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	int dwords_left = sizedwords;
 	uint32_t count = 0; /* dword count including packet header */
 	uint32_t val;
+	const char *name;
 
 	while (dwords_left > 0) {
 		int type = dwords[0] >> 30;
@@ -1138,11 +1152,12 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		case 0x3: /* type-3 */
 			count = ((dwords[0] >> 16) & 0x3fff) + 2;
 			val = GET_PM4_TYPE3_OPCODE(dwords);
+			name = rnndec_decode_enum(vc, "adreno_pm4_type3_packets", val);
 			printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
-					vc->colors->bctarg, type3_op[val].name, vc->colors->reset,
+					vc->colors->bctarg, name, vc->colors->reset,
 					val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
-			if (type3_op[val].name)
-				dump_domain(dwords+1, count-1, level+2, type3_op[val].name);
+			if (name)
+				dump_domain(dwords+1, count-1, level+2, name);
 			if (type3_op[val].fxn)
 				type3_op[val].fxn(dwords+1, count-1, level+1);
 			dump_hex(dwords, count, level+1);
@@ -1273,6 +1288,7 @@ int main(int argc, char **argv)
 				dump_commands(hostptr(((uint32_t *)buf)[0]),
 						((uint32_t *)buf)[1], 0);
 				printf("############################################################\n");
+				printf("vertices: %d\n", vertices);
 			}
 			draw++;
 			for (i = 0; i < nbuffers; i++) {
@@ -1285,8 +1301,12 @@ int main(int argc, char **argv)
 			if (!got_gpu_id) {
 				unsigned int gpu_id = *((unsigned int *)buf);
 				printf("gpu_id: %d\n", gpu_id);
-				if (gpu_id >= 300)
+				if (gpu_id >= 400)
+					init_a4xx();
+				else if (gpu_id >= 300)
 					init_a3xx();
+				else
+					init_a2xx();
 				got_gpu_id = 1;
 			}
 			break;
