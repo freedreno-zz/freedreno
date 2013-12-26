@@ -1168,6 +1168,7 @@ int main(int argc, char **argv)
 	void *buf = NULL;
 	int fd, sz, i, n = 1;
 	int got_gpu_id = 0;
+	int start = 0, end = 0x7ffffff, draw = 0;
 
 	while (1) {
 		if (!strcmp(argv[n], "--verbose")) {
@@ -1196,6 +1197,20 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[n], "--allregs")) {
 			allregs = true;
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--start")) {
+			n++;
+			start = atoi(argv[n]);
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--end")) {
+			n++;
+			end = atoi(argv[n]);
 			n++;
 			continue;
 		}
@@ -1252,11 +1267,14 @@ int main(int argc, char **argv)
 			buf = NULL;
 			break;
 		case RD_CMDSTREAM_ADDR:
-			printf("############################################################\n");
-			printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
-			dump_commands(hostptr(((uint32_t *)buf)[0]),
-					((uint32_t *)buf)[1], 0);
-			printf("############################################################\n");
+			if ((start <= draw) && (draw <= end)) {
+				printf("############################################################\n");
+				printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
+				dump_commands(hostptr(((uint32_t *)buf)[0]),
+						((uint32_t *)buf)[1], 0);
+				printf("############################################################\n");
+			}
+			draw++;
 			for (i = 0; i < nbuffers; i++) {
 				free(buffers[i].hostptr);
 				buffers[i].hostptr = NULL;
