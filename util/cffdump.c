@@ -51,6 +51,7 @@ static bool dump_shaders = false;
 static bool no_color = false;
 static bool summary = false;
 static bool allregs = false;
+static int vertices;
 
 static const char *levels[] = {
 		"\t",
@@ -353,7 +354,7 @@ static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 	}
 }
 
-static void reg_dump_gpuaddr2(const char *name, uint32_t dword, int level)
+static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 {
 	void *buf;
 
@@ -372,6 +373,14 @@ static void reg_dump_gpuaddr2(const char *name, uint32_t dword, int level)
 
 static uint32_t type0_reg_vals[0x7fff];
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
+
+// HACK:
+#define REG_A2XX_VSC_PIPE_CONFIG(i0)        (0x00000c06 + 0x3*(i0))
+#define REG_A2XX_VSC_PIPE_DATA_ADDRESS(i0)  (0x00000c07 + 0x3*(i0))
+#define REG_A2XX_VSC_PIPE_DATA_LENGTH(i0)   (0x00000c08 + 0x3*(i0))
+#define REG_A3XX_VSC_PIPE_CONFIG(i0)        (0x00000c06 + 0x3*(i0))
+#define REG_A3XX_VSC_PIPE_DATA_ADDRESS(i0)  (0x00000c07 + 0x3*(i0))
+#define REG_A3XX_VSC_PIPE_DATA_LENGTH(i0)   (0x00000c08 + 0x3*(i0))
 
 /*
  * Registers with special handling (rnndec_decode() handles rest):
@@ -407,6 +416,7 @@ static const const struct {
 #undef REG
 }, reg_a3xx[0x7fff] = {
 #define REG(x, fxn) [REG_A3XX_ ## x] = { fxn }
+		REG(VSC_SIZE_ADDRESS, reg_dump_gpuaddr),
 		REG(VSC_PIPE_CONFIG(0), reg_vsc_pipe_config),
 		REG(VSC_PIPE_DATA_ADDRESS(0), reg_vsc_pipe_data_address),
 		REG(VSC_PIPE_DATA_LENGTH(0), reg_vsc_pipe_data_length),
@@ -431,6 +441,7 @@ static const const struct {
 		REG(VSC_PIPE_CONFIG(7), reg_vsc_pipe_config),
 		REG(VSC_PIPE_DATA_ADDRESS(7), reg_vsc_pipe_data_address),
 		REG(VSC_PIPE_DATA_LENGTH(7), reg_vsc_pipe_data_length),
+#if 0
 		REG(VFD_FETCH_INSTR_0(0), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(0), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(1), reg_vfd_fetch_instr_0_x),
@@ -463,12 +474,12 @@ static const const struct {
 		REG(VFD_FETCH_INSTR_1(14), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(15), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(15), reg_vfd_fetch_instr_1_x),
+#endif
 		REG(SP_VS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
 		REG(SP_FS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
-		REG(SP_VS_OBJ_START_REG, reg_dump_gpuaddr2),
-		REG(SP_FS_OBJ_START_REG, reg_dump_gpuaddr2),
+		REG(SP_VS_OBJ_START_REG, reg_disasm_gpuaddr),
+		REG(SP_FS_OBJ_START_REG, reg_disasm_gpuaddr),
 #undef REG
-#endif
 }, *type0_reg;
 
 static struct rnndeccontext *vc;
@@ -861,15 +872,29 @@ static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 			rnndec_decode_enum(vc, "vgt_event_type", dwords[0]));
 }
 
-static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
+static void dump_register_summary(int level)
 {
 	uint32_t i;
+
+	/* dump current state of registers: */
+	printf("%scurrent register values\n", levels[level]);
+	for (i = 0; i < 0x7fff; i++) {
+		uint32_t regbase = i;
+		uint32_t lastval = type0_reg_vals[regbase];
+		/* skip registers that have zero: */
+		if (!lastval && !allregs)
+			continue;
+		if (!(type0_reg_written[regbase/8] & (1 << (regbase % 8))))
+			continue;
+		dump_register(regbase, lastval, level+1);
+	}
+}
+
+static uint32_t draw_indx_common(uint32_t *dwords, int level)
+{
 	uint32_t prim_type     = dwords[1] & 0x1f;
 	uint32_t source_select = (dwords[1] >> 6) & 0x3;
 	uint32_t num_indices   = dwords[2];
-	bool saved_summary = summary;
-
-	summary = false;
 
 	printf("%sprim_type:     %s (%d)\n", levels[level],
 			rnndec_decode_enum(vc, "pc_di_primtype", prim_type),
@@ -879,6 +904,18 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 			source_select);
 	printf("%snum_indices:   %d\n", levels[level], num_indices);
 
+	vertices += num_indices;
+
+	return num_indices;
+}
+static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t num_indices = draw_indx_common(dwords, level);
+	bool saved_summary = summary;
+
+	summary = false;
+
+	/* if we have an index buffer, dump that: */
 	if (sizedwords == 5) {
 		void *ptr = hostptr(dwords[3]);
 		printf("%sgpuaddr:       %08x\n", levels[level], dwords[3]);
@@ -907,23 +944,48 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 
 	/* don't bother dumping registers for the dummy draw_indx's.. */
-	if (num_indices == 0)
-		goto out;
+	if (num_indices > 0)
+		dump_register_summary(level);
 
-	/* dump current state of registers: */
-	printf("%scurrent register values\n", levels[level]);
-	for (i = 0; i < 0x7fff; i++) {
-		uint32_t regbase = i;
-		uint32_t lastval = type0_reg_vals[regbase];
-		/* skip registers that have zero: */
-		if (!lastval && !allregs)
-			continue;
-		if (!(type0_reg_written[regbase/8] & (1 << (regbase % 8))))
-			continue;
-		dump_register(regbase, lastval, level+1);
+	summary = saved_summary;
+}
+
+static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t num_indices = draw_indx_common(dwords, level);
+	enum pc_di_index_size size =
+			((dwords[1] >> 11) & 1) | ((dwords[1] >> 12) & 2);
+	void *ptr = &dwords[3];
+	int i, sz = 0;
+	bool saved_summary = summary;
+
+	summary = false;
+
+	/* CP_DRAW_INDX_2 has embedded/inline idx buffer: */
+	printf("%sidxs:         ", levels[level]);
+	if (size == INDEX_SIZE_8_BIT) {
+		uint8_t *idx = ptr;
+		for (i = 0; i < num_indices; i++)
+			printf(" %u", idx[i]);
+		sz = num_indices;
+	} else if (size == INDEX_SIZE_16_BIT) {
+		uint16_t *idx = ptr;
+		for (i = 0; i < num_indices; i++)
+			printf(" %u", idx[i]);
+		sz = num_indices * 2;
+	} else if (size == INDEX_SIZE_32_BIT) {
+		uint32_t *idx = ptr;
+		for (i = 0; i < num_indices; i++)
+			printf(" %u", idx[i]);
+		sz = num_indices * 4;
 	}
+	printf("\n");
+	dump_hex(ptr, sz / 4, level+1);
 
-out:
+	/* don't bother dumping registers for the dummy draw_indx's.. */
+	if (num_indices > 0)
+		dump_register_summary(level);
+
 	summary = saved_summary;
 }
 
@@ -1002,7 +1064,7 @@ static const struct {
 		CP(EVENT_WRITE_ZPD, NULL),
 		CP(RUN_OPENCL, NULL),
 		CP(DRAW_INDX, cp_draw_indx),
-		CP(DRAW_INDX_2, NULL),
+		CP(DRAW_INDX_2, cp_draw_indx_2),
 		CP(DRAW_INDX_BIN, NULL),
 		CP(DRAW_INDX_2_BIN, NULL),
 		CP(VIZ_QUERY, NULL),
@@ -1064,6 +1126,12 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			if (!summary)
 				printf("%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+2, 1, level+2);
+			if (!summary)
+				dump_hex(dwords, count, level+1);
+			break;
+		case 0x2: /* type-2 */
+			printf("%sNOP\n", levels[level+1]);
+			count = 1;
 			if (!summary)
 				dump_hex(dwords, count, level+1);
 			break;
