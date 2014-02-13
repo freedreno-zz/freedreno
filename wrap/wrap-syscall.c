@@ -63,6 +63,8 @@ static struct device_info kgsl_3d_info = {
 				IOCTL_INFO(IOCTL_KGSL_CFF_SYNCMEM),
 				IOCTL_INFO(IOCTL_KGSL_CFF_USER_EVENT),
 				IOCTL_INFO(IOCTL_KGSL_TIMESTAMP_EVENT),
+				IOCTL_INFO(IOCTL_KGSL_GPUMEM_ALLOC_ID),
+				IOCTL_INFO(IOCTL_KGSL_GPUMEM_FREE_ID),
 				/* kgsl-3d specific ioctls: */
 				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET),
 		},
@@ -89,6 +91,8 @@ static struct device_info kgsl_2d_info = {
 				IOCTL_INFO(IOCTL_KGSL_CFF_SYNCMEM),
 				IOCTL_INFO(IOCTL_KGSL_CFF_USER_EVENT),
 				IOCTL_INFO(IOCTL_KGSL_TIMESTAMP_EVENT),
+				IOCTL_INFO(IOCTL_KGSL_GPUMEM_ALLOC_ID),
+				IOCTL_INFO(IOCTL_KGSL_GPUMEM_FREE_ID),
 				/* no kgsl-2d specific ioctls, I don't think.. */
 		},
 };
@@ -257,7 +261,7 @@ static void dumpfile(const char *file)
 
 struct buffer {
 	void *hostptr;
-	unsigned int gpuaddr, flags, len, handle;
+	unsigned int gpuaddr, flags, len, handle, id;
 	off_t offset;
 	struct list node;
 	int munmap;
@@ -278,7 +282,7 @@ static struct buffer * register_buffer(void *hostptr, unsigned int flags,
 }
 
 static struct buffer * find_buffer(void *hostptr, unsigned int gpuaddr,
-		off_t offset, unsigned int handle)
+		off_t offset, unsigned int handle, unsigned id)
 {
 	struct buffer *buf;
 	list_for_each_entry(buf, &buffers_of_interest, node) {
@@ -293,6 +297,9 @@ static struct buffer * find_buffer(void *hostptr, unsigned int gpuaddr,
 				return buf;
 		if (handle)
 			if (buf->handle == handle)
+				return buf;
+		if (id)
+			if (buf->id == id)
 				return buf;
 	}
 	return NULL;
@@ -311,7 +318,7 @@ static void unregister_buffer(struct buffer *buf)
 static void dump_buffer(unsigned int gpuaddr)
 {
 	static int cnt = 0;
-	struct buffer *buf = find_buffer((void *)-1, gpuaddr, 0, 0);
+	struct buffer *buf = find_buffer((void *)-1, gpuaddr, 0, 0, 0);
 	if (buf) {
 		char filename[32];
 		int fd;
@@ -490,7 +497,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 				hexdump_dwords(ibdesc[i].hostptr, ibdesc[i].sizedwords);
 			}
 		} else {
-			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr, 0, 0);
+			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr, 0, 0, 0);
 			if (buf && buf->hostptr) {
 				struct buffer *other_buf;
 				uint32_t off = ibdesc[i].gpuaddr - buf->gpuaddr;
@@ -734,7 +741,7 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_pre(int fd,
 static void kgsl_ioctl_sharedmem_from_vmalloc_post(int fd,
 		struct kgsl_sharedmem_from_vmalloc *param)
 {
-	struct buffer *buf = find_buffer((void *)param->hostptr, 0, 0, 0);
+	struct buffer *buf = find_buffer((void *)param->hostptr, 0, 0, 0, 0);
 	log_gpuaddr(param->gpuaddr, len_from_vma(param->hostptr));
 	if (buf)
 		buf->gpuaddr = param->gpuaddr;
@@ -744,7 +751,7 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_post(int fd,
 static void kgsl_ioctl_sharedmem_free_pre(int fd,
 		struct kgsl_sharedmem_free *param)
 {
-	struct buffer *buf = find_buffer((void *)-1, param->gpuaddr, 0, 0);
+	struct buffer *buf = find_buffer((void *)-1, param->gpuaddr, 0, 0, 0);
 	printf("\t\tgpuaddr:\t%08x\n", param->gpuaddr);
 	unregister_buffer(buf);
 }
@@ -768,6 +775,44 @@ static void kgsl_ioctl_gpumem_alloc_post(int fd,
 	buf->offset = param->gpuaddr;
 }
 
+static void kgsl_ioctl_gpumem_alloc_id_pre(int fd,
+		struct kgsl_gpumem_alloc_id *param)
+{
+	printf("\t\tflags:\t\t%08x\n", param->flags);
+	printf("\t\tsize:\t\t%08x\n", param->size);
+	/* easier to force it not to USE_CPU_MAP than dealing with
+	 * the mmap dance:
+	 */
+	param->flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
+}
+
+static void kgsl_ioctl_gpumem_alloc_id_post(int fd,
+		struct kgsl_gpumem_alloc_id *param)
+{
+	struct buffer *buf;
+	log_gpuaddr(param->gpuaddr, param->size);
+	printf("\t\tid:\t%u\n", param->id);
+	printf("\t\tgpuaddr:\t%08lx\n", param->gpuaddr);
+	/* NOTE: host addr comes from mmap'ing w/ gpuaddr as offset */
+	buf = register_buffer(NULL, param->flags, param->size, 0);
+	buf->id = param->id;
+	buf->gpuaddr = param->gpuaddr;
+	buf->offset = param->gpuaddr;
+}
+
+static void kgsl_ioctl_gpumem_free_id_pre(int fd,
+		struct kgsl_gpumem_free_id *param)
+{
+	printf("\t\tid:\t%u\n", param->id);
+}
+
+static void kgsl_ioctl_gpumem_free_id_post(int fd,
+		struct kgsl_gpumem_free_id *param)
+{
+	struct buffer *buf = find_buffer((void *)-1, 0, 0, 0, param->id);
+	unregister_buffer(buf);
+}
+
 static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
 	dump_ioctl(get_kgsl_info(fd), _IOC_WRITE, fd, request, ptr, 0);
@@ -786,6 +831,12 @@ static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 		break;
 	case _IOC_NR(IOCTL_KGSL_GPUMEM_ALLOC):
 		kgsl_ioctl_gpumem_alloc_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUMEM_ALLOC_ID):
+		kgsl_ioctl_gpumem_alloc_id_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUMEM_FREE_ID):
+		kgsl_ioctl_gpumem_free_id_pre(fd, ptr);
 		break;
 	}
 }
@@ -809,6 +860,12 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 	case _IOC_NR(IOCTL_KGSL_GPUMEM_ALLOC):
 		kgsl_ioctl_gpumem_alloc_post(fd, ptr);
 		break;
+	case _IOC_NR(IOCTL_KGSL_GPUMEM_ALLOC_ID):
+		kgsl_ioctl_gpumem_alloc_id_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUMEM_FREE_ID):
+		kgsl_ioctl_gpumem_free_id_post(fd, ptr);
+		break;
 	}
 }
 
@@ -828,7 +885,7 @@ static void drm_ioctl_gem_create_post(int fd,
 static void drm_ioctl_gem_alloc_post(int fd,
 		struct drm_kgsl_gem_alloc *param)
 {
-	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle);
+	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle, 0);
 	if (buf) {
 		buf->offset = param->offset;
 		printf("\t\thandle:\t%d\n", buf->handle);
@@ -839,7 +896,7 @@ static void drm_ioctl_gem_alloc_post(int fd,
 static void drm_ioctl_gem_get_bufinfo_post(int fd,
 		struct drm_kgsl_gem_bufinfo *param)
 {
-	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle);
+	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle, 0);
 	if (buf) {
 		buf->gpuaddr = param->gpuaddr[0];
 		log_gpuaddr(buf->gpuaddr, buf->len);
@@ -851,7 +908,7 @@ static void drm_ioctl_gem_get_bufinfo_post(int fd,
 static void drm_ioctl_gem_close_post(int fd,
 		struct drm_gem_close *param)
 {
-	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle);
+	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle, 0);
 	printf("\t\thandle:\t%d\n", param->handle);
 	unregister_buffer(buf);
 }
@@ -942,7 +999,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	PROLOG(mmap);
 
 	if (get_kgsl_info(fd) || is_drm(fd)) {
-		struct buffer *buf = find_buffer(NULL, 0, offset, 0);
+		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 
 		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
 				fd, addr, length, prot, flags, offset);
@@ -957,7 +1014,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		ret = orig_mmap(addr, length, prot, flags, fd, offset);
 
 	if (get_kgsl_info(fd) || is_drm(fd)) {
-		struct buffer *buf = find_buffer(NULL, 0, offset, 0);
+		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 		if (buf)
 			buf->hostptr = ret;
 		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
@@ -968,7 +1025,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 
 int munmap(void *addr, size_t length)
 {
-	struct buffer *buf = find_buffer(addr, 0, 0, 0);
+	struct buffer *buf = find_buffer(addr, 0, 0, 0, 0);
 	PROLOG(munmap);
 
 	if (buf) {
