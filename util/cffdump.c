@@ -47,6 +47,7 @@ typedef enum {
 	true = 1, false = 0,
 } bool;
 
+static bool needs_wfi = false;
 static bool dump_shaders = false;
 static bool no_color = false;
 static bool summary = false;
@@ -575,15 +576,29 @@ static void dump_register(uint32_t regbase, uint32_t dword, int level)
 	}
 }
 
+static bool is_banked_reg(uint32_t regbase)
+{
+	return (0x2000 <= regbase) && (regbase < 0x2400);
+}
+
 static void dump_registers(uint32_t regbase,
 		uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	while (sizedwords--) {
+		int last_summary = summary;
+
+		/* access to non-banked registers needs a WFI:
+		 * TODO banked register range for a2xx??
+		 */
+		if (needs_wfi && !is_banked_reg(regbase))
+			printf("NEEDS WFI: %s (%x)\n", regname(regbase, 1), regbase);
+
 		type0_reg_vals[regbase] = *dwords;
 		type0_reg_written[regbase/8] |= (1 << (regbase % 8));
 		dump_register(regbase, *dwords, level);
 		regbase++;
 		dwords++;
+		summary = last_summary;
 	}
 }
 
@@ -888,6 +903,7 @@ static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void dump_register_summary(int level)
 {
+	static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 	uint32_t i;
 
 	/* dump current state of registers: */
@@ -900,6 +916,10 @@ static void dump_register_summary(int level)
 			continue;
 		if (!(type0_reg_written[regbase/8] & (1 << (regbase % 8))))
 			continue;
+		if (lastval != lastvals[regbase]) {
+			printf("!");
+			lastvals[regbase] = lastval;
+		}
 		dump_register(regbase, lastval, level+1);
 	}
 }
@@ -962,6 +982,8 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 		dump_register_summary(level);
 
 	summary = saved_summary;
+
+	needs_wfi = true;
 }
 
 static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -1003,6 +1025,17 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	summary = saved_summary;
 }
 
+static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	bool saved_summary = summary;
+
+	summary = false;
+
+	dump_register_summary(level);
+
+	summary = saved_summary;
+}
+
 static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	/* traverse indirect buffers */
@@ -1033,6 +1066,11 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 }
 
+static void cp_wfi(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	needs_wfi = false;
+}
+
 static void cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t gpuaddr = dwords[0];
@@ -1047,6 +1085,8 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t or  = dwords[2];
 	if (!summary)
 		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
+	if (needs_wfi)
+		printf("NEEDS WFI: rmw (%s & 0x%08x) | 0x%08x)\n", regname(val, 1), and, or);
 	type0_reg_vals[val] = (type0_reg_vals[val] & and) | or;
 	type0_reg_written[val/8] |= (1 << (val % 8));
 }
@@ -1059,7 +1099,7 @@ static const struct {
 		CP(NOP, NULL),
 		CP(INDIRECT_BUFFER, cp_indirect),
 		CP(INDIRECT_BUFFER_PFD, cp_indirect),
-		CP(WAIT_FOR_IDLE, NULL),
+		CP(WAIT_FOR_IDLE, cp_wfi),
 		CP(WAIT_REG_MEM, NULL),
 		CP(WAIT_REG_EQ, NULL),
 		CP(WAT_REG_GTE, NULL),
@@ -1075,7 +1115,7 @@ static const struct {
 		CP(EVENT_WRITE_SHD, NULL),
 		CP(EVENT_WRITE_CFL, NULL),
 		CP(EVENT_WRITE_ZPD, NULL),
-		CP(RUN_OPENCL, NULL),
+		CP(RUN_OPENCL, cp_run_cl),
 		CP(DRAW_INDX, cp_draw_indx),
 		CP(DRAW_INDX_2, cp_draw_indx_2),
 		CP(DRAW_INDX_BIN, NULL),
@@ -1236,7 +1276,10 @@ int main(int argc, char **argv)
 	if (argc-n != 1)
 		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
 
-	fd = open(argv[n], O_RDONLY);
+	if (!strcmp(argv[n], "-"))
+		fd = 0;
+	else
+		fd = open(argv[n], O_RDONLY);
 	if (fd < 0)
 		fprintf(stderr, "could not open: %s\n", argv[n]);
 
@@ -1253,6 +1296,8 @@ int main(int argc, char **argv)
 
 	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {
 		free(buf);
+
+		needs_wfi = false;
 
 		buf = malloc(sz + 1);
 		((char *)buf)[sz] = '\0';
