@@ -106,6 +106,13 @@ util_float_to_half(float f)
 	return f16;
 }
 
+/* hack for conflict w/ fbdev headers.. */
+#ifdef ROP_XOR
+#  undef ROP_XOR
+#endif
+#ifdef ROP_COPY
+#  undef ROP_COPY
+#endif
 
 #include "adreno_common.xml.h"
 #include "adreno_pm4.xml.h"

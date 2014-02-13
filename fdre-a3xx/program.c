@@ -289,7 +289,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 			// XXX "resolve" (?) bit set on gmem->mem pass..
 			COND(!uniforms, A3XX_SP_SP_CTRL_REG_RESOLVE) |
 			// XXX sometimes 0, sometimes 1:
-			A3XX_SP_SP_CTRL_REG_LOMODE(1));
+			A3XX_SP_SP_CTRL_REG_L0MODE(1));
 
 	/* emit unknown sequence of writes to 0x0ec4/0x0ec8 that the blob
 	 * emits as part of the program state (it seems)..

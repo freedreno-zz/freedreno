@@ -253,7 +253,7 @@ struct fd_state * fd_init(void)
 			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(g2a(GL_ALWAYS));
 	state->rb_depth_control =
 			A3XX_RB_DEPTH_CONTROL_Z_WRITE_ENABLE |
-			A3XX_RB_DEPTH_CONTROL_EARLY_Z_ENABLE |
+			A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE |
 			A3XX_RB_DEPTH_CONTROL_ZFUNC(g2a(GL_LESS));
 	state->rb_stencil_control =
 			A3XX_RB_STENCIL_CONTROL_FUNC(g2a(GL_ALWAYS)) |
@@ -1232,9 +1232,9 @@ int fd_flush(struct fd_state *state)
 			OUT_RING(ring, CP_SET_BIN_2_X2(x2) | CP_SET_BIN_2_Y2(y2));
 
 			/* setup scissor/offset for current tile: */
-			OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);
-			OUT_RING(ring, A3XX_PA_SC_WINDOW_OFFSET_X(xoff) |
-					A3XX_PA_SC_WINDOW_OFFSET_Y(yoff));
+			OUT_PKT0(ring, REG_A3XX_RB_WINDOW_OFFSET, 1);
+			OUT_RING(ring, A3XX_RB_WINDOW_OFFSET_X(xoff) |
+					A3XX_RB_WINDOW_OFFSET_Y(yoff));
 
 			OUT_PKT0(ring, REG_A3XX_GRAS_SC_WINDOW_SCISSOR_TL, 2);
 			OUT_RING(ring, A3XX_GRAS_SC_WINDOW_SCISSOR_TL_X(0) |
@@ -1433,12 +1433,12 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, 0x00000000);        /* VFD_INSTANCEID_OFFSET */
 	OUT_RING(ring, 0x00000000);        /* VFD_INDEX_OFFSET */
 
-	OUT_PKT0(ring, REG_A3XX_SP_VS_PVT_MEM_CTRL_REG, 2);
-	OUT_RING(ring, 0x08000001);                  /* SP_VS_PVT_MEM_CTRL_REG */
+	OUT_PKT0(ring, REG_A3XX_SP_VS_PVT_MEM_PARAM_REG, 2);
+	OUT_RING(ring, 0x08000001);                  /* SP_VS_PVT_MEM_PARAM_REG */
 	OUT_RELOC(ring, state->vs_pvt_mem, 0, 0);    /* SP_VS_PVT_MEM_ADDR_REG */
 
-	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_CTRL_REG, 2);
-	OUT_RING(ring, 0x08000001);                  /* SP_FS_PVT_MEM_CTRL_REG */
+	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_PARAM_REG, 2);
+	OUT_RING(ring, 0x08000001);                  /* SP_FS_PVT_MEM_PARAM_REG */
 	OUT_RELOC(ring, state->fs_pvt_mem, 0, 0);    /* SP_FS_PVT_MEM_ADDR_REG */
 
 	OUT_PKT0(ring, REG_A3XX_PC_VERTEX_REUSE_BLOCK_CNTL, 1);
@@ -1468,8 +1468,8 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, A3XX_GRAS_CL_GB_CLIP_ADJ_HORZ(0) |
 			A3XX_GRAS_CL_GB_CLIP_ADJ_VERT(0));
 
-	OUT_PKT0(ring, REG_A3XX_UNKNOWN_0C81, 1);
-	OUT_RING(ring, 0x00000001);        /* UNKNOWN_0C81 */
+	OUT_PKT0(ring, REG_A3XX_GRAS_TSE_DEBUG_ECO, 1);
+	OUT_RING(ring, 0x00000001);        /* GRAS_TSE_DEBUG_ECO */
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_SU_MODE_CONTROL, 1);
 	OUT_RING(ring, state->gras_su_mode_control);
@@ -1566,9 +1566,9 @@ void fd_make_current(struct fd_state *state,
 		OUT_RING(ring, A3XX_RB_DEPTH_PITCH(bw * 2));
 	}
 
-	OUT_PKT0(ring, REG_A3XX_PA_SC_WINDOW_OFFSET, 1);
-	OUT_RING(ring, A3XX_PA_SC_WINDOW_OFFSET_X(0) |
-			A3XX_PA_SC_WINDOW_OFFSET_Y(0));
+	OUT_PKT0(ring, REG_A3XX_RB_WINDOW_OFFSET, 1);
+	OUT_RING(ring, A3XX_RB_WINDOW_OFFSET_X(0) |
+			A3XX_RB_WINDOW_OFFSET_Y(0));
 
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 	OUT_RING(ring, state->rb_depth_control);
@@ -1603,9 +1603,9 @@ void fd_make_current(struct fd_state *state,
 	OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZOFFSET(state->viewport.offset.z));
 	OUT_RING(ring, A3XX_GRAS_CL_VPORT_ZSCALE(state->viewport.scale.z));
 
-	OUT_PKT0(ring, REG_A3XX_RB_WINDOW_SIZE, 1);
-	OUT_RING(ring, A3XX_RB_WINDOW_SIZE_WIDTH(surface->width) |
-			A3XX_RB_WINDOW_SIZE_HEIGHT(surface->height));
+	OUT_PKT0(ring, REG_A3XX_RB_FRAME_BUFFER_DIMENSION, 1);
+	OUT_RING(ring, A3XX_RB_FRAME_BUFFER_DIMENSION_WIDTH(surface->width) |
+			A3XX_RB_FRAME_BUFFER_DIMENSION_HEIGHT(surface->height));
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
 	OUT_RING(ring, A3XX_GRAS_CL_CLIP_CNTL_IJ_PERSP_CENTER);
