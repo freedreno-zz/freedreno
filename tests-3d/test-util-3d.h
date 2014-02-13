@@ -108,6 +108,8 @@ eglStrError(EGLint error)
 	switch (error) {
 	case EGL_SUCCESS:
 		return "EGL_SUCCESS";
+	case EGL_NOT_INITIALIZED:
+		return "EGL_NOT_INITIALIZED";
 	case EGL_BAD_ALLOC:
 		return "EGL_BAD_ALLOC";
 	case EGL_BAD_CONFIG:

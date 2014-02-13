@@ -247,7 +247,7 @@ GLuint CreateMipMappedTexture2D(int maxlevels, int width, int height, unsigned f
 ///
 // Draw a triangle using the shader pair created in Init()
 //
-static void Draw(void)
+static void Draw(float minlod, float maxlod)
 {
    GLfloat vVertices[] = { -0.5f,  0.5f, 0.0f, 1.5f,  // Position 0
                             0.0f,  0.0f,              // TexCoord 0
@@ -291,6 +291,15 @@ static void Draw(void)
    glUniform1f ( offsetLoc, -0.6f );
    glDrawElements ( GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices );
 
+#define GL_TEXTURE_MIN_LOD                               0x813A
+#define GL_TEXTURE_MAX_LOD                               0x813B
+   GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_LOD, minlod));
+   GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_LOD, maxlod));
+#define GL_TEXTURE_BASE_LEVEL                            0x813C
+#define GL_TEXTURE_MAX_LEVEL                             0x813D
+   GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, minlod));
+   GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxlod));
+
    // Draw quad with trilinear filtering
    glTexParameteri ( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR );
    glUniform1f ( offsetLoc, 0.6f );
@@ -298,9 +307,11 @@ static void Draw(void)
 
 }
 
-static void test_mipmap(int maxlevels, int w, int h, unsigned filt)
+static void test_mipmap(int maxlevels, int w, int h, unsigned filt,
+		float minlod, float maxlod)
 {
-	RD_START("mipmap", "maxlevels=%d, texsize=%dx%d", maxlevels, w, h);
+	RD_START("mipmap", "maxlevels=%d, texsize=%dx%d, minlod=%f, maxlod=%f",
+			maxlevels, w, h, minlod, maxlod);
 
 	display = get_display();
 
@@ -311,7 +322,7 @@ static void test_mipmap(int maxlevels, int w, int h, unsigned filt)
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	surface = make_window(display, config, 400, 240);
+	surface = make_window(display, config, 128, 128);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
@@ -339,7 +350,7 @@ static void test_mipmap(int maxlevels, int w, int h, unsigned filt)
 
 	GCHK(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 
-	GCHK(Draw());
+	GCHK(Draw(minlod, maxlod));
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
@@ -358,10 +369,14 @@ static void test_mipmap(int maxlevels, int w, int h, unsigned filt)
 
 int main(int argc, char *argv[])
 {
-	test_mipmap(0, 64, 64, GL_NEAREST_MIPMAP_NEAREST);
-	test_mipmap(3, 64, 64, GL_LINEAR_MIPMAP_NEAREST);
-	test_mipmap(8, 256, 256, GL_NEAREST_MIPMAP_LINEAR);
-	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR);
+	test_mipmap(0, 64, 64, GL_NEAREST_MIPMAP_NEAREST, -1000, 1000);
+	test_mipmap(3, 64, 64, GL_LINEAR_MIPMAP_NEAREST, -1000, 1000);
+	test_mipmap(8, 256, 256, GL_NEAREST_MIPMAP_LINEAR, -1000, 1000);
+	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -1000, 1000);
+	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -100, 100);
+	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -10, 10);
+	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -5, 5);
+	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -1, 1);
 }
 
 #ifdef BIONIC
