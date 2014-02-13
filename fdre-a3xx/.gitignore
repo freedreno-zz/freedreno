@@ -25,3 +25,4 @@ config.sub
 install-sh
 missing
 ylwrap
+test-driver

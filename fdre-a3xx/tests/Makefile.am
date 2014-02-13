@@ -37,6 +37,7 @@ LDADD = \
 	$(top_builddir)/libfreedreno.la
 
 TESTS = \
+	regdump \
 	cube-textured \
 	cube \
 	lolscat \

@@ -125,11 +125,21 @@ struct fd_shader_const {
 /* color format info */
 
 static int color2cpp[] = {
-		[RB_R8G8B8A8_UNORM] = 4,
+		[RB_R8G8B8_UNORM]       = 3,
+		[RB_R8G8B8A8_UNORM]     = 4,
+		[RB_Z16_UNORM]          = 2,
+		[RB_A8_UNORM]           = 1,
+		[RB_R16G16B16A16_FLOAT] = 8,
+		[RB_R32G32B32A32_FLOAT] = 16,
 };
 
 static enum a3xx_tex_fmt color2fmt[] = {
-		[RB_R8G8B8A8_UNORM]        = TFMT_NORM_UINT_8_8_8_8,
+		[RB_R8G8B8_UNORM]       = TFMT_NORM_UINT_8_8_8,
+		[RB_R8G8B8A8_UNORM]     = TFMT_NORM_UINT_8_8_8_8,
+//		[RB_Z16_UNORM]          = TFMT_FLOAT_16,  // ???
+		[RB_A8_UNORM]           = TFMT_NORM_UINT_8,
+		[RB_R16G16B16A16_FLOAT] = TFMT_FLOAT_16_16_16_16,
+		[RB_R32G32B32A32_FLOAT] = TFMT_FLOAT_32_32_32_32,
 };
 
 /* ************************************************************************* */
@@ -159,6 +169,7 @@ const char *solid_vertex_shader_asm =
 
 const char *solid_fragment_shader_asm =
 		"@uniform(hc0.x) uColor                                  \n"
+		"@out(hr0.x)     gl_FragColor                            \n"
 		"(sy)(ss)(rpt3)mov.f16f16 hr0.x, (r)hc0.x                \n"
 		"end                                                     \n"
 		"nop                                                     \n"
@@ -275,7 +286,7 @@ struct fd_state * fd_init(void)
 				A3XX_RB_MRT_BLEND_CONTROL_CLAMP_ENABLE;
 		state->rb_mrt[i].control =
 				A3XX_RB_MRT_CONTROL_READ_DEST_ENABLE |
-				A3XX_RB_MRT_CONTROL_ROP_CODE(12) |
+				A3XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY) |
 				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS) |
 				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf);
 	}
@@ -570,7 +581,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	for (i = 0; i < 4; i++) {
 		OUT_PKT0(ring, REG_A3XX_RB_MRT_CONTROL(i), 1);
-		OUT_RING(ring, A3XX_RB_MRT_CONTROL_ROP_CODE(12) |
+		OUT_RING(ring, A3XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY) |
 				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_ALWAYS) |
 				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0xf));
 

@@ -111,6 +111,15 @@ static uint32_t getpos(struct fd_shader *shader, const char *name,
 	return default_regid;
 }
 
+static bool ishalf(struct fd_shader *shader, const char *name)
+{
+	uint32_t i;
+	for (i = 0; i < shader->ir->outs_count; i++)
+		if (!strcmp(shader->ir->outs[i]->name, name))
+			return !!(shader->ir->outs[i]->rstart->flags & IR3_REG_HALF);
+	return 0;
+}
+
 static uint32_t instrlen(struct fd_shader *shader)
 {
 	/* the instructions length is in units of instruction groups
@@ -413,7 +422,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 
 	OUT_PKT0(ring, REG_A3XX_SP_FS_MRT_REG(0), 4);
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(colorregid) |  /* SP_FS_MRT[0].REG */
-			A3XX_SP_FS_MRT_REG_HALF_PRECISION);
+			COND(ishalf(fs, "gl_FragColor"), A3XX_SP_FS_MRT_REG_HALF_PRECISION));
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));           /* SP_FS_MRT[1].REG */
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));           /* SP_FS_MRT[2].REG */
 	OUT_RING(ring, A3XX_SP_FS_MRT_REG_REGID(0));           /* SP_FS_MRT[3].REG */
