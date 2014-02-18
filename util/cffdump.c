@@ -39,9 +39,9 @@
 /* ************************************************************************* */
 /* originally based on kernel recovery dump code: */
 #include "adreno_common.xml.h"
+#include "adreno_pm4.xml.h"
 #include "a2xx.xml.h"
 #include "a3xx.xml.h"
-#include "adreno_pm4.xml.h"
 
 typedef enum {
 	true = 1, false = 0,
@@ -680,6 +680,9 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	else
 		contents = dwords + 2;
 
+	if (!contents)
+		return;
+
 	switch (state_block_id) {
 	case SB_FRAG_SHADER:
 	case SB_VERT_SHADER:
@@ -1102,7 +1105,7 @@ static const struct {
 		CP(WAIT_FOR_IDLE, cp_wfi),
 		CP(WAIT_REG_MEM, NULL),
 		CP(WAIT_REG_EQ, NULL),
-		CP(WAT_REG_GTE, NULL),
+		CP(WAIT_REG_GTE, NULL),
 		CP(WAIT_UNTIL_READ, NULL),
 		CP(WAIT_IB_PFD_COMPLETE, NULL),
 		CP(REG_RMW, cp_rmw),
