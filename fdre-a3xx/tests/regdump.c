@@ -27,10 +27,12 @@
 #include "freedreno.h"
 #include "redump.h"
 
+#include "cubetex.h"
+
 int main(int argc, char **argv)
 {
 	struct fd_state *state;
-	struct fd_surface *surface;
+	struct fd_surface *surface, *tex;
 
 	float vertices[] = {
 			-1.0, -1.0, 0.0,
@@ -42,11 +44,13 @@ int main(int argc, char **argv)
 	const char *vertex_shader_asm =
 		"@attribute(r0.x) aPosition                                          \n"
 		"@varying(r0.x)   vColor    ; same slot as aPosition                 \n"
+		"@out(r0.x)       gl_Position                                        \n"
 		"(sy)(ss)end                                                         \n";
 	const char *fragment_shader_asm =
 		"@varying(r0.x)   vColor                                             \n"
+		"@sampler(0)      uTexture                                           \n"
 		"@out(r1.x)       gl_FragColor                                       \n"
-		"(sy)(ss)(rpt3)bary.f (ei)r1.x, (r)0, r0.x                          \n"
+		"(sy)(ss)(rpt3)bary.f (ei)r1.x, (r)0, r0.x                           \n"
 		"end                                                                 \n";
 
 	DEBUG_MSG("----------------------------------------------------------------");
@@ -56,11 +60,16 @@ int main(int argc, char **argv)
 	if (!state)
 		return -1;
 
-	surface = fd_surface_new_fmt(state, 32, 2, RB_R32G32B32A32_FLOAT);
+	surface = fd_surface_new_fmt(state, 4, 4, RB_R32G32B32A32_FLOAT);
 	if (!surface)
 		return -1;
 
 	fd_make_current(state, surface);
+
+	tex = fd_surface_new_fmt(state, cube_texture.width, cube_texture.height,
+			RB_R8G8B8A8_UNORM);
+
+	fd_surface_upload(tex, cube_texture.pixel_data);
 
 	fd_vertex_shader_attach_asm(state, vertex_shader_asm);
 	fd_fragment_shader_attach_asm(state, fragment_shader_asm);
@@ -69,6 +78,8 @@ int main(int argc, char **argv)
 
 	fd_clear_color(state, (float[]){ 0.0, 0.0, 0.0, 1.0 });
 	fd_clear(state, GL_COLOR_BUFFER_BIT);
+
+	fd_set_texture(state, "uTexture", tex);
 
 	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 4, vertices);
 

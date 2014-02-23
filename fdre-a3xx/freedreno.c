@@ -1120,11 +1120,24 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 	OUT_RING(ring, state->rb_depth_control);
 
+	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
+	OUT_RING(ring, 0x00000000);
+
 	OUT_PKT3(ring, CP_REG_RMW, 3);
 	OUT_RING(ring, REG_A3XX_RB_RENDER_CONTROL);
 	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH__MASK);
-	OUT_RING(ring, 0x2000 | /* XXX */
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_ENABLE_GMEM |
+			A3XX_RB_RENDER_CONTROL_FACENESS |
+			A3XX_RB_RENDER_CONTROL_XCOORD |
+			A3XX_RB_RENDER_CONTROL_YCOORD |
+			A3XX_RB_RENDER_CONTROL_ZCOORD |
+			A3XX_RB_RENDER_CONTROL_WCOORD |
 			state->rb_render_control);
+
+	OUT_PKT0(ring, REG_A3XX_GRAS_CL_CLIP_CNTL, 1);
+	OUT_RING(ring, A3XX_GRAS_CL_CLIP_CNTL_IJ_PERSP_CENTER |
+			A3XX_GRAS_CL_CLIP_CNTL_ZCOORD |
+			A3XX_GRAS_CL_CLIP_CNTL_WCOORD);
 
 	OUT_PKT0(ring, REG_A3XX_GRAS_CL_VPORT_XOFFSET, 6);
 	OUT_RING(ring, A3XX_GRAS_CL_VPORT_XOFFSET(state->viewport.offset.x));
@@ -1626,17 +1639,24 @@ void fd_make_current(struct fd_state *state,
 	fd_ringmarker_mark(state->draw_start);
 }
 
+/* really just for float32 buffers.. */
 int fd_dump_hex(struct fd_surface *surface)
 {
 	uint32_t *dbuf = fd_bo_map(surface->bo);
 	float   *fbuf = fd_bo_map(surface->bo);
-	uint32_t i, sz = surface->width * surface->height * surface->cpp;
+	uint32_t i, j;
 
-	for (i = 0; i < ALIGN(sz, 4) / 4; i+=4) {
-		printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
-				(unsigned int) i*4,
-				dbuf[i], dbuf[i+1], dbuf[i+2], dbuf[i+3],
-				fbuf[i], fbuf[i+1], fbuf[i+2], fbuf[i+3]);
+	for (i = 0; i < surface->height; i++) {
+		for (j = 0; j < surface->width; j++) {
+			uint32_t off = (i * surface->pitch) + j;
+			off *= 4;  /* convert to vec4 (f32f32f32f32) */
+			printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
+					(unsigned int)(off * 4),
+					dbuf[off+0], dbuf[off+1], dbuf[off+2], dbuf[off+3],
+					fbuf[off+0], fbuf[off+1], fbuf[off+2], fbuf[off+3]);
+
+		}
+		printf("\t\t\t********\n");
 	}
 
 	return 0;

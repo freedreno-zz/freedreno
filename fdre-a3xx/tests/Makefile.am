@@ -51,6 +51,7 @@ TESTS = \
 
 noinst_PROGRAMS = $(TESTS)
 
+regdump_SOURCES           = regdump.c cubetex.c
 quad_flat_SOURCES         = quad-flat.c
 quad_textured_SOURCES     = quad-textured.c cubetex.c
 triangle_quad_SOURCES     = triangle-quad.c
