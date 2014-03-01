@@ -21,18 +21,49 @@
  * SOFTWARE.
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <err.h>
 
 #include "freedreno.h"
 #include "redump.h"
 
 #include "cubetex.h"
 
+static void
+read_file(const char *filename, void **ptr, size_t *size)
+{
+	int fd, ret;
+	struct stat st;
+
+	*ptr = MAP_FAILED;
+
+	fd = open(filename, O_RDONLY);
+	if (fd == -1)
+		errx(1, "couldn't open `%s'", filename);
+
+	ret = fstat(fd, &st);
+	if (ret)
+		errx(1, "couldn't stat `%s'", filename);
+
+	*size = st.st_size;
+	*ptr = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	if (*ptr == MAP_FAILED)
+		errx(1, "couldn't map `%s'", filename);
+
+	close(fd);
+}
+
 int main(int argc, char **argv)
 {
 	struct fd_state *state;
 	struct fd_surface *surface, *tex;
+	size_t sz;
 
 	float vertices[] = {
 			-1.0, -1.0, 0.0,
@@ -41,12 +72,12 @@ int main(int argc, char **argv)
 			+1.0, +1.0, 0.0
 	};
 
-	const char *vertex_shader_asm =
+	char *vertex_shader_asm =
 		"@attribute(r0.x) aPosition                                          \n"
 		"@varying(r0.x)   vColor    ; same slot as aPosition                 \n"
 		"@out(r0.x)       gl_Position                                        \n"
 		"(sy)(ss)end                                                         \n";
-	const char *fragment_shader_asm =
+	char *fragment_shader_asm =
 		"@varying(r0.x)   vColor                                             \n"
 		"@sampler(0)      uTexture                                           \n"
 		"@out(r1.x)       gl_FragColor                                       \n"
@@ -55,6 +86,15 @@ int main(int argc, char **argv)
 
 	DEBUG_MSG("----------------------------------------------------------------");
 	RD_START("regdump", "");
+
+	if (argc > 1) {
+		read_file(argv[1], &fragment_shader_asm, &sz);
+		DEBUG_MSG("using fragment shader:\n%s", fragment_shader_asm);
+	}
+	if (argc > 2) {
+		read_file(argv[2], &vertex_shader_asm, &sz);
+		DEBUG_MSG("using vertex shader:\n%s", vertex_shader_asm);
+	}
 
 	state = fd_init();
 	if (!state)
