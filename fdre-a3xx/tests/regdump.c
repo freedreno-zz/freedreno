@@ -65,11 +65,17 @@ int main(int argc, char **argv)
 	struct fd_surface *surface, *tex;
 	size_t sz;
 
-	float vertices[] = {
+	float vertices1[] = {
 			-1.0, -1.0, 0.0,
-			+1.0, -1.0, 0.0,
+			+0.0, -1.0, 0.0,
 			-1.0, +1.0, 0.0,
-			+1.0, +1.0, 0.0
+			+0.0, +1.0, 0.0
+	};
+	float vertices2[] = {
+			+1.0, -1.0, 0.0,
+			+0.0, -1.0, 0.0,
+			+1.0, +1.0, 0.0,
+			+0.0, +1.0, 0.0
 	};
 
 	char *vertex_shader_asm =
@@ -121,8 +127,10 @@ int main(int argc, char **argv)
 
 	fd_set_texture(state, "uTexture", tex);
 
-	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 4, vertices);
+	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 4, vertices1);
+	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
+	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 4, vertices2);
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
 	fd_swap_buffers(state);
