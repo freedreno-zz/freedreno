@@ -117,6 +117,25 @@ unsigned int wrap_gpu_id(void)
 	return val;
 }
 
+/* defaults to zero if $WRAP_GPU_ID does not end in a ".%d".. */
+unsigned int wrap_gpu_id_patchid(void)
+{
+	static unsigned int val = -1;
+	if (val == -1) {
+		char *endptr = NULL;
+		const char *str = getenv("WRAP_GPU_ID");
+		if (str) {
+			unsigned int gpuid = strtol(str, &endptr, 0);
+			if (endptr[0] == '.') {
+				val = strtol(endptr + 1, NULL, 0);
+			}
+		} else {
+			val = 0;
+		}
+	}
+	return val;
+}
+
 unsigned int wrap_gmem_size(void)
 {
 	static unsigned int val = -1;

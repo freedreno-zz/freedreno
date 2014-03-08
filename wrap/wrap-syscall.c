@@ -564,8 +564,19 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 	if (param->type == KGSL_PROP_DEVICE_INFO) {
 		struct kgsl_devinfo *devinfo = param->value;
 		if (wrap_gpu_id()) {
-			devinfo->gpu_id = wrap_gpu_id();
-			printf("\t\tEMULATING gpu_id: %d !!!\n", devinfo->gpu_id);
+			uint32_t gpu_id = wrap_gpu_id();
+			/* convert gpu-id into chip-id, and add optional patch level: */
+			unsigned core  = gpu_id / 100;
+			unsigned major = (gpu_id % 100) / 10;
+			unsigned minor = gpu_id % 10;
+			int patch = wrap_gpu_id_patchid();
+			devinfo->gpu_id = gpu_id;
+			devinfo->chip_id = (patch & 0xff) |
+					((minor & 0xff) << 8) |
+					((major & 0xff) << 16) |
+					((core & 0xff) << 24);
+			printf("\t\tEMULATING gpu_id: %d (%08x)!!!\n",
+					devinfo->gpu_id, devinfo->chip_id);
 		}
 		if (wrap_gmem_size()) {
 			devinfo->gmem_sizebytes = wrap_gmem_size();
