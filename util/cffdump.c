@@ -139,6 +139,7 @@ static const char *fmt_name[] = {
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
+static void dump_register_val(uint32_t regbase, uint32_t dword, int level);
 
 struct buffer {
 	void *hostptr;
@@ -243,6 +244,9 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 #define	REG_CP_TIMESTAMP		 REG_SCRATCH_REG0
 
 
+static uint32_t type0_reg_vals[0x7fff];
+static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
+
 
 static struct {
 	uint32_t config;
@@ -341,6 +345,16 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 	}
 }
 
+static void reg_dump_scratch(const char *name, uint32_t dword, int level)
+{
+	unsigned regbase;
+	for (regbase = REG_AXXX_CP_SCRATCH_REG0;
+			regbase <= REG_AXXX_CP_SCRATCH_REG7;
+			regbase++) {
+		dump_register_val(regbase, type0_reg_vals[regbase], level);
+	}
+}
+
 static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 {
 	void *buf;
@@ -372,9 +386,6 @@ static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 	}
 }
 
-static uint32_t type0_reg_vals[0x7fff];
-static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
-
 // HACK:
 #define REG_A2XX_VSC_PIPE_CONFIG(i0)        (0x00000c06 + 0x3*(i0))
 #define REG_A2XX_VSC_PIPE_DATA_ADDRESS(i0)  (0x00000c07 + 0x3*(i0))
@@ -388,7 +399,18 @@ static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
  */
 static const const struct {
 	void (*fxn)(const char *name, uint32_t dword, int level);
-} reg_a2xx[0x7fff] = {
+} reg_axxx[0x7fff] = {
+#define REG(x, fxn) [REG_AXXX_ ## x] = { fxn }
+		REG(CP_SCRATCH_REG0, reg_dump_scratch),
+		REG(CP_SCRATCH_REG1, reg_dump_scratch),
+		REG(CP_SCRATCH_REG2, reg_dump_scratch),
+		REG(CP_SCRATCH_REG3, reg_dump_scratch),
+		REG(CP_SCRATCH_REG4, reg_dump_scratch),
+		REG(CP_SCRATCH_REG5, reg_dump_scratch),
+		REG(CP_SCRATCH_REG6, reg_dump_scratch),
+		REG(CP_SCRATCH_REG7, reg_dump_scratch),
+#undef REG
+}, reg_a2xx[0x7fff] = {
 #define REG(x, fxn) [REG_A2XX_ ## x] = { fxn }
 		REG(VSC_PIPE_CONFIG(0), reg_vsc_pipe_config),
 		REG(VSC_PIPE_DATA_ADDRESS(0), reg_vsc_pipe_data_address),
@@ -537,6 +559,7 @@ static struct rnndomain *finddom(uint32_t regbase)
 
 static const char *regname(uint32_t regbase, int color)
 {
+	static char buf[1024];
 	struct rnndecaddrinfo *info;
 
 	if (!initialized) {
@@ -545,9 +568,35 @@ static const char *regname(uint32_t regbase, int color)
 	}
 
 	info = rnndec_decodeaddr(color ? vc : vc_nocolor, finddom(regbase), regbase, 0);
-	if (info)
-		return info->name;
+	if (info) {
+		strncpy(buf, info->name, sizeof(buf));
+		free(info->name);
+		free(info);
+		return buf;
+	}
 	return NULL;
+}
+
+static void dump_register_val(uint32_t regbase, uint32_t dword, int level)
+{
+	struct rnndecaddrinfo *info =
+			rnndec_decodeaddr(vc, finddom(regbase), regbase, 0);
+
+	if (info && info->typeinfo) {
+		char *decoded = rnndec_decodeval(vc, info->typeinfo, dword, info->width);
+		printf("%s%s: %s\n", levels[level], info->name, decoded);
+		free(decoded);
+	} else if (info) {
+		printf("%s%s: %08x\n", levels[level], info->name, dword);
+
+	} else {
+		printf("%s<%04x>: %08x\n", levels[level], regbase, dword);
+	}
+
+	if (info) {
+		free(info->name);
+		free(info);
+	}
 }
 
 static void dump_register(uint32_t regbase, uint32_t dword, int level)
@@ -558,21 +607,13 @@ static void dump_register(uint32_t regbase, uint32_t dword, int level)
 	}
 
 	if (!summary) {
-		struct rnndecaddrinfo *info =
-				rnndec_decodeaddr(vc, finddom(regbase), regbase, 0);
-
-		if (info && info->typeinfo) {
-			printf("%s%s: %s\n", levels[level], info->name,
-					rnndec_decodeval(vc, info->typeinfo, dword, info->width));
-		} else if (info) {
-			printf("%s%s: %08x\n", levels[level], info->name, dword);
-		} else {
-			printf("%s<%04x>: %08x\n", levels[level], regbase, dword);
-		}
+		dump_register_val(regbase, dword, level);
 	}
 
 	if (type0_reg[regbase].fxn) {
 		type0_reg[regbase].fxn(regname(regbase, 0), dword, level);
+	} else if (reg_axxx[regbase].fxn) {
+		reg_axxx[regbase].fxn(regname(regbase, 0), dword, level);
 	}
 }
 
@@ -620,10 +661,14 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 
 	for (i = 0; i < sizedwords; i++) {
 		struct rnndecaddrinfo *info = rnndec_decodeaddr(vc, dom, i, 0);
+		char *decoded;
 		if (!(info && info->typeinfo))
 			break;
-		printf("%s%s\n", levels[level],
-			rnndec_decodeval(vc, info->typeinfo, dwords[i], info->width));
+		decoded = rnndec_decodeval(vc, info->typeinfo, dwords[i], info->width);
+		printf("%s%s\n", levels[level], decoded);
+		free(decoded);
+		free(info->name);
+		free(info);
 	}
 }
 
@@ -1220,6 +1265,23 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		printf("**** this ain't right!! dwords_left=%d\n", dwords_left);
 }
 
+ssize_t readn(int fd, void *buf, int nbytes)
+{
+	char *ptr = buf;
+	int ret = 0;
+	while (nbytes > 0) {
+		int n = read(fd, ptr, nbytes);
+		if (n < 0)
+			return n;
+		if (n == 0)
+			break;
+		ptr += n;
+		nbytes -= n;
+		ret += n;
+	}
+	return ret;
+}
+
 int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
@@ -1297,14 +1359,14 @@ int main(int argc, char **argv)
 		vc->colors = &envy_def_colors;
 	}
 
-	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {
+	while ((readn(fd, &type, sizeof(type)) > 0) && (readn(fd, &sz, 4) > 0)) {
 		free(buf);
 
 		needs_wfi = false;
 
 		buf = malloc(sz + 1);
 		((char *)buf)[sz] = '\0';
-		read(fd, buf, sz);
+		readn(fd, buf, sz);
 
 		switch(type) {
 		case RD_TEST:
