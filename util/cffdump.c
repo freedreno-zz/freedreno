@@ -42,6 +42,7 @@
 #include "adreno_pm4.xml.h"
 #include "a2xx.xml.h"
 #include "a3xx.xml.h"
+#include "a4xx.xml.h"
 
 typedef enum {
 	true = 1, false = 0,
@@ -504,7 +505,12 @@ static const const struct {
 		REG(SP_FS_OBJ_START_REG, reg_disasm_gpuaddr),
 #undef REG
 }, reg_a4xx[0x7fff] = {
-		/* TODO */
+#define REG(x, fxn) [REG_A4XX_ ## x] = { fxn }
+		REG(SP_VS_PVT_MEM_ADDR, reg_dump_gpuaddr),
+		REG(SP_FS_PVT_MEM_ADDR, reg_dump_gpuaddr),
+		REG(SP_VS_OBJ_START, reg_disasm_gpuaddr),
+		REG(SP_FS_OBJ_START, reg_disasm_gpuaddr),
+#undef REG
 }, *type0_reg;
 
 static struct rnndeccontext *vc;
@@ -1073,6 +1079,20 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	summary = saved_summary;
 }
 
+static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t num_indices = dwords[2];
+	bool saved_summary = summary;
+
+	summary = false;
+
+	/* don't bother dumping registers for the dummy draw_indx's.. */
+	if (num_indices > 0)
+		dump_register_summary(level);
+
+	summary = saved_summary;
+}
+
 static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	bool saved_summary = summary;
@@ -1139,6 +1159,27 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	type0_reg_written[val/8] |= (1 << (val % 8));
 }
 
+static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t count = dwords[0] & 0xffff;
+	uint32_t addr = dwords[1];
+	uint32_t *ptr = hostptr(addr);
+
+	if (ptr) {
+		uint32_t i;
+
+		dump_hex(ptr, count, level+1);
+
+		for (i = 0; i < count; ) {
+			uint32_t regbase = ptr[i] & 0xffff;
+			uint32_t count2 = (ptr[i] >> 16) + 1;
+			dump_registers(regbase, &ptr[i+1], count2, level+1);
+			i += count2 + 1;
+		}
+	}
+}
+
+
 #define CP(x, fxn)   [CP_ ## x] = { fxn }
 static const struct {
 	void (*fxn)(uint32_t *dwords, uint32_t sizedwords, int level);
@@ -1193,6 +1234,10 @@ static const struct {
 		CP(LOAD_STATE, cp_load_state),
 		CP(SET_BIN_DATA, NULL),
 		CP(SET_BIN, NULL),
+
+		/* for a4xx */
+		CP(SET_DRAW_STATE, cp_set_draw_state),
+		CP(DRAW_INDX_OFFSET, cp_draw_indx_offset),
 };
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)

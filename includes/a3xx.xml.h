@@ -10,11 +10,11 @@ git clone https://github.com/freedreno/envytools.git
 The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2013-11-30 14:47:15)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32840 bytes, from 2014-01-05 14:44:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (   9009 bytes, from 2014-01-11 16:56:35)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  12362 bytes, from 2014-01-07 14:47:36)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  56345 bytes, from 2014-02-23 00:00:17)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (   8344 bytes, from 2013-11-30 14:49:47)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32580 bytes, from 2014-03-11 20:33:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (   9845 bytes, from 2014-03-11 20:33:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14477 bytes, from 2014-03-11 20:33:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  56146 bytes, from 2014-03-11 20:33:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  17174 bytes, from 2014-03-11 20:33:21)
 
 Copyright (C) 2013-2014 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -40,12 +40,6 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-
-enum a3xx_render_mode {
-	RB_RENDERING_PASS = 0,
-	RB_TILING_PASS = 1,
-	RB_RESOLVE_PASS = 2,
-};
 
 enum a3xx_tile_mode {
 	LINEAR = 0,
@@ -180,12 +174,6 @@ enum a3xx_color_swap {
 	XYZW = 3,
 };
 
-enum a3xx_msaa_samples {
-	MSAA_ONE = 0,
-	MSAA_TWO = 1,
-	MSAA_FOUR = 2,
-};
-
 enum a3xx_sp_perfcounter_select {
 	SP_FS_CFLOW_INSTRUCTIONS = 12,
 	SP_FS_FULL_ALU_INSTRUCTIONS = 14,
@@ -210,11 +198,6 @@ enum a3xx_rop_code {
 	ROP_OR_REVERSE = 13,
 	ROP_OR = 14,
 	ROP_SET = 15,
-};
-
-enum adreno_rb_copy_control_mode {
-	RB_COPY_RESOLVE = 1,
-	RB_COPY_DEPTH_STENCIL = 5,
 };
 
 enum a3xx_tex_filter {
@@ -644,8 +627,26 @@ static inline uint32_t A3XX_GRAS_CL_VPORT_ZSCALE(float val)
 }
 
 #define REG_A3XX_GRAS_SU_POINT_MINMAX				0x00002068
+#define A3XX_GRAS_SU_POINT_MINMAX_MIN__MASK			0x0000ffff
+#define A3XX_GRAS_SU_POINT_MINMAX_MIN__SHIFT			0
+static inline uint32_t A3XX_GRAS_SU_POINT_MINMAX_MIN(float val)
+{
+	return ((((uint32_t)(val * 8.0))) << A3XX_GRAS_SU_POINT_MINMAX_MIN__SHIFT) & A3XX_GRAS_SU_POINT_MINMAX_MIN__MASK;
+}
+#define A3XX_GRAS_SU_POINT_MINMAX_MAX__MASK			0xffff0000
+#define A3XX_GRAS_SU_POINT_MINMAX_MAX__SHIFT			16
+static inline uint32_t A3XX_GRAS_SU_POINT_MINMAX_MAX(float val)
+{
+	return ((((uint32_t)(val * 8.0))) << A3XX_GRAS_SU_POINT_MINMAX_MAX__SHIFT) & A3XX_GRAS_SU_POINT_MINMAX_MAX__MASK;
+}
 
 #define REG_A3XX_GRAS_SU_POINT_SIZE				0x00002069
+#define A3XX_GRAS_SU_POINT_SIZE__MASK				0xffffffff
+#define A3XX_GRAS_SU_POINT_SIZE__SHIFT				0
+static inline uint32_t A3XX_GRAS_SU_POINT_SIZE(float val)
+{
+	return ((((uint32_t)(val * 8.0))) << A3XX_GRAS_SU_POINT_SIZE__SHIFT) & A3XX_GRAS_SU_POINT_SIZE__MASK;
+}
 
 #define REG_A3XX_GRAS_SU_POLY_OFFSET_SCALE			0x0000206c
 #define A3XX_GRAS_SU_POLY_OFFSET_SCALE_VAL__MASK		0x00ffffff
@@ -992,6 +993,12 @@ static inline uint32_t A3XX_RB_COPY_CONTROL_MODE(enum adreno_rb_copy_control_mod
 {
 	return ((val) << A3XX_RB_COPY_CONTROL_MODE__SHIFT) & A3XX_RB_COPY_CONTROL_MODE__MASK;
 }
+#define A3XX_RB_COPY_CONTROL_FASTCLEAR__MASK			0x00000f00
+#define A3XX_RB_COPY_CONTROL_FASTCLEAR__SHIFT			8
+static inline uint32_t A3XX_RB_COPY_CONTROL_FASTCLEAR(uint32_t val)
+{
+	return ((val) << A3XX_RB_COPY_CONTROL_FASTCLEAR__SHIFT) & A3XX_RB_COPY_CONTROL_FASTCLEAR__MASK;
+}
 #define A3XX_RB_COPY_CONTROL_GMEM_BASE__MASK			0xffffc000
 #define A3XX_RB_COPY_CONTROL_GMEM_BASE__SHIFT			14
 static inline uint32_t A3XX_RB_COPY_CONTROL_GMEM_BASE(uint32_t val)
@@ -1033,6 +1040,12 @@ static inline uint32_t A3XX_RB_COPY_DEST_INFO_FORMAT(enum a3xx_color_fmt val)
 static inline uint32_t A3XX_RB_COPY_DEST_INFO_SWAP(enum a3xx_color_swap val)
 {
 	return ((val) << A3XX_RB_COPY_DEST_INFO_SWAP__SHIFT) & A3XX_RB_COPY_DEST_INFO_SWAP__MASK;
+}
+#define A3XX_RB_COPY_DEST_INFO_DITHER_MODE__MASK		0x00000c00
+#define A3XX_RB_COPY_DEST_INFO_DITHER_MODE__SHIFT		10
+static inline uint32_t A3XX_RB_COPY_DEST_INFO_DITHER_MODE(enum adreno_rb_dither_mode val)
+{
+	return ((val) << A3XX_RB_COPY_DEST_INFO_DITHER_MODE__SHIFT) & A3XX_RB_COPY_DEST_INFO_DITHER_MODE__MASK;
 }
 #define A3XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE__MASK		0x0003c000
 #define A3XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE__SHIFT		14
@@ -1249,6 +1262,7 @@ static inline uint32_t A3XX_PC_PRIM_VTX_CNTL_POLYMODE_BACK_PTYPE(enum adreno_pa_
 	return ((val) << A3XX_PC_PRIM_VTX_CNTL_POLYMODE_BACK_PTYPE__SHIFT) & A3XX_PC_PRIM_VTX_CNTL_POLYMODE_BACK_PTYPE__MASK;
 }
 #define A3XX_PC_PRIM_VTX_CNTL_PROVOKING_VTX_LAST		0x02000000
+#define A3XX_PC_PRIM_VTX_CNTL_PSIZE				0x04000000
 
 #define REG_A3XX_PC_RESTART_INDEX				0x000021ed
 
@@ -1515,12 +1529,13 @@ static inline uint32_t A3XX_VFD_VS_THREADING_THRESHOLD_REGID_VTXCNT(uint32_t val
 }
 
 #define REG_A3XX_VPC_ATTR					0x00002280
-#define A3XX_VPC_ATTR_TOTALATTR__MASK				0x00000fff
+#define A3XX_VPC_ATTR_TOTALATTR__MASK				0x000001ff
 #define A3XX_VPC_ATTR_TOTALATTR__SHIFT				0
 static inline uint32_t A3XX_VPC_ATTR_TOTALATTR(uint32_t val)
 {
 	return ((val) << A3XX_VPC_ATTR_TOTALATTR__SHIFT) & A3XX_VPC_ATTR_TOTALATTR__MASK;
 }
+#define A3XX_VPC_ATTR_PSIZE					0x00000200
 #define A3XX_VPC_ATTR_THRDASSIGN__MASK				0x0ffff000
 #define A3XX_VPC_ATTR_THRDASSIGN__SHIFT				12
 static inline uint32_t A3XX_VPC_ATTR_THRDASSIGN(uint32_t val)
