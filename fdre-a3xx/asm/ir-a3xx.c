@@ -653,10 +653,21 @@ struct ir3_varying * ir3_varying_create(struct ir3_shader *shader,
 	return v;
 }
 
+struct ir3_buf * ir3_buf_create(struct ir3_shader *shader,
+		int cstart, const char *name)
+{
+	struct ir3_buf *b = ir3_alloc(shader, sizeof(struct ir3_buf));
+	b->name   = ir3_strdup(shader, name);
+	b->cstart = reg_create_from_num(shader, cstart, IR3_REG_CONST);
+	assert(shader->outs_count < ARRAY_SIZE(shader->outs));
+	shader->bufs[shader->bufs_count++] = b;
+	return b;
+}
+
 struct ir3_out * ir3_out_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name)
 {
-	struct ir3_out *o = ir3_alloc(shader, sizeof(struct ir3_varying));
+	struct ir3_out *o = ir3_alloc(shader, sizeof(struct ir3_out));
 	o->name   = ir3_strdup(shader, name);
 	o->rstart = reg_create_from_num(shader, rstart, 0);
 	o->num    = num;

@@ -45,6 +45,6 @@ struct ir3_sampler ** fd_program_samplers(struct fd_program *program,
 uint32_t fd_program_outloc(struct fd_program *program);
 void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		struct fd_parameters *uniforms, struct fd_parameters *attr,
-		struct fd_ringbuffer *ring);
+		struct fd_parameters *bufs, struct fd_ringbuffer *ring);
 
 #endif /* PROGRAM_H_ */

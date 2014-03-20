@@ -175,6 +175,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_A_SAMPLER
 %token <tok> T_A_UNIFORM
 %token <tok> T_A_VARYING
+%token <tok> T_A_BUF
 %token <tok> T_A_OUT
 
 /* src register flags */
@@ -408,6 +409,7 @@ header:            attribute_header
 |                  sampler_header
 |                  uniform_header
 |                  varying_header
+|                  buf_header
 |                  out_header
 
 attribute_header:  T_A_ATTRIBUTE '(' reg_range ')' T_IDENTIFIER {
@@ -432,6 +434,10 @@ varying_header:    T_A_VARYING '(' reg_range ')' T_IDENTIFIER {
 
 out_header:        T_A_OUT '(' reg_range ')' T_IDENTIFIER {
                        ir3_out_create(shader, $3.start, $3.num, $5);
+}
+
+buf_header:        T_A_BUF '(' T_CONSTANT ')' T_IDENTIFIER {
+                       ir3_buf_create(shader, $3, $5);
 }
 
                    /* NOTE: if just single register is specified (rather than a range) assume vec4 */
