@@ -40,6 +40,7 @@ TESTS_3D = \
 	test-triangle-quad
 
 TESTS_CL = \
+	test-simple \
 	test-image
 
 TESTS = $(TESTS_2D) $(TESTS_3D) $(TESTS_CL)

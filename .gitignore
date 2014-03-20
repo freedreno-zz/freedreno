@@ -33,6 +33,10 @@ test-es2gears
 test-piglit-bad
 test-piglit-good
 
+# cl tests:
+test-image
+test-simple
+
 # misc:
 redump
 zdump
