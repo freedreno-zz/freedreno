@@ -209,18 +209,40 @@ static void emit_vtx_fetch(struct fd_ringbuffer *ring,
 	}
 }
 
+static struct fd_bo *get_buf(struct fd_shader *shader,
+		struct fd_parameters *bufs, int num)
+{
+	uint32_t i;
+
+	if (!bufs)
+		return NULL;
+
+	for (i = 0; i < shader->ir->bufs_count; i++) {
+		struct ir3_buf *b = shader->ir->bufs[i];
+
+		if (b->cstart->num == num) {
+			struct fd_param *p = find_param(bufs, b->name);
+			if (p)
+				return p->bo;
+		}
+	}
+
+	return NULL;
+}
+
 static void emit_uniconst(struct fd_ringbuffer *ring,
 		struct fd_shader *shader, struct fd_parameters *uniforms,
-		enum adreno_state_block state_block)
+		struct fd_parameters *bufs, enum adreno_state_block state_block)
 {
 	static uint32_t buf[512]; /* cheesy, but test code isn't multithreaded */
-	uint32_t i, j, k, sz = 0;
+	uint32_t i, j, k, sz = 0, base = ~0;
 
 	memset(buf, 0, sizeof(buf));
 
 	for (i = 0; i < shader->ir->consts_count; i++) {
 		struct ir3_const *c = shader->ir->consts[i];
 		uint32_t off = c->cstart->num;
+		base = min(base, off);
 		memcpy(&buf[off], c->val, sizeof(c->val));
 		sz = max(sz, off + (sizeof(c->val) / sizeof(buf[0])));
 	}
@@ -230,6 +252,8 @@ static void emit_uniconst(struct fd_ringbuffer *ring,
 		struct fd_param *p = find_param(uniforms, u->name);
 		const uint32_t *dwords = p->data;
 		uint32_t off = u->cstart->num;
+
+		base = min(base, off);
 
 		for (j = 0; j < p->count; j++) {
 			for (k = 0; k < p->size; k++)
@@ -242,24 +266,43 @@ static void emit_uniconst(struct fd_ringbuffer *ring,
 		sz = max(sz, off);
 	}
 
+	/* don't forget buf's: */
+	for (i = 0; i < shader->ir->bufs_count; i++) {
+		struct ir3_buf *b = shader->ir->bufs[i];
+		uint32_t off = b->cstart->num;
+		base = min(base, off);
+		sz = max(sz, off);
+	}
+
 	/* if no constants, don't emit the CP_LOAD_STATE */
 	if (sz == 0)
 		return;
 
+	/* align things to vec4: */
+	base &= ~0x3;
+	sz = ALIGN(sz, 4);
+	sz -= base;
+
 	OUT_PKT3(ring, CP_LOAD_STATE, 2 + sz);
-	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(0) |
+	OUT_RING(ring, CP_LOAD_STATE_0_DST_OFF(base/2) |
 			CP_LOAD_STATE_0_STATE_SRC(SS_DIRECT) |
 			CP_LOAD_STATE_0_STATE_BLOCK(state_block) |
 			CP_LOAD_STATE_0_NUM_UNIT(sz/2));
 	OUT_RING(ring, CP_LOAD_STATE_1_STATE_TYPE(ST_CONSTANTS) |
 			CP_LOAD_STATE_1_EXT_SRC_ADDR(0));
-	for (i = 0; i < sz; i++)
-		OUT_RING(ring, buf[i]);
+	for (i = 0; i < sz; i++) {
+		struct fd_bo *bo = get_buf(shader, bufs, i + base);
+		if (bo) {
+			OUT_RELOC(ring, bo, 0, 0);
+		} else {
+			OUT_RING(ring, buf[i]);
+		}
+	}
 }
 
 void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		struct fd_parameters *uniforms, struct fd_parameters *attr,
-		struct fd_ringbuffer *ring)
+		struct fd_parameters *bufs, struct fd_ringbuffer *ring)
 {
 	struct fd_shader *vs = get_shader(program, FD_SHADER_VERTEX);
 	struct fd_shader *fs = get_shader(program, FD_SHADER_FRAGMENT);
@@ -483,7 +526,7 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 
 	/* for RB_RESOLVE_PASS, I think the consts are not needed: */
 	if (uniforms) {
-		emit_uniconst(ring, vs, uniforms, SB_VERT_SHADER);
-		emit_uniconst(ring, fs, uniforms, SB_FRAG_SHADER);
+		emit_uniconst(ring, vs, uniforms, bufs, SB_VERT_SHADER);
+		emit_uniconst(ring, fs, uniforms, bufs, SB_FRAG_SHADER);
 	}
 }

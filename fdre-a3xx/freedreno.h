@@ -51,6 +51,7 @@ int fd_uniform_attach(struct fd_state *state, const char *name,
 		uint32_t size, uint32_t count, const void *data);
 int fd_set_texture(struct fd_state *state, const char *name,
 		struct fd_surface *tex);
+int fd_set_buf(struct fd_state *state, const char *name, struct fd_bo *bo);
 
 void fd_clear_color(struct fd_state *state, float color[4]);
 void fd_clear_stencil(struct fd_state *state, uint32_t s);

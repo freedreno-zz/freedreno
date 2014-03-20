@@ -78,6 +78,9 @@ struct fd_state {
 		struct fd_parameters params;
 	} textures;
 
+	/* buffer related params: */
+	struct fd_parameters bufs;
+
 	struct {
 		/* render target: */
 		struct fd_surface *surface;
@@ -355,7 +358,8 @@ struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 {
 	struct fd_bo *bo = fd_bo_new(state->dev, size,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
-	memcpy(fd_bo_map(bo), data, size);
+	if (data)
+		memcpy(fd_bo_map(bo), data, size);
 	return bo;
 }
 
@@ -401,6 +405,15 @@ int fd_set_texture(struct fd_state *state, const char *name,
 	if (!p)
 		return -1;
 	p->tex = tex;
+	return 0;
+}
+
+int fd_set_buf(struct fd_state *state, const char *name, struct fd_bo *bo)
+{
+	struct fd_param *p = find_param(&state->bufs, name);
+	if (!p)
+		return -1;
+	p->bo = bo;
 	return 0;
 }
 
@@ -453,7 +466,7 @@ static void emit_gmem2mem(struct fd_state *state,
 		uint32_t xoff, uint32_t yoff)
 {
 	fd_program_emit_state(state->solid_program, 0,
-			NULL, &state->solid_attributes, ring);
+			NULL, &state->solid_attributes, NULL, ring);
 
 	OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
 	OUT_RING(ring, A3XX_RB_DEPTH_CONTROL_ZFUNC(FUNC_NEVER));
@@ -616,7 +629,7 @@ int fd_clear(struct fd_state *state, GLbitfield mask)
 
 	fd_program_emit_state(state->solid_program, 0,
 			&state->solid_uniforms, &state->solid_attributes,
-			ring);
+			NULL, ring);
 
 	emit_draw_indx(ring, DI_PT_RECTLIST, INDEX_SIZE_IGN, 2, NULL, 0, 0);
 
@@ -1081,7 +1094,7 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 	state->dirty = true;
 
 	fd_program_emit_state(state->program, first, &state->uniforms,
-			&state->attributes, ring);
+			&state->attributes, &state->bufs, ring);
 
 	/*
 	 * +----------- max outloc
