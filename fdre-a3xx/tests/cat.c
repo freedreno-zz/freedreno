@@ -243,11 +243,11 @@ void main(void)
 	fd_make_current(state, surface);
 
 	/* construct the two shader programs: */
-	cat_program = fd_program_new();
+	cat_program = fd_program_new(state);
 	fd_program_attach_asm(cat_program, FD_SHADER_VERTEX, cat_vertex_shader_asm);
 	fd_program_attach_asm(cat_program, FD_SHADER_FRAGMENT, cat_fragment_shader_asm);
 
-	tex_program = fd_program_new();
+	tex_program = fd_program_new(state);
 	fd_program_attach_asm(tex_program, FD_SHADER_VERTEX, tex_vertex_shader_asm);
 	fd_program_attach_asm(tex_program, FD_SHADER_FRAGMENT, tex_fragment_shader_asm);
 

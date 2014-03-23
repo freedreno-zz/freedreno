@@ -37,6 +37,7 @@ LDADD = \
 	$(top_builddir)/libfreedreno.la
 
 TESTS = \
+	compute-simple \
 	regdump \
 	cube-textured \
 	cube \
@@ -51,6 +52,7 @@ TESTS = \
 
 noinst_PROGRAMS = $(TESTS)
 
+compute_simple_SOURCES    = compute-simple.c
 regdump_SOURCES           = regdump.c cubetex.c
 quad_flat_SOURCES         = quad-flat.c
 quad_textured_SOURCES     = quad-textured.c cubetex.c
