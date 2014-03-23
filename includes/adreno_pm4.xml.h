@@ -10,11 +10,11 @@ git clone https://github.com/freedreno/envytools.git
 The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2013-11-30 14:47:15)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32580 bytes, from 2014-03-11 20:33:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (   9845 bytes, from 2014-03-11 20:33:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14477 bytes, from 2014-03-11 20:33:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  56146 bytes, from 2014-03-11 20:33:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  17174 bytes, from 2014-03-11 20:33:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32580 bytes, from 2014-03-23 15:12:15)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10186 bytes, from 2014-03-23 15:38:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14477 bytes, from 2014-03-23 15:12:15)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  56398 bytes, from 2014-03-23 15:39:13)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  26293 bytes, from 2014-03-23 15:46:09)
 
 Copyright (C) 2013-2014 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
