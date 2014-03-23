@@ -73,6 +73,8 @@ int fd_draw_elements(struct fd_state *state, GLenum mode, GLsizei count,
 		GLenum type, const GLvoid* indices);
 int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		GLint first, GLsizei count);
+int fd_run_compute(struct fd_state *state, uint32_t workdim,
+		uint32_t *globaloff, uint32_t *globalsize, uint32_t *localsize);
 
 int fd_swap_buffers(struct fd_state *state);
 int fd_flush(struct fd_state *state);
@@ -89,6 +91,7 @@ void fd_surface_upload(struct fd_surface *surface, const void *data);
 void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface);
 int fd_dump_hex(struct fd_surface *surface);
+int fd_dump_hex_bo(struct fd_bo *bo);
 int fd_dump_bmp(struct fd_surface *surface, const char *filename);
 
 #endif /* FREEDRENO_H_ */

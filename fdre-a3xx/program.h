@@ -31,9 +31,12 @@ struct fd_program;
 enum fd_shader_type {
 	FD_SHADER_VERTEX   = 0,
 	FD_SHADER_FRAGMENT = 1,
+	FD_SHADER_COMPUTE  = 2,
 };
 
-struct fd_program * fd_program_new(void);
+struct fd_state;
+
+struct fd_program * fd_program_new(struct fd_state *state);
 
 int fd_program_attach_asm(struct fd_program *program,
 		enum fd_shader_type type, const char *src);
@@ -44,6 +47,9 @@ struct ir3_sampler ** fd_program_samplers(struct fd_program *program,
 		enum fd_shader_type type, int *cnt);
 uint32_t fd_program_outloc(struct fd_program *program);
 void fd_program_emit_state(struct fd_program *program, uint32_t first,
+		struct fd_parameters *uniforms, struct fd_parameters *attr,
+		struct fd_parameters *bufs, struct fd_ringbuffer *ring);
+void fd_program_emit_compute_state(struct fd_program *program,
 		struct fd_parameters *uniforms, struct fd_parameters *attr,
 		struct fd_parameters *bufs, struct fd_ringbuffer *ring);
 

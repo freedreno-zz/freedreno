@@ -34,6 +34,14 @@
 #include "ws.h"
 #include "bmp.h"
 
+static inline void
+emit_marker(struct fd_ringbuffer *ring, int scratch_idx)
+{
+	static unsigned marker_cnt = 0;
+	OUT_PKT0(ring, REG_AXXX_CP_SCRATCH_REG0 + scratch_idx, 1);
+	OUT_RING(ring, ++marker_cnt);
+}
+
 struct fd_state {
 
 	struct fd_winsys *ws;
@@ -240,12 +248,12 @@ struct fd_state * fd_init(void)
 	state->vs_pvt_mem = fd_bo_new(state->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
-	state->fs_pvt_mem = fd_bo_new(state->dev, 0x2000,
+	state->fs_pvt_mem = fd_bo_new(state->dev, 0x102000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
-	state->program = fd_program_new();
+	state->program = fd_program_new(state);
 
-	state->solid_program = fd_program_new();
+	state->solid_program = fd_program_new(state);
 
 	ret = fd_program_attach_asm(state->solid_program,
 			FD_SHADER_VERTEX, solid_vertex_shader_asm);
@@ -1057,7 +1065,6 @@ static enum pc_di_primtype mode2prim(GLenum mode)
 static int draw_impl(struct fd_state *state, GLenum mode,
 		GLint first, GLsizei count, GLenum type, const GLvoid *indices)
 {
-
 	struct fd_ringbuffer *ring = state->ring;
 	enum pc_di_index_size idx_type = INDEX_SIZE_IGN;
 	struct fd_bo *indx_bo = NULL;
@@ -1209,6 +1216,155 @@ int fd_draw_arrays(struct fd_state *state, GLenum mode,
 		GLint first, GLsizei count)
 {
 	return draw_impl(state, mode, first, count, 0, NULL);
+}
+
+int fd_run_compute(struct fd_state *state, uint32_t workdim,
+		uint32_t *globaloff, uint32_t *globalsize, uint32_t *localsize)
+{
+	struct fd_ringbuffer *ring = state->ring;
+	uint32_t local[3] = {1, 1, 1};
+	uint32_t global[3] = {1, 1, 1};
+	uint32_t off[3] = {0, 0, 0};
+	uint32_t i;
+
+	for (i = 0; i < workdim; i++) {
+		if (globaloff)
+			off[i] = globaloff[i];
+		global[i] = globalsize[i];
+		local[i] = localsize[i];
+	}
+
+	OUT_PKT3(ring, CP_NOP, 2);
+	OUT_RING(ring, 0xdeec0ded);
+	OUT_RING(ring, 0x00000001);
+
+	emit_marker(ring, 6);
+
+	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
+	OUT_RING(ring, 0x00000000);
+
+	emit_marker(ring, 6);
+
+	OUT_PKT0(ring, REG_A3XX_UNKNOWN_0EE0, 1);
+	OUT_RING(ring, 0x00000000);
+
+	OUT_PKT0(ring, REG_A3XX_UNKNOWN_0F03, 1);
+	OUT_RING(ring, 0x00000002);
+
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RBBM_CLOCK_CTL);
+	OUT_RING(ring, 0xfffcffff);
+	OUT_RING(ring, 0x00010000);
+
+	OUT_PKT0(ring, REG_A3XX_RB_MODE_CONTROL, 1);
+	OUT_RING(ring, A3XX_RB_MODE_CONTROL_RENDER_MODE(RB_COMPUTE_PASS) |
+			A3XX_RB_MODE_CONTROL_GMEM_BYPASS);
+
+	OUT_PKT0(ring, REG_A3XX_RB_RENDER_CONTROL, 1);
+	OUT_RING(ring, A3XX_RB_RENDER_CONTROL_BIN_WIDTH(0) |
+			A3XX_RB_RENDER_CONTROL_ALPHA_TEST_FUNC(FUNC_NEVER));
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_CL_NDRANGE_0_REG, 9);
+	OUT_RING(ring, A3XX_HLSQ_CL_NDRANGE_0_REG_WORKDIM(workdim) |
+			A3XX_HLSQ_CL_NDRANGE_0_REG_LOCALSIZE0(local[0]) |
+			A3XX_HLSQ_CL_NDRANGE_0_REG_LOCALSIZE1(local[1]) |
+			A3XX_HLSQ_CL_NDRANGE_0_REG_LOCALSIZE2(local[2]));
+	OUT_RING(ring, global[0]);    /* HLSQ_CL_GLOBAL_WORK[0].SIZE */
+	OUT_RING(ring, off[0]);       /* HLSQ_CL_GLOBAL_WORK[0].OFFSET */
+	OUT_RING(ring, global[1]);    /* HLSQ_CL_GLOBAL_WORK[1].SIZE */
+	OUT_RING(ring, off[1]);       /* HLSQ_CL_GLOBAL_WORK[1].OFFSET */
+	OUT_RING(ring, global[2]);    /* HLSQ_CL_GLOBAL_WORK[2].SIZE */
+	OUT_RING(ring, off[2]);       /* HLSQ_CL_GLOBAL_WORK[2].OFFSET */
+	OUT_RING(ring, 0x0001200c);   /* HLSQ_CL_CONTROL_0_REG */
+	OUT_RING(ring, 0x0000f000);   /* HLSQ_CL_CONTROL_1_REG */
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_CL_KERNEL_CONST_REG, 4);
+	OUT_RING(ring, 0x00003006);   /* HLSQ_CL_KERNEL_CONST_REG */
+	OUT_RING(ring, global[0] / local[0]);  /* HLSQ_CL_KERNEL_GROUP[0].RATIO */
+	OUT_RING(ring, global[1] / local[1]);  /* HLSQ_CL_KERNEL_GROUP[1].RATIO */
+	OUT_RING(ring, global[2] / local[2]);  /* HLSQ_CL_KERNEL_GROUP[2].RATIO */
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_CL_WG_OFFSET_REG, 1);
+	OUT_RING(ring, 0x00000009);
+
+	for (i = 0; i < 4; i++) {
+		enum a3xx_color_fmt format = 0x11; // XXX
+
+		OUT_PKT0(ring, REG_A3XX_RB_MRT(i), 4);
+		OUT_RING(ring, A3XX_RB_MRT_CONTROL_ROP_CODE(ROP_CLEAR) |
+				A3XX_RB_MRT_CONTROL_DITHER_MODE(DITHER_DISABLE) |
+				A3XX_RB_MRT_CONTROL_COMPONENT_ENABLE(0));
+		OUT_RING(ring, A3XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(LINEAR) |
+				A3XX_RB_MRT_BUF_INFO_COLOR_BUF_PITCH(0));
+		OUT_RING(ring, A3XX_RB_MRT_BUF_BASE_COLOR_BUF_BASE(0));
+		OUT_RING(ring, A3XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(FACTOR_ZERO) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(BLEND_DST_PLUS_SRC) |
+				A3XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(FACTOR_ZERO) |
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_SRC_FACTOR(FACTOR_ZERO) |
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_BLEND_OPCODE(BLEND_DST_PLUS_SRC) |
+				A3XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(FACTOR_ZERO));
+
+		OUT_PKT0(ring, REG_A3XX_SP_FS_IMAGE_OUTPUT_REG(i), 1);
+		OUT_RING(ring, A3XX_SP_FS_IMAGE_OUTPUT_REG_MRTFORMAT(format));
+	}
+
+	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_PARAM_REG, 2);
+	OUT_RING(ring, 0x10400010);                  /* SP_FS_PVT_MEM_PARAM_REG */
+	OUT_RELOC(ring, state->fs_pvt_mem, 0, 0);    /* SP_FS_PVT_MEM_ADDR_REG */
+
+	OUT_PKT0(ring, REG_A3XX_SP_FS_PVT_MEM_SIZE_REG, 1);
+	OUT_RING(ring, 0x00000102);
+
+	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
+	OUT_RING(ring, 0x00000000);
+
+	OUT_PKT0(ring, REG_A3XX_TPL1_TP_FS_TEX_OFFSET, 2);
+	OUT_RING(ring, A3XX_TPL1_TP_FS_TEX_OFFSET_SAMPLEROFFSET(0) |
+			A3XX_TPL1_TP_FS_TEX_OFFSET_MEMOBJOFFSET(0) |
+			A3XX_TPL1_TP_FS_TEX_OFFSET_BASETABLEPTR(0));
+	OUT_RING(ring, 0x00000000);        /* TPL1_TP_FS_BORDER_COLOR_BASE_ADDR */
+
+	fd_program_emit_compute_state(state->program, &state->uniforms,
+			&state->attributes, &state->bufs, ring);
+
+	emit_marker(ring, 6);
+
+	/* kick the compute: */
+	OUT_PKT3(ring, CP_RUN_OPENCL, 1);
+	OUT_RING(ring, 0x00000000);
+
+	emit_marker(ring, 6);
+
+	OUT_PKT3(ring, CP_NOP, 2);
+	OUT_RING(ring, 0xdeec0ded);
+	OUT_RING(ring, 0x00000002);
+
+	emit_marker(ring, 6);
+
+	OUT_PKT3(ring, CP_WAIT_FOR_IDLE, 1);
+	OUT_RING(ring, 0x00000000);
+
+	emit_marker(ring, 6);
+
+	OUT_PKT3(ring, CP_REG_RMW, 3);
+	OUT_RING(ring, REG_A3XX_RBBM_CLOCK_CTL);
+	OUT_RING(ring, 0xfffcffff);
+	OUT_RING(ring, 0x00000000);
+
+	fd_ringbuffer_flush(ring);
+
+	// TODO maybe return fence/timestamp and let app explicitly wait
+	// for timestamp, so it could better pipeline things?  Probably
+	// need to be a bit more sophisticated with ringbuffer rollover/
+	// reset..
+
+	fd_pipe_wait(state->pipe, fd_ringbuffer_timestamp(ring));
+	fd_ringbuffer_reset(state->ring);
+
+	fd_ringmarker_mark(state->draw_start);
+
+	return 0;
 }
 
 int fd_swap_buffers(struct fd_state *state)
@@ -1671,27 +1827,39 @@ void fd_make_current(struct fd_state *state,
 	fd_ringmarker_mark(state->draw_start);
 }
 
-/* really just for float32 buffers.. */
-int fd_dump_hex(struct fd_surface *surface)
+static int dump_hex(void *buf, uint32_t w, uint32_t h, uint32_t p)
 {
-	uint32_t *dbuf = fd_bo_map(surface->bo);
-	float   *fbuf = fd_bo_map(surface->bo);
+	uint32_t *dbuf = buf;
+	float   *fbuf = buf;
 	uint32_t i, j;
 
-	for (i = 0; i < surface->height; i++) {
-		for (j = 0; j < surface->width; j++) {
-			uint32_t off = (i * surface->pitch) + j;
+	for (i = 0; i < h; i++) {
+		for (j = 0; j < w; j++) {
+			uint32_t off = (i * p) + j;
 			off *= 4;  /* convert to vec4 (f32f32f32f32) */
 			printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
 					(unsigned int)(off * 4),
 					dbuf[off+0], dbuf[off+1], dbuf[off+2], dbuf[off+3],
 					fbuf[off+0], fbuf[off+1], fbuf[off+2], fbuf[off+3]);
-
 		}
 		printf("\t\t\t********\n");
 	}
 
 	return 0;
+
+}
+
+/* really just for float32 buffers.. */
+int fd_dump_hex(struct fd_surface *surface)
+{
+	return dump_hex(fd_bo_map(surface->bo), surface->width,
+			surface->height, surface->pitch);
+}
+
+int fd_dump_hex_bo(struct fd_bo *bo)
+{
+	uint32_t sizedwords = fd_bo_size(bo) / 4;
+	return dump_hex(fd_bo_map(bo), sizedwords / 4, 1, sizedwords);
 }
 
 int fd_dump_bmp(struct fd_surface *surface, const char *filename)

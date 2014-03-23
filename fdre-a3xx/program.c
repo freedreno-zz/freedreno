@@ -26,6 +26,7 @@
 #endif
 
 #include "program.h"
+#include "freedreno.h"
 #include "ir-a3xx.h"
 #include "ring.h"
 #include "util.h"
@@ -34,12 +35,14 @@
 struct fd_shader {
 	uint32_t bin[512];
 	uint32_t sizedwords;
+	struct fd_bo *bo;
 	struct ir3_shader_info info;
 	struct ir3_shader *ir;
 };
 
 struct fd_program {
-	struct fd_shader vertex_shader, fragment_shader;
+	struct fd_state *state;
+	struct fd_shader vertex_shader, fragment_shader, compute_shader;
 };
 
 static struct fd_shader *get_shader(struct fd_program *program,
@@ -48,14 +51,17 @@ static struct fd_shader *get_shader(struct fd_program *program,
 	switch (type) {
 	case FD_SHADER_VERTEX:   return &program->vertex_shader;
 	case FD_SHADER_FRAGMENT: return &program->fragment_shader;
+	case FD_SHADER_COMPUTE:  return &program->compute_shader;
 	}
 	assert(0);
 	return NULL;
 }
 
-struct fd_program * fd_program_new(void)
+struct fd_program * fd_program_new(struct fd_state *state)
 {
-	return calloc(1, sizeof(struct fd_program));
+	struct fd_program *program = calloc(1, sizeof(struct fd_program));
+	program->state = state;
+	return program;
 }
 
 int fd_program_attach_asm(struct fd_program *program,
@@ -81,6 +87,10 @@ int fd_program_attach_asm(struct fd_program *program,
 		return -1;
 	}
 	shader->sizedwords = sizedwords;
+
+	shader->bo = fd_attribute_bo_new(program->state,
+			sizedwords * 4, shader->bin);
+
 	return 0;
 }
 
@@ -126,17 +136,6 @@ static uint32_t instrlen(struct fd_shader *shader)
 	 * (4 instructions, 8 dwords):
 	 */
 	return shader->sizedwords / 8;
-}
-
-static uint32_t constlen(struct fd_shader *shader)
-{
-	/* the constants length is in units of vec4's, and is the sum of
-	 * the uniforms and the built-in compiler constants
-	 */
-	uint32_t i, len = 4 * shader->ir->consts_count;
-	for (i = 0; i < shader->ir->uniforms_count; i++)
-		len += shader->ir->uniforms[i]->num;
-	return ALIGN(len, 4) / 4;
 }
 
 static uint32_t totalattr(struct fd_shader *shader)
@@ -300,6 +299,23 @@ static void emit_uniconst(struct fd_ringbuffer *ring,
 	}
 }
 
+static void emit_global_mem(struct fd_ringbuffer *ring,
+		struct fd_shader *shader, struct fd_parameters *bufs)
+{
+	uint32_t i;
+
+	for (i = 0; i < shader->ir->bufs_count; i++) {
+		struct ir3_buf *b = shader->ir->bufs[i];
+		struct fd_param *p = find_param(bufs, b->name);
+
+		OUT_PKT0(ring, REG_A3XX_SP_GLOBAL_MEM_ADDR, 1);
+		OUT_RELOC(ring, p->bo, 0, 0);       /* SP_GLOBAL_MEM_ADDR */
+
+		OUT_PKT0(ring, REG_A3XX_SP_GLOBAL_MEM_SIZE, 1);
+		OUT_RING(ring, fd_bo_size(p->bo));  /* SP_GLOBAL_MEM_SIZE */
+	}
+}
+
 void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		struct fd_parameters *uniforms, struct fd_parameters *attr,
 		struct fd_parameters *bufs, struct fd_ringbuffer *ring)
@@ -308,8 +324,8 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 	struct fd_shader *fs = get_shader(program, FD_SHADER_FRAGMENT);
 	struct ir3_shader_info *vsi = &vs->info;
 	struct ir3_shader_info *fsi = &fs->info;
-	uint32_t vsconstlen = constlen(vs);
-	uint32_t fsconstlen = constlen(fs);
+	uint32_t vsconstlen = vsi->max_const + 1;
+	uint32_t fsconstlen = fsi->max_const + 1;
 	uint32_t i, outloc;
 
 	uint32_t posregid   = getpos(vs, "gl_Position", 0);
@@ -529,4 +545,83 @@ void fd_program_emit_state(struct fd_program *program, uint32_t first,
 		emit_uniconst(ring, vs, uniforms, bufs, SB_VERT_SHADER);
 		emit_uniconst(ring, fs, uniforms, bufs, SB_FRAG_SHADER);
 	}
+}
+
+void fd_program_emit_compute_state(struct fd_program *program,
+		struct fd_parameters *uniforms, struct fd_parameters *attr,
+		struct fd_parameters *bufs, struct fd_ringbuffer *ring)
+{
+	struct fd_shader *cs = get_shader(program, FD_SHADER_COMPUTE);
+	struct ir3_shader_info *csi = &cs->info;
+	uint32_t csconstlen = csi->max_const + 1;
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_CONTROL_0_REG, 2);
+	OUT_RING(ring, A3XX_HLSQ_CONTROL_0_REG_FSTHREADSIZE(TWO_QUADS) |
+			A3XX_HLSQ_CONTROL_0_REG_CHUNKDISABLE |
+			A3XX_HLSQ_CONTROL_0_REG_LAZYUPDATEDISABLE |
+			A3XX_HLSQ_CONTROL_0_REG_SINGLECONTEXT |
+			0x2000100);
+	OUT_RING(ring, A3XX_HLSQ_CONTROL_1_REG_VSTHREADSIZE(TWO_QUADS));
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_FS_CONTROL_REG, 1);
+	OUT_RING(ring, A3XX_HLSQ_FS_CONTROL_REG_CONSTLENGTH(csconstlen) |
+			A3XX_HLSQ_FS_CONTROL_REG_CONSTSTARTOFFSET(0) |
+			A3XX_HLSQ_FS_CONTROL_REG_INSTRLENGTH(instrlen(cs)));
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_CONST_VSPRESV_RANGE_REG, 1);
+	OUT_RING(ring, A3XX_HLSQ_CONST_VSPRESV_RANGE_REG_STARTENTRY(0) |
+			A3XX_HLSQ_CONST_VSPRESV_RANGE_REG_ENDENTRY(0));
+
+	OUT_PKT0(ring, REG_A3XX_HLSQ_CONST_FSPRESV_RANGE_REG, 1);
+	OUT_RING(ring, A3XX_HLSQ_CONST_FSPRESV_RANGE_REG_STARTENTRY(0) |
+			A3XX_HLSQ_CONST_FSPRESV_RANGE_REG_ENDENTRY(0));
+
+	OUT_PKT0(ring, REG_A3XX_SP_SP_CTRL_REG, 1);
+	OUT_RING(ring, A3XX_SP_SP_CTRL_REG_CONSTMODE(0) |
+			A3XX_SP_SP_CTRL_REG_SLEEPMODE(1) |
+			A3XX_SP_SP_CTRL_REG_L0MODE(0));
+
+	OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
+	OUT_RING(ring, A3XX_SP_FS_LENGTH_REG_SHADERLENGTH(instrlen(cs)));
+
+	OUT_PKT0(ring, REG_A3XX_SP_FS_CTRL_REG0, 2);
+	OUT_RING(ring, A3XX_SP_FS_CTRL_REG0_THREADMODE(MULTI) |
+			A3XX_SP_FS_CTRL_REG0_INSTRBUFFERMODE(BUFFER) |
+			A3XX_SP_FS_CTRL_REG0_HALFREGFOOTPRINT(csi->max_half_reg + 1) |
+			A3XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(csi->max_reg + 1) |
+			A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(0) |
+			A3XX_SP_FS_CTRL_REG0_CACHEINVALID |
+			A3XX_SP_FS_CTRL_REG0_THREADSIZE(TWO_QUADS) |
+			A3XX_SP_FS_CTRL_REG0_COMPUTEMODE |
+			COND(cs->ir->samplers_count > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
+			A3XX_SP_FS_CTRL_REG0_LENGTH(instrlen(cs)));
+	OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(csconstlen) |
+			A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(3) |
+			A3XX_SP_FS_CTRL_REG1_CONSTFOOTPRINT(max(csi->max_const, 0)) |
+			A3XX_SP_FS_CTRL_REG1_HALFPRECVAROFFSET(0));
+
+	OUT_PKT0(ring, REG_A3XX_SP_FS_OBJ_OFFSET_REG, 2);
+	OUT_RING(ring, A3XX_SP_FS_OBJ_OFFSET_REG_CONSTOBJECTOFFSET(0) |
+			A3XX_SP_FS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
+	OUT_RELOC(ring, cs->bo, 0, 0);     /* SP_FS_OBJ_START_REG */
+
+	OUT_PKT0(ring, REG_A3XX_SP_FS_OUTPUT_REG, 1);
+	OUT_RING(ring, 0x00000000);        /* SP_FS_OUTPUT_REG */
+
+	emit_shader(ring, cs, SB_FRAG_SHADER);
+
+	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
+	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
+
+	/* we have this sometimes, not others.. perhaps we could be clever
+	 * and figure out actually when we need to invalidate cache:
+	 */
+	OUT_PKT0(ring, REG_A3XX_UCHE_CACHE_INVALIDATE0_REG, 2);
+	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE0_REG_ADDR(0));
+	OUT_RING(ring, A3XX_UCHE_CACHE_INVALIDATE1_REG_ADDR(0) |
+			A3XX_UCHE_CACHE_INVALIDATE1_REG_OPCODE(INVALIDATE) |
+			A3XX_UCHE_CACHE_INVALIDATE1_REG_ENTIRE_CACHE);
+
+	emit_uniconst(ring, cs, uniforms, bufs, SB_FRAG_SHADER);
+	emit_global_mem(ring, cs, bufs);
 }
