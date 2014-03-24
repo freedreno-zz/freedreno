@@ -37,6 +37,8 @@
 struct fd_state {
 
 	struct fd_winsys *ws;
+	struct fd_device *dev;
+	struct fd_pipe *pipe;
 
 	/* device properties: */
 	uint32_t gmemsize_bytes;
@@ -203,23 +205,39 @@ struct fd_state * fd_init(void)
 	if (!state->ws)
 		state->ws = fd_winsys_fbdev_open();
 
-	fd_pipe_get_param(state->ws->pipe, FD_GMEM_SIZE, &val);
+	if (state->ws) {
+		state->dev  = state->ws->dev;
+		state->pipe = state->ws->pipe;
+	} else {
+		/* well, we can still do compute.. */
+		int fd = drmOpen("msm", NULL);
+		if (fd < 0) {
+			ERROR_MSG("could not open msm device: %d (%s)",
+					fd, strerror(errno));
+			goto fail;
+		}
+
+		state->dev = fd_device_new(fd);
+		state->pipe = fd_pipe_new(state->dev, FD_PIPE_3D);
+	}
+
+	fd_pipe_get_param(state->pipe, FD_GMEM_SIZE, &val);
 	state->gmemsize_bytes = val;
 
-	fd_pipe_get_param(state->ws->pipe, FD_DEVICE_ID, &val);
+	fd_pipe_get_param(state->pipe, FD_DEVICE_ID, &val);
 	state->device_id = val;
 
-	state->ring = fd_ringbuffer_new(state->ws->pipe, 0x10000);
+	state->ring = fd_ringbuffer_new(state->pipe, 0x10000);
 	state->draw_start = fd_ringmarker_new(state->ring);
 	state->draw_end = fd_ringmarker_new(state->ring);
 
-	state->solid_const = fd_bo_new(state->ws->dev, 0x1000,
+	state->solid_const = fd_bo_new(state->dev, 0x1000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
-	state->vs_pvt_mem = fd_bo_new(state->ws->dev, 0x2000,
+	state->vs_pvt_mem = fd_bo_new(state->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
-	state->fs_pvt_mem = fd_bo_new(state->ws->dev, 0x2000,
+	state->fs_pvt_mem = fd_bo_new(state->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 
 	state->program = fd_program_new();
@@ -302,7 +320,8 @@ void fd_fini(struct fd_state *state)
 {
 	fd_surface_del(state, state->render_target.surface);
 	fd_ringbuffer_del(state->ring);
-	state->ws->destroy(state->ws);
+	if (state->ws)
+		state->ws->destroy(state->ws);
 	free(state);
 }
 
@@ -334,7 +353,7 @@ int fd_set_program(struct fd_state *state, struct fd_program *program)
 struct fd_bo * fd_attribute_bo_new(struct fd_state *state,
 		uint32_t size, const void *data)
 {
-	struct fd_bo *bo = fd_bo_new(state->ws->dev, size,
+	struct fd_bo *bo = fd_bo_new(state->dev, size,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 	memcpy(fd_bo_map(bo), data, size);
 	return bo;
@@ -355,7 +374,7 @@ int fd_attribute_pointer(struct fd_state *state, const char *name,
 		enum a3xx_vtx_fmt fmt, uint32_t count, const void *data)
 {
 	uint32_t size = fmt2size(fmt) * count;
-	struct fd_bo *bo = fd_bo_new(state->ws->dev, size,
+	struct fd_bo *bo = fd_bo_new(state->dev, size,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 	memcpy(fd_bo_map(bo), data, size);
 	return fd_attribute_bo(state, name, fmt, bo);
@@ -1050,7 +1069,7 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 			return -1;
 		}
 
-		indx_bo = fd_bo_new(state->ws->dev, idx_size,
+		indx_bo = fd_bo_new(state->dev, idx_size,
 				DRM_FREEDRENO_GEM_TYPE_KMEM);
 		memcpy(fd_bo_map(indx_bo), indices, idx_size);
 
@@ -1289,7 +1308,7 @@ int fd_flush(struct fd_state *state)
 
 	fd_ringmarker_flush(state->draw_end);
 	fd_ringbuffer_flush(ring);
-	fd_pipe_wait(state->ws->pipe, fd_ringbuffer_timestamp(ring));
+	fd_pipe_wait(state->pipe, fd_ringbuffer_timestamp(ring));
 	fd_ringbuffer_reset(state->ring);
 
 	fd_ringmarker_mark(state->draw_start);
@@ -1320,7 +1339,7 @@ struct fd_surface * fd_surface_new_fmt(struct fd_state *state,
 	surface->pitch  = ALIGN(width, 32);
 	surface->cpp    = cpp;
 
-	surface->bo = fd_bo_new(state->ws->dev,
+	surface->bo = fd_bo_new(state->dev,
 			surface->pitch * surface->height * surface->cpp,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 	return surface;
@@ -1565,7 +1584,7 @@ void fd_make_current(struct fd_state *state,
 		struct fd_bo *bo = state->vsc_pipe[i].bo;
 
 		if (!bo) {
-			bo = fd_bo_new(state->ws->dev, 0x40000,
+			bo = fd_bo_new(state->dev, 0x40000,
 					DRM_FREEDRENO_GEM_TYPE_KMEM);
 			state->vsc_pipe[i].bo = bo;
 		}
