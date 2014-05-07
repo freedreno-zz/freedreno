@@ -15,6 +15,7 @@ TESTS_2D = \
 	test-multi
 
 TESTS_3D = \
+	test-occquery \
 	test-draw \
 	test-clear \
 	test-es2gears \

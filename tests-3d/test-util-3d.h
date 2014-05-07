@@ -28,8 +28,10 @@
 #include "test-util-common.h"
 
 #include <EGL/egl.h>
+#ifndef GL_ES_VERSION_2_0
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#endif
 
 /*****************************************************************************/
 
@@ -72,14 +74,24 @@ typename(GLenum type)
 	ENUM(GL_UNSIGNED_INT);
 	ENUM(GL_FIXED);
 	ENUM(GL_FLOAT);
+#ifdef GL_UNSIGNED_INT_10_10_10_2_OES
 	ENUM(GL_UNSIGNED_INT_10_10_10_2_OES);
+#endif
+#ifdef GL_INT_10_10_10_2_OES
 	ENUM(GL_INT_10_10_10_2_OES);
+#endif
 	ENUM(GL_UNSIGNED_SHORT_5_6_5);
 	ENUM(GL_UNSIGNED_SHORT_4_4_4_4);
 	ENUM(GL_UNSIGNED_SHORT_5_5_5_1);
+#ifdef GL_HALF_FLOAT_OES
 	ENUM(GL_HALF_FLOAT_OES);
+#endif
+#ifdef GL_BGRA_EXT
 	ENUM(GL_BGRA_EXT);
+#endif
+#ifdef GL_UNSIGNED_INT_2_10_10_10_REV_EXT
 	ENUM(GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
+#endif
 	}
 	ERROR_MSG("invalid type: %04x", type);
 	exit(1);
