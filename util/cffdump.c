@@ -54,6 +54,7 @@ static bool no_color = false;
 static bool summary = false;
 static bool allregs = false;
 static int vertices;
+static unsigned gpu_id = 220;
 
 static const char *levels[] = {
 		"\t",
@@ -349,11 +350,13 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 static void reg_dump_scratch(const char *name, uint32_t dword, int level)
 {
 	unsigned regbase;
+	printf("%s:", levels[level]);
 	for (regbase = REG_AXXX_CP_SCRATCH_REG0;
 			regbase <= REG_AXXX_CP_SCRATCH_REG7;
 			regbase++) {
-		dump_register_val(regbase, type0_reg_vals[regbase], level);
+		printf(" %08x", type0_reg_vals[regbase]);
 	}
+	printf("\n");
 }
 
 static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
@@ -503,6 +506,7 @@ static const const struct {
 		REG(SP_FS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
 		REG(SP_VS_OBJ_START_REG, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START_REG, reg_disasm_gpuaddr),
+		REG(TPL1_TP_FS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
 #undef REG
 }, reg_a4xx[0x7fff] = {
 #define REG(x, fxn) [REG_A4XX_ ## x] = { fxn }
@@ -556,6 +560,14 @@ static void init_a4xx(void)
 	init_rnn("adreno/a4xx.xml", "A4XX");
 }
 
+static void init(void)
+{
+	if (!initialized) {
+		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
+		init_a2xx();
+	}
+}
+
 static struct rnndomain *finddom(uint32_t regbase)
 {
 	if (rnndec_checkaddr(vc, dom[0], regbase, 0))
@@ -568,10 +580,7 @@ static const char *regname(uint32_t regbase, int color)
 	static char buf[1024];
 	struct rnndecaddrinfo *info;
 
-	if (!initialized) {
-		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
-		init_a2xx();
-	}
+	init();
 
 	info = rnndec_decodeaddr(color ? vc : vc_nocolor, finddom(regbase), regbase, 0);
 	if (info) {
@@ -607,10 +616,7 @@ static void dump_register_val(uint32_t regbase, uint32_t dword, int level)
 
 static void dump_register(uint32_t regbase, uint32_t dword, int level)
 {
-	if (!initialized) {
-		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
-		init_a2xx();
-	}
+	init();
 
 	if (!summary) {
 		dump_register_val(regbase, dword, level);
@@ -655,10 +661,7 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 	struct rnndomain *dom;
 	int i;
 
-	if (!initialized) {
-		/* default to a2xx so we can still parse older rd files prior to RD_GPU_ID */
-		init_a2xx();
-	}
+	init();
 
 	dom = rnn_finddomain(db, name);
 
@@ -803,7 +806,10 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 				if ((num_unit == 16) && (texsamp[0] == 0) && (texsamp[1] == 0))
 					break;
 
-				dump_domain(texsamp, 2, level+2, "A3XX_TEX_SAMP");
+				if ((300 <= gpu_id) && (gpu_id < 400))
+					dump_domain(texsamp, 2, level+2, "A3XX_TEX_SAMP");
+				else if ((400 <= gpu_id) && (gpu_id < 500))
+					dump_domain(texsamp, 2, level+2, "A4XX_TEX_SAMP");
 				dump_hex(texsamp, 2, level+1);
 			}
 		} else {
@@ -818,7 +824,10 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 					(texconst[2] == 0) && (texconst[3] == 0))
 					break;
 
-				dump_domain(texconst, 4, level+2, "A3XX_TEX_CONST");
+				if ((300 <= gpu_id) && (gpu_id < 400))
+					dump_domain(texconst, 4, level+2, "A3XX_TEX_CONST");
+				else if ((400 <= gpu_id) && (gpu_id < 500))
+					dump_domain(texconst, 4, level+2, "A4XX_TEX_CONST");
 				dump_hex(texconst, 4, level+1);
 			}
 		}
@@ -922,7 +931,7 @@ static void dump_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t va
 static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t val = dwords[0] & 0xffff;
-	switch(dwords[0] >> 16) {
+	switch((dwords[0] >> 16) & 0xf) {
 	case 0x0:
 		dump_float((float *)(dwords+1), sizedwords-1, level+1);
 		break;
@@ -944,7 +953,19 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 		break;
 	case 0x4:
 		val += 0x2000;
-		dump_registers(val, dwords+1, sizedwords-1, level+1);
+		if (dwords[0] & 0x80000000) {
+			uint32_t srcreg = dwords[1];
+			uint32_t dstval = dwords[2];
+			/* TODO: not sure what happens w/ payload != 2.. */
+			assert(sizedwords == 3);
+			assert(srcreg < ARRAY_SIZE(type0_reg_vals));
+
+			dstval += type0_reg_vals[srcreg];
+
+			dump_registers(val, &dstval, 1, level+1);
+		} else {
+			dump_registers(val, dwords+1, sizedwords-1, level+1);
+		}
 		break;
 	}
 }
@@ -1285,6 +1306,7 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		case 0x3: /* type-3 */
 			count = ((dwords[0] >> 16) & 0x3fff) + 2;
 			val = GET_PM4_TYPE3_OPCODE(dwords);
+			init();
 			name = rnndec_decode_enum(vc, "adreno_pm4_type3_packets", val);
 			printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
 					vc->colors->bctarg, name, vc->colors->reset,
@@ -1327,6 +1349,11 @@ ssize_t readn(int fd, void *buf, int nbytes)
 	return ret;
 }
 
+static int check_extension(const char *path, const char *ext)
+{
+	return strcmp(path + strlen(path) - strlen(ext), ext) == 0;
+}
+
 int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
@@ -1334,6 +1361,7 @@ int main(int argc, char **argv)
 	int fd, sz, i, n = 1;
 	int got_gpu_id = 0;
 	int start = 0, end = 0x7ffffff, draw = 0;
+	const char *filename;
 
 	while (1) {
 		if (!strcmp(argv[n], "--verbose")) {
@@ -1386,10 +1414,12 @@ int main(int argc, char **argv)
 	if (argc-n != 1)
 		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
 
-	if (!strcmp(argv[n], "-"))
+	filename = argv[n];
+
+	if (!strcmp(filename, "-"))
 		fd = 0;
 	else
-		fd = open(argv[n], O_RDONLY);
+		fd = open(filename, O_RDONLY);
 	if (fd < 0)
 		fprintf(stderr, "could not open: %s\n", argv[n]);
 
@@ -1402,6 +1432,51 @@ int main(int argc, char **argv)
 	} else {
 		vc = rnndec_newcontext(db);
 		vc->colors = &envy_def_colors;
+	}
+
+	if (check_extension(filename, ".txt")) {
+		/* read in from hexdump.. this could probably be more flexibile,
+		 * but right now the format is:
+		 *
+		 *   "%x(ignored): %x %x %x %x %x %x %x %x
+		 *
+		 * and buf size is hard coded..  this is just for a quick hack
+		 * I needed, if txt input is really useful this should be made
+		 * less lame..
+		 */
+#define SZ 40960
+		char *strbuf  = calloc(SZ, 1);
+		uint32_t *buf = calloc(SZ, 1);
+		uint32_t *bufp = buf;
+		uint32_t dummy, sizedwords = 0;
+		int n;
+
+		readn(fd, strbuf, SZ);
+
+		do {
+			n = sscanf(strbuf, "%x: %x %x %x %x %x %x %x %x", &dummy,
+							&bufp[0], &bufp[1], &bufp[2], &bufp[3],
+							&bufp[4], &bufp[5], &bufp[6], &bufp[7]);
+			if (n <= 0)
+				break;
+
+			sizedwords += n - 1;
+			bufp += 8;
+
+			/* scan fwd until next newline: */
+			while (strbuf[0] != '\n')
+				strbuf++;
+			strbuf++;
+
+		} while (1);
+
+		init_a3xx();
+
+		printf("############################################################\n");
+		printf("cmdstream: %d dwords\n", sizedwords);
+		dump_commands(buf, sizedwords, 0);
+		printf("############################################################\n");
+		printf("vertices: %d\n", vertices);
 	}
 
 	while ((readn(fd, &type, sizeof(type)) > 0) && (readn(fd, &sz, 4) > 0)) {
@@ -1454,7 +1529,7 @@ int main(int argc, char **argv)
 			break;
 		case RD_GPU_ID:
 			if (!got_gpu_id) {
-				unsigned int gpu_id = *((unsigned int *)buf);
+				gpu_id = *((unsigned int *)buf);
 				printf("gpu_id: %d\n", gpu_id);
 				if (gpu_id >= 400)
 					init_a4xx();
