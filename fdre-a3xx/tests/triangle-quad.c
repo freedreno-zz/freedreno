@@ -31,6 +31,7 @@ int main(int argc, char **argv)
 {
 	struct fd_state *state;
 	struct fd_surface *surface;
+	struct fd_perfctrs ctrs;
 
 	float vertices[] = {
 			/* triangle */
@@ -105,6 +106,8 @@ int main(int argc, char **argv)
 
 	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 7, vertices);
 
+	fd_query_start(state);
+
 	/* draw triangle: */
 	fd_uniform_attach(state, "uColor", 4, 1, triangle_color);
 	fd_draw_arrays(state, GL_TRIANGLES, 0, 3);
@@ -113,9 +116,14 @@ int main(int argc, char **argv)
 	fd_uniform_attach(state, "uColor", 4, 1, quad_color);
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 3, 4);
 
+	fd_query_end(state);
+
 	fd_swap_buffers(state);
 
 	fd_flush(state);
+
+	fd_query_read(state, &ctrs);
+	fd_query_dump(&ctrs);
 
 	fd_dump_bmp(surface, "triangle-quad.bmp");
 

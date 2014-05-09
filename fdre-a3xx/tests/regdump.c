@@ -63,6 +63,7 @@ int main(int argc, char **argv)
 {
 	struct fd_state *state;
 	struct fd_surface *surface, *tex;
+	struct fd_perfctrs ctrs;
 	size_t sz;
 
 	float vertices1[] = {
@@ -127,15 +128,22 @@ int main(int argc, char **argv)
 
 	fd_set_texture(state, "uTexture", tex);
 
+	fd_query_start(state);
+
 	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 4, vertices1);
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
 	fd_attribute_pointer(state, "aPosition", VFMT_FLOAT_32_32_32, 4, vertices2);
 	fd_draw_arrays(state, GL_TRIANGLE_STRIP, 0, 4);
 
+	fd_query_end(state);
+
 	fd_swap_buffers(state);
 
 	fd_flush(state);
+
+	fd_query_read(state, &ctrs);
+	fd_query_dump(&ctrs);
 
 	fd_dump_hex(surface);
 

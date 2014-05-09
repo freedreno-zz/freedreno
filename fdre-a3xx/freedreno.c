@@ -116,6 +116,13 @@ struct fd_state {
 
 	GLenum cull_mode;
 
+	/* query related state: */
+	struct {
+		bool active;
+		struct fd_bo *bo;
+		uint32_t offset;
+	} query;
+
 	uint32_t pc_prim_vtx_cntl;
 	uint32_t gras_su_mode_control;
 	struct {
@@ -1062,6 +1069,75 @@ static enum pc_di_primtype mode2prim(GLenum mode)
 	}
 }
 
+
+/* TODO: support for >1 tile (ie. so each tile doesn't overwrite the
+ * same part of the results buffer) we need to set the scratch reg from
+ * the tiling cmds.  Probably the simplest way is to have one buffer
+ * per tile in the batch, and then just increment the offset at each
+ * query.
+ */
+static void emit_query(struct fd_state *state, bool flush)
+{
+	struct fd_ringbuffer *ring = state->ring;
+
+	if (flush) {
+		OUT_PKT0(ring, REG_A3XX_RBBM_PERFCTR_LOAD_VALUE_LO, 1);
+		OUT_RING(ring, 0x00000000);
+
+		OUT_PKT0(ring, REG_A3XX_RBBM_PERFCTR_LOAD_VALUE_HI, 1);
+		OUT_RING(ring, 0x00000000);
+
+		OUT_PKT3(ring, CP_NOP, 7);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+	} else {
+		OUT_PKT3(ring, CP_NOP, 2);
+		OUT_RING(ring, 0x00000000);
+		OUT_RING(ring, 0x00000000);
+	}
+
+	OUT_PKT3(ring, CP_NOP, 1);
+	OUT_RING(ring, 0x00000000);
+
+	if (!state->query.bo) {
+		state->query.bo = fd_bo_new(state->dev, 0x1000,
+				DRM_FREEDRENO_GEM_TYPE_KMEM);
+	}
+
+// TODO: just set directly for now until we add tiling support..
+	OUT_PKT0(ring, REG_A3XX_RB_SAMPLE_COUNT_ADDR, 1);
+	OUT_RELOC(ring, state->query.bo, state->query.offset, 0);
+	state->query.offset += sizeof(struct fd_perfctrs);
+//t3			opcode: CP_SET_CONSTANT (2d) (4 dwords)
+//				RB_SAMPLE_COUNT_ADDR: 0x101b2040
+//1017c6b0:			c0022d00 80040111 0000057e 101b2040
+
+	OUT_PKT0(ring, REG_A3XX_RB_SAMPLE_COUNT_CONTROL, 1);
+	OUT_RING(ring, A3XX_RB_SAMPLE_COUNT_CONTROL_COPY);
+
+	emit_draw_indx(ring, DI_PT_POINTLIST_A2XX, INDEX_SIZE_IGN, 0, NULL, 0, 0);
+
+	OUT_PKT3(ring, CP_EVENT_WRITE, 1);
+	OUT_RING(ring, ZPASS_DONE);
+
+	if (flush) {
+		OUT_PKT0(ring, REG_A3XX_RBBM_PERFCTR_CTL, 1);
+		OUT_RING(ring, A3XX_RBBM_PERFCTR_CTL_ENABLE);
+
+		OUT_PKT0(ring, REG_A3XX_VBIF_PERF_CNT_EN, 1);
+		OUT_RING(ring, A3XX_VBIF_PERF_CNT_EN_CNT0 |
+				A3XX_VBIF_PERF_CNT_EN_CNT1 |
+				A3XX_VBIF_PERF_CNT_EN_PWRCNT0 |
+				A3XX_VBIF_PERF_CNT_EN_PWRCNT1 |
+				A3XX_VBIF_PERF_CNT_EN_PWRCNT2);
+	}
+}
+
 static int draw_impl(struct fd_state *state, GLenum mode,
 		GLint first, GLsizei count, GLenum type, const GLvoid *indices)
 {
@@ -1199,6 +1275,8 @@ static int draw_impl(struct fd_state *state, GLenum mode,
 
 	emit_draw_indx(ring, mode2prim(mode), idx_type, count,
 			indx_bo, 0, idx_size);
+	if (state->query.active)
+		emit_query(state, false);
 
 	if (indx_bo)
 		fd_bo_del(indx_bo);
@@ -1411,6 +1489,12 @@ int fd_flush(struct fd_state *state)
 
 	if (!state->dirty)
 		return 0;
+
+	if (state->query.bo) {
+		/* TODO support for > 1 tile: */
+		assert(state->render_target.nbins_x == 1);
+		assert(state->render_target.nbins_y == 1);
+	}
 
 	fd_ringmarker_mark(state->draw_end);
 
@@ -1827,7 +1911,7 @@ void fd_make_current(struct fd_state *state,
 	fd_ringmarker_mark(state->draw_start);
 }
 
-static int dump_hex(void *buf, uint32_t w, uint32_t h, uint32_t p)
+static int dump_hex(void *buf, uint32_t w, uint32_t h, uint32_t p, bool flt)
 {
 	uint32_t *dbuf = buf;
 	float   *fbuf = buf;
@@ -1837,10 +1921,16 @@ static int dump_hex(void *buf, uint32_t w, uint32_t h, uint32_t p)
 		for (j = 0; j < w; j++) {
 			uint32_t off = (i * p) + j;
 			off *= 4;  /* convert to vec4 (f32f32f32f32) */
-			printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
-					(unsigned int)(off * 4),
-					dbuf[off+0], dbuf[off+1], dbuf[off+2], dbuf[off+3],
-					fbuf[off+0], fbuf[off+1], fbuf[off+2], fbuf[off+3]);
+			if (flt) {
+				printf("\t\t\t%08X:   %08x %08x %08x %08x\t\t %8.8f %8.8f %8.8f %8.8f\n",
+						(unsigned int)(off * 4),
+						dbuf[off+0], dbuf[off+1], dbuf[off+2], dbuf[off+3],
+						fbuf[off+0], fbuf[off+1], fbuf[off+2], fbuf[off+3]);
+			} else {
+				printf("\t\t\t%08X:   %08x %08x %08x %08x\n",
+						(unsigned int)(off * 4),
+						dbuf[off+0], dbuf[off+1], dbuf[off+2], dbuf[off+3]);
+			}
 		}
 		printf("\t\t\t********\n");
 	}
@@ -1853,13 +1943,13 @@ static int dump_hex(void *buf, uint32_t w, uint32_t h, uint32_t p)
 int fd_dump_hex(struct fd_surface *surface)
 {
 	return dump_hex(fd_bo_map(surface->bo), surface->width,
-			surface->height, surface->pitch);
+			surface->height, surface->pitch, true);
 }
 
-int fd_dump_hex_bo(struct fd_bo *bo)
+int fd_dump_hex_bo(struct fd_bo *bo, bool flt)
 {
 	uint32_t sizedwords = fd_bo_size(bo) / 4;
-	return dump_hex(fd_bo_map(bo), sizedwords / 4, 1, sizedwords);
+	return dump_hex(fd_bo_map(bo), sizedwords / 4, 1, sizedwords, flt);
 }
 
 int fd_dump_bmp(struct fd_surface *surface, const char *filename)
@@ -1868,4 +1958,86 @@ int fd_dump_bmp(struct fd_surface *surface, const char *filename)
 			surface->width, surface->height,
 			surface->pitch * surface->cpp,
 			filename);
+}
+
+int fd_query_start(struct fd_state *state)
+{
+	if (state->query.active)
+		return -1;
+
+	state->query.active = true;
+	emit_query(state, true);
+
+	return 0;
+}
+
+int fd_query_end(struct fd_state *state)
+{
+	if (!state->query.active)
+		return -1;
+	state->query.active = false;
+	return 0;
+}
+
+int fd_query_read(struct fd_state *state, struct fd_perfctrs *ctrs)
+{
+	struct fd_perfctrs last_ctrs;
+	struct fd_bo *bo = state->query.bo;
+	uint32_t offset;
+	uint8_t *ptr;
+
+	if (state->query.active)
+		return -1;
+
+	if (!bo)
+		return -1;
+
+	memset(ctrs, 0, sizeof(*ctrs));
+
+	fd_bo_cpu_prep(bo, state->pipe, DRM_FREEDRENO_PREP_READ);
+
+	ptr = fd_bo_map(bo);
+
+	while (offset < state->query.offset) {
+		struct fd_perfctrs *cur = (void *)(ptr + offset);
+		if (offset > 0) {
+			int i;
+			for (i = 0; i < ARRAY_SIZE(ctrs->ctr); i++) {
+				ctrs->ctr[i] += cur->ctr[i] - last_ctrs.ctr[i];
+			}
+		}
+		last_ctrs = *cur;
+		offset += sizeof(struct fd_perfctrs);
+	}
+
+	fd_bo_cpu_fini(bo);
+
+	fd_bo_del(state->query.bo);
+	memset(&state->query, 0, sizeof(state->query));
+
+	return 0;
+}
+
+void fd_query_dump(struct fd_perfctrs *ctrs)
+{
+#define dump_ctr(n) do { \
+	printf("%s:\t%016llu\n", #n, ctrs->n); \
+} while (0)
+
+	dump_ctr(ctr0);
+	dump_ctr(ctr1);
+	dump_ctr(ctr2);
+	dump_ctr(ctr3);
+	dump_ctr(ctr4);
+	dump_ctr(ctr5);
+	dump_ctr(ctr6);
+	dump_ctr(ctr7);
+	dump_ctr(ctr8);
+	dump_ctr(ctr9);
+	dump_ctr(ctrA);
+	dump_ctr(ctrB);
+	dump_ctr(ctrC);
+	dump_ctr(ctrD);
+	dump_ctr(ctrE);
+	dump_ctr(ctrF);
 }

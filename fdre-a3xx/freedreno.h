@@ -91,7 +91,37 @@ void fd_surface_upload(struct fd_surface *surface, const void *data);
 void fd_make_current(struct fd_state *state,
 		struct fd_surface *surface);
 int fd_dump_hex(struct fd_surface *surface);
-int fd_dump_hex_bo(struct fd_bo *bo);
+int fd_dump_hex_bo(struct fd_bo *bo, bool flt);
 int fd_dump_bmp(struct fd_surface *surface, const char *filename);
+
+struct fd_perfctrs {
+	union {
+		struct {
+			/* I believe these are all 64bit: */
+			uint64_t ctr0;
+			uint64_t ctr1;
+			uint64_t ctr2;
+			uint64_t ctr3;
+			uint64_t ctr4;
+			uint64_t ctr5;
+			uint64_t ctr6;
+			uint64_t ctr7;
+			uint64_t ctr8;
+			uint64_t ctr9;
+			uint64_t ctrA;
+			uint64_t ctrB;
+			uint64_t ctrC;
+			uint64_t ctrD;
+			uint64_t ctrE;
+			uint64_t ctrF;
+		};
+		uint64_t ctr[16];
+	};
+};
+
+int fd_query_start(struct fd_state *state);
+int fd_query_end(struct fd_state *state);
+int fd_query_read(struct fd_state *state, struct fd_perfctrs *ctrs);
+void fd_query_dump(struct fd_perfctrs *ctrs);
 
 #endif /* FREEDRENO_H_ */

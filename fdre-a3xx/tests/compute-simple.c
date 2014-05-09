@@ -97,7 +97,7 @@ __kernel void simple(__global float *out, __global float *in)
 
 	fd_run_compute(state, 2, NULL, globalsize, localsize);
 
-	fd_dump_hex_bo(outbuf);
+	fd_dump_hex_bo(outbuf, true);
 
 	fd_fini(state);
 
