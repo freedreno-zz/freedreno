@@ -10,11 +10,11 @@ git clone https://github.com/freedreno/envytools.git
 The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2013-11-30 14:47:15)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32580 bytes, from 2014-03-23 15:12:15)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10186 bytes, from 2014-03-23 15:38:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14477 bytes, from 2014-03-23 15:12:15)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  56398 bytes, from 2014-03-23 15:39:13)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  26293 bytes, from 2014-03-23 15:46:09)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32580 bytes, from 2014-05-09 14:56:06)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10186 bytes, from 2014-05-09 14:56:06)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14477 bytes, from 2014-05-09 14:56:06)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  57702 bytes, from 2014-05-09 14:56:06)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  26293 bytes, from 2014-05-09 14:56:06)
 
 Copyright (C) 2013-2014 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -306,6 +306,7 @@ enum a3xx_tex_type {
 #define REG_A3XX_RBBM_INT_0_STATUS				0x00000064
 
 #define REG_A3XX_RBBM_PERFCTR_CTL				0x00000080
+#define A3XX_RBBM_PERFCTR_CTL_ENABLE				0x00000001
 
 #define REG_A3XX_RBBM_PERFCTR_LOAD_CMD0				0x00000081
 
@@ -1205,6 +1206,8 @@ static inline uint32_t A3XX_RB_WINDOW_OFFSET_Y(uint32_t val)
 }
 
 #define REG_A3XX_RB_SAMPLE_COUNT_CONTROL			0x00002110
+#define A3XX_RB_SAMPLE_COUNT_CONTROL_RESET			0x00000001
+#define A3XX_RB_SAMPLE_COUNT_CONTROL_COPY			0x00000002
 
 #define REG_A3XX_RB_SAMPLE_COUNT_ADDR				0x00002111
 
@@ -2008,6 +2011,42 @@ static inline uint32_t A3XX_TPL1_TP_FS_TEX_OFFSET_BASETABLEPTR(uint32_t val)
 #define REG_A3XX_VBIF_OUT_AXI_AOOO_EN				0x0000305e
 
 #define REG_A3XX_VBIF_OUT_AXI_AOOO				0x0000305f
+
+#define REG_A3XX_VBIF_PERF_CNT_EN				0x00003070
+#define A3XX_VBIF_PERF_CNT_EN_CNT0				0x00000001
+#define A3XX_VBIF_PERF_CNT_EN_CNT1				0x00000002
+#define A3XX_VBIF_PERF_CNT_EN_PWRCNT0				0x00000004
+#define A3XX_VBIF_PERF_CNT_EN_PWRCNT1				0x00000008
+#define A3XX_VBIF_PERF_CNT_EN_PWRCNT2				0x00000010
+
+#define REG_A3XX_VBIF_PERF_CNT_CLR				0x00003071
+#define A3XX_VBIF_PERF_CNT_CLR_CNT0				0x00000001
+#define A3XX_VBIF_PERF_CNT_CLR_CNT1				0x00000002
+#define A3XX_VBIF_PERF_CNT_CLR_PWRCNT0				0x00000004
+#define A3XX_VBIF_PERF_CNT_CLR_PWRCNT1				0x00000008
+#define A3XX_VBIF_PERF_CNT_CLR_PWRCNT2				0x00000010
+
+#define REG_A3XX_VBIF_PERF_CNT_SEL				0x00003072
+
+#define REG_A3XX_VBIF_PERF_CNT0_LO				0x00003073
+
+#define REG_A3XX_VBIF_PERF_CNT0_HI				0x00003074
+
+#define REG_A3XX_VBIF_PERF_CNT1_LO				0x00003075
+
+#define REG_A3XX_VBIF_PERF_CNT1_HI				0x00003076
+
+#define REG_A3XX_VBIF_PERF_PWR_CNT0_LO				0x00003077
+
+#define REG_A3XX_VBIF_PERF_PWR_CNT0_HI				0x00003078
+
+#define REG_A3XX_VBIF_PERF_PWR_CNT1_LO				0x00003079
+
+#define REG_A3XX_VBIF_PERF_PWR_CNT1_HI				0x0000307a
+
+#define REG_A3XX_VBIF_PERF_PWR_CNT2_LO				0x0000307b
+
+#define REG_A3XX_VBIF_PERF_PWR_CNT2_HI				0x0000307c
 
 #define REG_A3XX_VSC_BIN_SIZE					0x00000c01
 #define A3XX_VSC_BIN_SIZE_WIDTH__MASK				0x0000001f
