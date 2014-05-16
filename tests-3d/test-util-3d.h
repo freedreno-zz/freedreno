@@ -108,6 +108,15 @@ formatname(GLenum format)
 	ENUM(GL_LUMINANCE);
 	ENUM(GL_LUMINANCE_ALPHA);
 	ENUM(GL_DEPTH_COMPONENT);
+#ifdef GL_SRGB_EXT
+	ENUM(GL_SRGB_EXT);
+#endif
+#ifdef GL_SRGB_ALPHA_EXT
+	ENUM(GL_SRGB_ALPHA_EXT);
+#endif
+#ifdef GL_SRGB8_ALPHA8_EXT
+	ENUM(GL_SRGB8_ALPHA8_EXT);
+#endif
 	}
 	ERROR_MSG("invalid format: %04x", format);
 	exit(1);
