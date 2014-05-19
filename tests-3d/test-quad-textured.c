@@ -52,10 +52,11 @@ static EGLint num_config;
 static EGLContext context;
 static GLuint program;
 const char *vertex_shader_source =
-		"attribute vec4 in_position;    \n"
-		"attribute vec2 in_TexCoord;    \n"
+		"#version 300 es              \n"
+		"in vec4 in_position;         \n"
+		"in vec2 in_TexCoord;         \n"
 		"\n"
-		"varying vec2 vTexCoord;      \n"
+		"out vec2 vTexCoord;          \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
@@ -64,18 +65,33 @@ const char *vertex_shader_source =
 		"}                            \n";
 
 const char *fragment_shader_source =
+		"#version 300 es              \n"
 		"precision mediump float;     \n"
 		"                             \n"
 		"uniform sampler2D uTexture;  \n"
-		"varying vec2 vTexCoord;      \n"
+		"in vec2 vTexCoord;           \n"
+		"out vec4 gl_FragColor;       \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
-		"    gl_FragColor = texture2D(uTexture, vTexCoord);\n"
+		"    gl_FragColor = texture(uTexture, vTexCoord);\n"
+		"}                            \n";
+
+const char *fragment_shader_source_shadow =
+		"#version 300 es              \n"
+		"precision mediump float;     \n"
+		"                             \n"
+		"uniform sampler2DShadow uTexture;  \n"
+		"in vec2 vTexCoord;           \n"
+		"out vec4 gl_FragColor;       \n"
+		"                             \n"
+		"void main()                  \n"
+		"{                            \n"
+		"    gl_FragColor = vec4(texture(uTexture, vTexCoord.xyy));\n"
 		"}                            \n";
 
 
-void test_quad_textured(void)
+void test_quad_textured(int shadow, int cfunc)
 {
 	GLint width, height;
 	GLuint texturename = 0, texture_handle;
@@ -96,7 +112,7 @@ void test_quad_textured(void)
 
 	EGLSurface surface;
 
-	RD_START("quad-textured", "");
+	RD_START("quad-textured", "shadow=%d, cfunc=%x", shadow, cfunc);
 
 	display = get_display();
 
@@ -107,7 +123,7 @@ void test_quad_textured(void)
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	surface = make_window(display, config, 1024, 768);
+	surface = make_window(display, config, 255, 255);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
@@ -117,7 +133,14 @@ void test_quad_textured(void)
 	/* connect the context to the surface */
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 
-	program = get_program(vertex_shader_source, fragment_shader_source);
+	printf("EGL Version %s\n", eglQueryString(display, EGL_VERSION));
+	printf("EGL Vendor %s\n", eglQueryString(display, EGL_VENDOR));
+	printf("EGL Extensions %s\n", eglQueryString(display, EGL_EXTENSIONS));
+	printf("GL Version %s\n", glGetString(GL_VERSION));
+	printf("GL extensions: %s\n", glGetString(GL_EXTENSIONS));
+
+	program = get_program(vertex_shader_source, shadow ?
+			fragment_shader_source_shadow : fragment_shader_source);
 
 	GCHK(glBindAttribLocation(program, 0, "in_position"));
 	GCHK(glBindAttribLocation(program, 1, "in_TexCoord"));
@@ -139,10 +162,18 @@ void test_quad_textured(void)
 	GCHK(glActiveTexture(GL_TEXTURE0));
 	GCHK(glGenTextures(1, &texturename));
 	GCHK(glBindTexture(GL_TEXTURE_2D, texturename));
-	GCHK(glTexImage2D(
-			GL_TEXTURE_2D, 0, GL_RGB,
-			cube_texture.width, cube_texture.height, 0,
-			GL_RGB, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
+
+	if (shadow) {
+		GCHK(glTexImage2D(
+				GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+				cube_texture.width/2, cube_texture.height/2, 0,
+				GL_DEPTH_COMPONENT, GL_FLOAT, cube_texture.pixel_data));
+	} else {
+		GCHK(glTexImage2D(
+				GL_TEXTURE_2D, 0, GL_RGB,
+				cube_texture.width, cube_texture.height, 0,
+				GL_RGB, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
+	}
 
 	/* Note: cube turned black until these were defined. */
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
@@ -150,6 +181,16 @@ void test_quad_textured(void)
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R_OES, GL_CLAMP_TO_EDGE));
+
+	if (shadow) {
+#define GL_TEXTURE_COMPARE_MODE           0x884C
+#define GL_TEXTURE_COMPARE_FUNC           0x884D
+#define GL_COMPARE_REF_TO_TEXTURE         0x884E
+		GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,
+				GL_COMPARE_REF_TO_TEXTURE));
+		GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC,
+				cfunc));
+	}
 
 	GCHK(texture_handle = glGetUniformLocation(program, "uTexture"));
 
@@ -173,7 +214,16 @@ void test_quad_textured(void)
 
 int main(int argc, char *argv[])
 {
-	test_quad_textured();
+	test_quad_textured(0, 0);
+	test_quad_textured(0, 0);
+	test_quad_textured(1, GL_NEVER);
+	test_quad_textured(1, GL_LESS);
+	test_quad_textured(1, GL_EQUAL);
+	test_quad_textured(1, GL_LEQUAL);
+	test_quad_textured(1, GL_GREATER);
+	test_quad_textured(1, GL_NOTEQUAL);
+	test_quad_textured(1, GL_GEQUAL);
+	test_quad_textured(1, GL_ALWAYS);
 }
 
 #ifdef BIONIC
