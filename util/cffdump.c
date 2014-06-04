@@ -56,6 +56,22 @@ static bool allregs = false;
 static int vertices;
 static unsigned gpu_id = 220;
 
+/* query mode.. to handle symbolic register name queries, we need to
+ * defer parsing query string until after gpu_id is know and rnn db
+ * loaded:
+ */
+static char *querystr;
+static int queryval;
+
+static bool quiet(int lvl)
+{
+	if ((lvl >= 3) && (summary || querystr))
+		return true;
+	if ((lvl >= 2) && querystr)
+		return true;
+	return false;
+}
+
 static const char *levels[] = {
 		"\t",
 		"\t\t",
@@ -142,6 +158,7 @@ static const char *fmt_name[] = {
 
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
 static void dump_register_val(uint32_t regbase, uint32_t dword, int level);
+static const char *regname(uint32_t regbase, int color);
 
 struct buffer {
 	void *hostptr;
@@ -249,6 +266,10 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 static uint32_t type0_reg_vals[0x7fff];
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
 
+static bool reg_written(uint32_t regbase)
+{
+	return !!(type0_reg_written[regbase/8] & (1 << (regbase % 8)));
+}
 
 static struct {
 	uint32_t config;
@@ -285,7 +306,7 @@ static void reg_vsc_pipe_data_length(const char *name, uint32_t dword, int level
 
 	vsc_pipe_data[idx].length = dword;
 
-	if (summary)
+	if (quiet(3))
 		return;
 
 	/* as this is the last register in the triplet written, we dump
@@ -333,7 +354,7 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 		sscanf(name, "VFD_FETCH[0x%x].INSTR_1", &idx) ||
 		sscanf(name, "VFD_FETCH[%d].INSTR_1", &idx);
 
-	if (summary)
+	if (quiet(3))
 		return;
 
 	buf = hostptr(dword);
@@ -363,7 +384,7 @@ static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 {
 	void *buf;
 
-	if (summary)
+	if (quiet(3))
 		return;
 
 	buf = hostptr(dword);
@@ -379,7 +400,7 @@ static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 
 	dword &= 0xfffffff0;
 
-	if (summary)
+	if (quiet(3))
 		return;
 
 	buf = hostptr(dword);
@@ -539,7 +560,29 @@ static void init_rnn(char *file, char *domain)
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
 		exit(1);
 	}
+
 	initialized = true;
+
+	if (querystr) {
+		int val = strtol(querystr, NULL, 0);
+
+		if (val == 0) {
+			unsigned regbase;
+			/* really need a better way to do this this!! */
+			for (regbase = 0; regbase < 0x7fff; regbase++) {
+				char *name = regname(regbase, 0);
+				if (!name)
+					continue;
+				if (!strcmp(name, querystr)) {
+					val = regbase;
+					break;
+				}
+			}
+		}
+
+		queryval = val;
+		printf("querystr: %s -> 0x%x\n", querystr, queryval);
+	}
 }
 
 static void init_a2xx(void)
@@ -577,14 +620,14 @@ static struct rnndomain *finddom(uint32_t regbase)
 
 static const char *regname(uint32_t regbase, int color)
 {
-	static char buf[1024];
+	static char buf[128];
 	struct rnndecaddrinfo *info;
 
 	init();
 
 	info = rnndec_decodeaddr(color ? vc : vc_nocolor, finddom(regbase), regbase, 0);
 	if (info) {
-		strncpy(buf, info->name, sizeof(buf));
+		strcpy(buf, info->name);
 		free(info->name);
 		free(info);
 		return buf;
@@ -618,7 +661,7 @@ static void dump_register(uint32_t regbase, uint32_t dword, int level)
 {
 	init();
 
-	if (!summary) {
+	if (!quiet(3)) {
 		dump_register_val(regbase, dword, level);
 	}
 
@@ -681,6 +724,22 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 	}
 }
 
+
+static uint32_t bin_x1, bin_x2, bin_y1, bin_y2;
+
+static void do_query(const char *mode)
+{
+	if (querystr) {
+		uint32_t regbase = queryval;
+		if (reg_written(regbase)) {
+			uint32_t lastval = type0_reg_vals[regbase];
+			printf("%s(%u,%u-%u,%u)", mode,
+					bin_x1, bin_y1, bin_x2, bin_y2);
+			dump_register_val(regbase, lastval, 0);
+		}
+	}
+}
+
 static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t start = dwords[1] >> 16;
@@ -725,6 +784,9 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t ext_src_addr = dwords[1] & 0xfffffffc;
 	void *contents = NULL;
 	int i;
+
+	if (quiet(2))
+		return;
 
 	/* we could either have a ptr to other gpu buffer, or directly have
 	 * contents inline:
@@ -839,6 +901,14 @@ unknown:
 		break;
 	}
 
+}
+
+static void cp_set_bin(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	bin_x1 = dwords[1] & 0xffff;
+	bin_y1 = dwords[1] >> 16;
+	bin_x2 = dwords[2] & 0xffff;
+	bin_y2 = dwords[2] >> 16;
 }
 
 static void dump_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val, int level)
@@ -972,6 +1042,8 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
+	if (quiet(2))
+		return;
 	printf("%sevent %s\n", levels[level],
 			rnndec_decode_enum(vc, "vgt_event_type", dwords[0]));
 }
@@ -981,6 +1053,9 @@ static void dump_register_summary(int level)
 	static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 	uint32_t i;
 
+	if (quiet(2))
+		return;
+
 	/* dump current state of registers: */
 	printf("%scurrent register values\n", levels[level]);
 	for (i = 0; i < 0x7fff; i++) {
@@ -989,7 +1064,7 @@ static void dump_register_summary(int level)
 		/* skip registers that have zero: */
 		if (!lastval && !allregs)
 			continue;
-		if (!(type0_reg_written[regbase/8] & (1 << (regbase % 8))))
+		if (!reg_written(regbase))
 			continue;
 		if (lastval != lastvals[regbase]) {
 			printf("!");
@@ -1004,9 +1079,16 @@ static uint32_t draw_indx_common(uint32_t *dwords, int level)
 	uint32_t prim_type     = dwords[1] & 0x1f;
 	uint32_t source_select = (dwords[1] >> 6) & 0x3;
 	uint32_t num_indices   = dwords[2];
+	const char *primtype;
 
-	printf("%sprim_type:     %s (%d)\n", levels[level],
-			rnndec_decode_enum(vc, "pc_di_primtype", prim_type),
+	primtype = rnndec_decode_enum(vc, "pc_di_primtype", prim_type);
+
+	do_query(primtype);
+
+	if (quiet(2))
+		return 0;
+
+	printf("%sprim_type:     %s (%d)\n", levels[level], primtype,
 			prim_type);
 	printf("%ssource_select: %s (%d)\n", levels[level],
 			rnndec_decode_enum(vc, "pc_di_src_sel", source_select),
@@ -1021,6 +1103,9 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t num_indices = draw_indx_common(dwords, level);
 	bool saved_summary = summary;
+
+	if (quiet(2))
+		return;
 
 	summary = false;
 
@@ -1070,6 +1155,9 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	int i, sz = 0;
 	bool saved_summary = summary;
 
+	if (quiet(2))
+		return;
+
 	summary = false;
 
 	/* CP_DRAW_INDX_2 has embedded/inline idx buffer: */
@@ -1103,7 +1191,13 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t num_indices = dwords[2];
+	uint32_t prim_type = dwords[0] & 0x1f;
 	bool saved_summary = summary;
+
+	do_query(rnndec_decode_enum(vc, "pc_di_primtype", prim_type));
+
+	if (quiet(2))
+		return;
 
 	summary = false;
 
@@ -1117,6 +1211,11 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	bool saved_summary = summary;
+
+	do_query("COMPUTE");
+
+	if (quiet(2))
+		return;
 
 	summary = false;
 
@@ -1133,7 +1232,7 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t ibsize = dwords[1];
 	uint32_t *ptr = NULL;
 
-	if (!summary) {
+	if (!quiet(3)) {
 		printf("%sibaddr:%08x\n", levels[level], ibaddr);
 		printf("%sibsize:%08x\n", levels[level], ibsize);
 	} else {
@@ -1163,6 +1262,10 @@ static void cp_wfi(uint32_t *dwords, uint32_t sizedwords, int level)
 static void cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t gpuaddr = dwords[0];
+
+	if (quiet(2))
+		return;
+
 	printf("%sgpuaddr:%08x\n", levels[level], gpuaddr);
 	dump_float((float *)&dwords[1], sizedwords-1, level+1);
 }
@@ -1172,7 +1275,7 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t val = dwords[0] & 0xffff;
 	uint32_t and = dwords[1];
 	uint32_t or  = dwords[2];
-	if (!summary)
+	if (!quiet(3))
 		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
 	if (needs_wfi)
 		printf("NEEDS WFI: rmw (%s & 0x%08x) | 0x%08x)\n", regname(val, 1), and, or);
@@ -1189,7 +1292,8 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	if (ptr) {
 		uint32_t i;
 
-		dump_hex(ptr, count, level+1);
+		if (!quiet(2))
+			dump_hex(ptr, count, level+1);
 
 		for (i = 0; i < count; ) {
 			uint32_t regbase = ptr[i] & 0xffff;
@@ -1254,7 +1358,7 @@ static const struct {
 		/* for a3xx */
 		CP(LOAD_STATE, cp_load_state),
 		CP(SET_BIN_DATA, NULL),
-		CP(SET_BIN, NULL),
+		CP(SET_BIN, cp_set_bin),
 
 		/* for a4xx */
 		CP(SET_DRAW_STATE, cp_set_draw_state),
@@ -1266,56 +1370,59 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	int dwords_left = sizedwords;
 	uint32_t count = 0; /* dword count including packet header */
 	uint32_t val;
-	const char *name;
 
 	while (dwords_left > 0) {
 		int type = dwords[0] >> 30;
-		if (!summary)
+		if (!quiet(3))
 			printf("t%d", type);
 		switch (type) {
 		case 0x0: /* type-0 */
 			count = (dwords[0] >> 16)+2;
 			val = GET_PM4_TYPE0_REGIDX(dwords);
-			if (!summary) {
+			if (!quiet(3)) {
 				printf("%swrite %s%s\n", levels[level+1], regname(val, 1),
 						(dwords[0] & 0x8000) ? " (same register)" : "");
 			}
 			dump_registers(val, dwords+1, count-1, level+2);
-			if (!summary)
+			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
 			break;
 		case 0x1: /* type-1 */
 			count = 3;
 			val = dwords[0] & 0xfff;
-			if (!summary)
+			if (!quiet(3))
 				printf("%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+1, 1, level+2);
 			val = (dwords[0] >> 12) & 0xfff;
-			if (!summary)
+			if (!quiet(3))
 				printf("%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+2, 1, level+2);
-			if (!summary)
+			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
 			break;
 		case 0x2: /* type-2 */
 			printf("%sNOP\n", levels[level+1]);
 			count = 1;
-			if (!summary)
+			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
 			break;
 		case 0x3: /* type-3 */
 			count = ((dwords[0] >> 16) & 0x3fff) + 2;
 			val = GET_PM4_TYPE3_OPCODE(dwords);
 			init();
-			name = rnndec_decode_enum(vc, "adreno_pm4_type3_packets", val);
-			printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
-					vc->colors->bctarg, name, vc->colors->reset,
-					val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
-			if (name)
-				dump_domain(dwords+1, count-1, level+2, name);
+			if (!quiet(2)) {
+				const char *name;
+				name = rnndec_decode_enum(vc, "adreno_pm4_type3_packets", val);
+				printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
+						vc->colors->bctarg, name, vc->colors->reset,
+						val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
+				if (name)
+					dump_domain(dwords+1, count-1, level+2, name);
+			}
 			if (type3_op[val].fxn)
 				type3_op[val].fxn(dwords+1, count-1, level+1);
-			dump_hex(dwords, count, level+1);
+			if (!quiet(2))
+				dump_hex(dwords, count, level+1);
 			break;
 		default:
 			fprintf(stderr, "bad type!\n");
@@ -1325,7 +1432,6 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		dwords += count;
 		dwords_left -= count;
 
-		//printf("*** dwords_left=%d, count=%d\n", dwords_left, count);
 	}
 
 	if (dwords_left < 0)
@@ -1404,6 +1510,14 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[n], "--end")) {
 			n++;
 			end = atoi(argv[n]);
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--query") ||
+				!strcmp(argv[n], "-q")) {
+			n++;
+			querystr = argv[n];
 			n++;
 			continue;
 		}
@@ -1490,16 +1604,20 @@ int main(int argc, char **argv)
 
 		switch(type) {
 		case RD_TEST:
-			printf("test: %s\n", (char *)buf);
+			if (!quiet(2))
+				printf("test: %s\n", (char *)buf);
 			break;
 		case RD_CMD:
-			printf("cmd: %s\n", (char *)buf);
+			if (!quiet(2))
+				printf("cmd: %s\n", (char *)buf);
 			break;
 		case RD_VERT_SHADER:
-			printf("vertex shader:\n%s\n", (char *)buf);
+			if (!quiet(2))
+				printf("vertex shader:\n%s\n", (char *)buf);
 			break;
 		case RD_FRAG_SHADER:
-			printf("fragment shader:\n%s\n", (char *)buf);
+			if (!quiet(2))
+				printf("fragment shader:\n%s\n", (char *)buf);
 			break;
 		case RD_GPUADDR:
 			buffers[nbuffers].gpuaddr = ((uint32_t *)buf)[0];
@@ -1513,12 +1631,16 @@ int main(int argc, char **argv)
 			break;
 		case RD_CMDSTREAM_ADDR:
 			if ((start <= draw) && (draw <= end)) {
-				printf("############################################################\n");
-				printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
+				if (!quiet(2)) {
+					printf("############################################################\n");
+					printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
+				}
 				dump_commands(hostptr(((uint32_t *)buf)[0]),
 						((uint32_t *)buf)[1], 0);
-				printf("############################################################\n");
-				printf("vertices: %d\n", vertices);
+				if (!quiet(2)) {
+					printf("############################################################\n");
+					printf("vertices: %d\n", vertices);
+				}
 			}
 			draw++;
 			for (i = 0; i < nbuffers; i++) {
@@ -1530,7 +1652,8 @@ int main(int argc, char **argv)
 		case RD_GPU_ID:
 			if (!got_gpu_id) {
 				gpu_id = *((unsigned int *)buf);
-				printf("gpu_id: %d\n", gpu_id);
+				if (!quiet(2))
+					printf("gpu_id: %d\n", gpu_id);
 				if (gpu_id >= 400)
 					init_a4xx();
 				else if (gpu_id >= 300)
