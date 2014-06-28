@@ -1028,6 +1028,16 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 		if (buf)
 			buf->hostptr = ret;
+		else {
+			/*
+			 * when a buffer is allocated using IOCTL_KGSL_GPUMEM_ALLOC_ID
+			 * it's mmapped by id, not by gpuaddr, so try to find that
+			 * buffer via id now.
+			 */
+			buf = find_buffer(NULL, 0, 0, 0, offset >> 12);
+			if (buf)
+				buf->hostptr = ret;
+		}
 		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
 	}
 
