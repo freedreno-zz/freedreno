@@ -33,6 +33,7 @@
 
 #include "redump.h"
 #include "disasm.h"
+#include "script.h"
 #include "rnn.h"
 #include "rnndec.h"
 
@@ -63,11 +64,13 @@ static unsigned gpu_id = 220;
 static char *querystr;
 static int queryval;
 
+static char *script;
+
 static bool quiet(int lvl)
 {
-	if ((lvl >= 3) && (summary || querystr))
+	if ((lvl >= 3) && (summary || querystr || script))
 		return true;
-	if ((lvl >= 2) && querystr)
+	if ((lvl >= 2) && (querystr || script))
 		return true;
 	return false;
 }
@@ -265,10 +268,21 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 
 static uint32_t type0_reg_vals[0x7fff];
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
+static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 
-static bool reg_written(uint32_t regbase)
+bool reg_written(uint32_t regbase)
 {
 	return !!(type0_reg_written[regbase/8] & (1 << (regbase % 8)));
+}
+
+uint32_t reg_lastval(uint32_t regbase)
+{
+	return lastvals[regbase];
+}
+
+uint32_t reg_val(uint32_t regbase)
+{
+	return type0_reg_vals[regbase];
 }
 
 static struct {
@@ -371,11 +385,15 @@ static void reg_vfd_fetch_instr_1_x(const char *name, uint32_t dword, int level)
 static void reg_dump_scratch(const char *name, uint32_t dword, int level)
 {
 	unsigned regbase;
+
+	if (quiet(3))
+		return;
+
 	printf("%s:", levels[level]);
 	for (regbase = REG_AXXX_CP_SCRATCH_REG0;
 			regbase <= REG_AXXX_CP_SCRATCH_REG7;
 			regbase++) {
-		printf(" %08x", type0_reg_vals[regbase]);
+		printf(" %08x", reg_val(regbase));
 	}
 	printf("\n");
 }
@@ -570,7 +588,7 @@ static void init_rnn(char *file, char *domain)
 			unsigned regbase;
 			/* really need a better way to do this this!! */
 			for (regbase = 0; regbase < 0x7fff; regbase++) {
-				char *name = regname(regbase, 0);
+				const char *name = regname(regbase, 0);
 				if (!name)
 					continue;
 				if (!strcmp(name, querystr)) {
@@ -727,17 +745,21 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 
 static uint32_t bin_x1, bin_x2, bin_y1, bin_y2;
 
-static void do_query(const char *mode)
+/* well, actually query and script.. */
+static void do_query(const char *mode, uint32_t num_indices)
 {
 	if (querystr) {
 		uint32_t regbase = queryval;
 		if (reg_written(regbase)) {
-			uint32_t lastval = type0_reg_vals[regbase];
+			uint32_t lastval = reg_val(regbase);
 			printf("%s(%u,%u-%u,%u)", mode,
 					bin_x1, bin_y1, bin_x2, bin_y2);
 			dump_register_val(regbase, lastval, 0);
 		}
 	}
+
+	if (num_indices > 0)
+		script_draw(mode, num_indices);
 }
 
 static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -1050,7 +1072,6 @@ static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void dump_register_summary(int level)
 {
-	static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 	uint32_t i;
 
 	if (quiet(2))
@@ -1060,7 +1081,7 @@ static void dump_register_summary(int level)
 	printf("%scurrent register values\n", levels[level]);
 	for (i = 0; i < 0x7fff; i++) {
 		uint32_t regbase = i;
-		uint32_t lastval = type0_reg_vals[regbase];
+		uint32_t lastval = reg_val(regbase);
 		/* skip registers that have zero: */
 		if (!lastval && !allregs)
 			continue;
@@ -1083,7 +1104,7 @@ static uint32_t draw_indx_common(uint32_t *dwords, int level)
 
 	primtype = rnndec_decode_enum(vc, "pc_di_primtype", prim_type);
 
-	do_query(primtype);
+	do_query(primtype, num_indices);
 
 	if (quiet(2))
 		return 0;
@@ -1194,7 +1215,7 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 	uint32_t prim_type = dwords[0] & 0x1f;
 	bool saved_summary = summary;
 
-	do_query(rnndec_decode_enum(vc, "pc_di_primtype", prim_type));
+	do_query(rnndec_decode_enum(vc, "pc_di_primtype", prim_type), num_indices);
 
 	if (quiet(2))
 		return;
@@ -1212,7 +1233,7 @@ static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	bool saved_summary = summary;
 
-	do_query("COMPUTE");
+	do_query("COMPUTE", 1);
 
 	if (quiet(2))
 		return;
@@ -1514,6 +1535,24 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[n], "--frame")) {
+			n++;
+			end = start = atoi(argv[n]);
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--script")) {
+			n++;
+			script = argv[n];
+			if (script_load(script)) {
+				fprintf(stderr, "error loading %s\n", argv[n]);
+				return 1;
+			}
+			n++;
+			continue;
+		}
+
 		if (!strcmp(argv[n], "--query") ||
 				!strcmp(argv[n], "-q")) {
 			n++;
@@ -1525,10 +1564,16 @@ int main(int argc, char **argv)
 		break;
 	}
 
+	/* Hmm, at least in script mode, we want to load more than one file
+	 * so script can do comparisions, etc..
+	 */
+
 	if (argc-n != 1)
 		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
 
 	filename = argv[n];
+
+	script_start_cmdstream(filename);
 
 	if (!strcmp(filename, "-"))
 		fd = 0;
@@ -1667,6 +1712,12 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
+
+	script_end_cmdstream();
+
+	// TODO handle more files..
+
+	script_finish();
 
 	return 0;
 }
