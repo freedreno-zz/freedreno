@@ -296,6 +296,11 @@ uint32_t reg_lastval(uint32_t regbase)
 	return lastvals[regbase];
 }
 
+static void clear_lastvals(void)
+{
+	memset(lastvals, 0, sizeof(lastvals));
+}
+
 uint32_t reg_val(uint32_t regbase)
 {
 	return type0_reg_vals[regbase];
@@ -1479,16 +1484,14 @@ static int check_extension(const char *path, const char *ext)
 	return strcmp(path + strlen(path) - strlen(ext), ext) == 0;
 }
 
+static int handle_file(const char *filename, int start, int end);
+
 int main(int argc, char **argv)
 {
-	enum rd_sect_type type = RD_NONE;
-	void *buf = NULL;
-	int fd, sz, i, n = 1;
-	int got_gpu_id = 0;
-	int start = 0, end = 0x7ffffff, draw = 0;
-	const char *filename;
+	int n = 1;
+	int start = 0, end = 0x7ffffff;
 
-	while (1) {
+	while (n < argc) {
 		if (!strcmp(argv[n], "--verbose")) {
 			disasm_set_debug(PRINT_RAW);
 			n++;
@@ -1562,14 +1565,28 @@ int main(int argc, char **argv)
 		break;
 	}
 
-	/* Hmm, at least in script mode, we want to load more than one file
-	 * so script can do comparisions, etc..
-	 */
+	while (n < argc) {
+		int ret = handle_file(argv[n], start, end);
+		if (ret) {
+			// XXX tragically out of date usage msg.. maybe it is time
+			// for real cmdline arg parsing..
+			fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
+			return ret;
+		}
+		n++;
+	}
 
-	if (argc-n != 1)
-		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
+	script_finish();
 
-	filename = argv[n];
+	return 0;
+}
+
+static int handle_file(const char *filename, int start, int end)
+{
+	enum rd_sect_type type = RD_NONE;
+	void *buf = NULL;
+	int draw = 0, got_gpu_id = 0;
+	int fd, sz, i;
 
 	script_start_cmdstream(filename);
 
@@ -1577,8 +1594,14 @@ int main(int argc, char **argv)
 		fd = 0;
 	else
 		fd = open(filename, O_RDONLY);
-	if (fd < 0)
-		fprintf(stderr, "could not open: %s\n", argv[n]);
+
+	if (fd < 0) {
+		fprintf(stderr, "could not open: %s\n", filename);
+		return fd;
+	}
+
+	clear_written();
+	clear_lastvals();
 
 	rnn_init();
 	db = rnn_newdb();
@@ -1703,10 +1726,6 @@ int main(int argc, char **argv)
 	}
 
 	script_end_cmdstream();
-
-	// TODO handle more files..
-
-	script_finish();
 
 	return 0;
 }
