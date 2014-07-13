@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -73,6 +74,16 @@ static bool quiet(int lvl)
 	if ((lvl >= 2) && (querystr || script))
 		return true;
 	return false;
+}
+
+static void printl(int lvl, const char *fmt, ...)
+{
+	va_list args;
+	if (quiet(lvl))
+		return;
+	va_start(args, fmt);
+	vprintf(fmt, args);
+	va_end(args);
 }
 
 static const char *levels[] = {
@@ -273,6 +284,11 @@ static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 bool reg_written(uint32_t regbase)
 {
 	return !!(type0_reg_written[regbase/8] & (1 << (regbase % 8)));
+}
+
+static void clear_written(void)
+{
+	memset(type0_reg_written, 0, sizeof(type0_reg_written));
 }
 
 uint32_t reg_lastval(uint32_t regbase)
@@ -1064,9 +1080,7 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	if (quiet(2))
-		return;
-	printf("%sevent %s\n", levels[level],
+	printl(2, "%sevent %s\n", levels[level],
 			rnndec_decode_enum(vc, "vgt_event_type", dwords[0]));
 }
 
@@ -1074,11 +1088,8 @@ static void dump_register_summary(int level)
 {
 	uint32_t i;
 
-	if (quiet(2))
-		return;
-
 	/* dump current state of registers: */
-	printf("%scurrent register values\n", levels[level]);
+	printl(2, "%scurrent register values\n", levels[level]);
 	for (i = 0; i < 0x7fff; i++) {
 		uint32_t regbase = i;
 		uint32_t lastval = reg_val(regbase);
@@ -1088,11 +1099,14 @@ static void dump_register_summary(int level)
 		if (!reg_written(regbase))
 			continue;
 		if (lastval != lastvals[regbase]) {
-			printf("!");
+			printl(2, "!");
 			lastvals[regbase] = lastval;
 		}
-		dump_register(regbase, lastval, level+1);
+		if (!quiet(2))
+			dump_register(regbase, lastval, level+1);
 	}
+
+	clear_written();
 }
 
 static uint32_t draw_indx_common(uint32_t *dwords, int level)
@@ -1106,15 +1120,12 @@ static uint32_t draw_indx_common(uint32_t *dwords, int level)
 
 	do_query(primtype, num_indices);
 
-	if (quiet(2))
-		return 0;
-
-	printf("%sprim_type:     %s (%d)\n", levels[level], primtype,
+	printl(2, "%sprim_type:     %s (%d)\n", levels[level], primtype,
 			prim_type);
-	printf("%ssource_select: %s (%d)\n", levels[level],
+	printl(2, "%ssource_select: %s (%d)\n", levels[level],
 			rnndec_decode_enum(vc, "pc_di_src_sel", source_select),
 			source_select);
-	printf("%snum_indices:   %d\n", levels[level], num_indices);
+	printl(2, "%snum_indices:   %d\n", levels[level], num_indices);
 
 	vertices += num_indices;
 
@@ -1125,36 +1136,35 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t num_indices = draw_indx_common(dwords, level);
 	bool saved_summary = summary;
 
-	if (quiet(2))
-		return;
-
 	summary = false;
 
 	/* if we have an index buffer, dump that: */
 	if (sizedwords == 5) {
 		void *ptr = hostptr(dwords[3]);
-		printf("%sgpuaddr:       %08x\n", levels[level], dwords[3]);
-		printf("%sidx_size:      %d\n", levels[level], dwords[4]);
+		printl(2, "%sgpuaddr:       %08x\n", levels[level], dwords[3]);
+		printl(2, "%sidx_size:      %d\n", levels[level], dwords[4]);
 		if (ptr) {
 			enum pc_di_index_size size =
 					((dwords[1] >> 11) & 1) | ((dwords[1] >> 12) & 2);
-			int i;
-			printf("%sidxs:         ", levels[level]);
-			if (size == INDEX_SIZE_8_BIT) {
-				uint8_t *idx = ptr;
-				for (i = 0; i < dwords[4]; i++)
-					printf(" %u", idx[i]);
-			} else if (size == INDEX_SIZE_16_BIT) {
-				uint16_t *idx = ptr;
-				for (i = 0; i < dwords[4]/2; i++)
-					printf(" %u", idx[i]);
-			} else if (size == INDEX_SIZE_32_BIT) {
-				uint32_t *idx = ptr;
-				for (i = 0; i < dwords[4]/4; i++)
-					printf(" %u", idx[i]);
+			if (!quiet(2)) {
+				int i;
+				printf("%sidxs:         ", levels[level]);
+				if (size == INDEX_SIZE_8_BIT) {
+					uint8_t *idx = ptr;
+					for (i = 0; i < dwords[4]; i++)
+						printf(" %u", idx[i]);
+				} else if (size == INDEX_SIZE_16_BIT) {
+					uint16_t *idx = ptr;
+					for (i = 0; i < dwords[4]/2; i++)
+						printf(" %u", idx[i]);
+				} else if (size == INDEX_SIZE_32_BIT) {
+					uint32_t *idx = ptr;
+					for (i = 0; i < dwords[4]/4; i++)
+						printf(" %u", idx[i]);
+				}
+				printf("\n");
+				dump_hex(ptr, dwords[4]/4, level+1);
 			}
-			printf("\n");
-			dump_hex(ptr, dwords[4]/4, level+1);
 		}
 	}
 
@@ -1173,34 +1183,34 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	enum pc_di_index_size size =
 			((dwords[1] >> 11) & 1) | ((dwords[1] >> 12) & 2);
 	void *ptr = &dwords[3];
-	int i, sz = 0;
+	int sz = 0;
 	bool saved_summary = summary;
-
-	if (quiet(2))
-		return;
 
 	summary = false;
 
 	/* CP_DRAW_INDX_2 has embedded/inline idx buffer: */
-	printf("%sidxs:         ", levels[level]);
-	if (size == INDEX_SIZE_8_BIT) {
-		uint8_t *idx = ptr;
-		for (i = 0; i < num_indices; i++)
-			printf(" %u", idx[i]);
-		sz = num_indices;
-	} else if (size == INDEX_SIZE_16_BIT) {
-		uint16_t *idx = ptr;
-		for (i = 0; i < num_indices; i++)
-			printf(" %u", idx[i]);
-		sz = num_indices * 2;
-	} else if (size == INDEX_SIZE_32_BIT) {
-		uint32_t *idx = ptr;
-		for (i = 0; i < num_indices; i++)
-			printf(" %u", idx[i]);
-		sz = num_indices * 4;
+	if (!quiet(2)) {
+		int i;
+		printf("%sidxs:         ", levels[level]);
+		if (size == INDEX_SIZE_8_BIT) {
+			uint8_t *idx = ptr;
+			for (i = 0; i < num_indices; i++)
+				printf(" %u", idx[i]);
+			sz = num_indices;
+		} else if (size == INDEX_SIZE_16_BIT) {
+			uint16_t *idx = ptr;
+			for (i = 0; i < num_indices; i++)
+				printf(" %u", idx[i]);
+			sz = num_indices * 2;
+		} else if (size == INDEX_SIZE_32_BIT) {
+			uint32_t *idx = ptr;
+			for (i = 0; i < num_indices; i++)
+				printf(" %u", idx[i]);
+			sz = num_indices * 4;
+		}
+		printf("\n");
+		dump_hex(ptr, sz / 4, level+1);
 	}
-	printf("\n");
-	dump_hex(ptr, sz / 4, level+1);
 
 	/* don't bother dumping registers for the dummy draw_indx's.. */
 	if (num_indices > 0)
@@ -1217,9 +1227,6 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 
 	do_query(rnndec_decode_enum(vc, "pc_di_primtype", prim_type), num_indices);
 
-	if (quiet(2))
-		return;
-
 	summary = false;
 
 	/* don't bother dumping registers for the dummy draw_indx's.. */
@@ -1234,9 +1241,6 @@ static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 	bool saved_summary = summary;
 
 	do_query("COMPUTE", 1);
-
-	if (quiet(2))
-		return;
 
 	summary = false;
 
@@ -1296,10 +1300,9 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t val = dwords[0] & 0xffff;
 	uint32_t and = dwords[1];
 	uint32_t or  = dwords[2];
-	if (!quiet(3))
-		printf("%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
+	printl(3, "%srmw (%s & 0x%08x) | 0x%08x)\n", levels[level], regname(val, 1), and, or);
 	if (needs_wfi)
-		printf("NEEDS WFI: rmw (%s & 0x%08x) | 0x%08x)\n", regname(val, 1), and, or);
+		printl(2, "NEEDS WFI: rmw (%s & 0x%08x) | 0x%08x)\n", regname(val, 1), and, or);
 	type0_reg_vals[val] = (type0_reg_vals[val] & and) | or;
 	type0_reg_written[val/8] |= (1 << (val % 8));
 }
@@ -1394,16 +1397,13 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	while (dwords_left > 0) {
 		int type = dwords[0] >> 30;
-		if (!quiet(3))
-			printf("t%d", type);
+		printl(3, "t%d", type);
 		switch (type) {
 		case 0x0: /* type-0 */
 			count = (dwords[0] >> 16)+2;
 			val = GET_PM4_TYPE0_REGIDX(dwords);
-			if (!quiet(3)) {
-				printf("%swrite %s%s\n", levels[level+1], regname(val, 1),
-						(dwords[0] & 0x8000) ? " (same register)" : "");
-			}
+			printl(3, "%swrite %s%s\n", levels[level+1], regname(val, 1),
+					(dwords[0] & 0x8000) ? " (same register)" : "");
 			dump_registers(val, dwords+1, count-1, level+2);
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
@@ -1411,12 +1411,10 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		case 0x1: /* type-1 */
 			count = 3;
 			val = dwords[0] & 0xfff;
-			if (!quiet(3))
-				printf("%swrite %s\n", levels[level+1], regname(val, 1));
+			printl(3, "%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+1, 1, level+2);
 			val = (dwords[0] >> 12) & 0xfff;
-			if (!quiet(3))
-				printf("%swrite %s\n", levels[level+1], regname(val, 1));
+			printl(3, "%swrite %s\n", levels[level+1], regname(val, 1));
 			dump_registers(val, dwords+2, 1, level+2);
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
@@ -1649,20 +1647,16 @@ int main(int argc, char **argv)
 
 		switch(type) {
 		case RD_TEST:
-			if (!quiet(2))
-				printf("test: %s\n", (char *)buf);
+			printl(2, "test: %s\n", (char *)buf);
 			break;
 		case RD_CMD:
-			if (!quiet(2))
-				printf("cmd: %s\n", (char *)buf);
+			printl(2, "cmd: %s\n", (char *)buf);
 			break;
 		case RD_VERT_SHADER:
-			if (!quiet(2))
-				printf("vertex shader:\n%s\n", (char *)buf);
+			printl(2, "vertex shader:\n%s\n", (char *)buf);
 			break;
 		case RD_FRAG_SHADER:
-			if (!quiet(2))
-				printf("fragment shader:\n%s\n", (char *)buf);
+			printl(2, "fragment shader:\n%s\n", (char *)buf);
 			break;
 		case RD_GPUADDR:
 			buffers[nbuffers].gpuaddr = ((uint32_t *)buf)[0];
@@ -1676,16 +1670,12 @@ int main(int argc, char **argv)
 			break;
 		case RD_CMDSTREAM_ADDR:
 			if ((start <= draw) && (draw <= end)) {
-				if (!quiet(2)) {
-					printf("############################################################\n");
-					printf("cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
-				}
+				printl(2, "############################################################\n");
+				printl(2, "cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
 				dump_commands(hostptr(((uint32_t *)buf)[0]),
 						((uint32_t *)buf)[1], 0);
-				if (!quiet(2)) {
-					printf("############################################################\n");
-					printf("vertices: %d\n", vertices);
-				}
+				printl(2, "############################################################\n");
+				printl(2, "vertices: %d\n", vertices);
 			}
 			draw++;
 			for (i = 0; i < nbuffers; i++) {
@@ -1697,8 +1687,7 @@ int main(int argc, char **argv)
 		case RD_GPU_ID:
 			if (!got_gpu_id) {
 				gpu_id = *((unsigned int *)buf);
-				if (!quiet(2))
-					printf("gpu_id: %d\n", gpu_id);
+				printl(2, "gpu_id: %d\n", gpu_id);
 				if (gpu_id >= 400)
 					init_a4xx();
 				else if (gpu_id >= 300)

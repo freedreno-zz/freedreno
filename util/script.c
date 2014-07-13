@@ -29,6 +29,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
