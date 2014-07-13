@@ -26,6 +26,7 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <string.h>
@@ -36,6 +37,7 @@
 #include <assert.h>
 
 #include "script.h"
+#include "rnnutil.h"
 
 static lua_State *L;
 
@@ -45,6 +47,66 @@ static void error(const char *fmt)
 	fprintf(stderr, fmt, lua_tostring(L, -1));
 	exit(1);
 }
+
+/* Expose rnn decode to script environment as "rnn" library:
+ */
+
+static int l_rnn_init(lua_State *L)
+{
+	const char *gpuname = lua_tostring(L, 1);
+	struct rnn *rnn = rnn_new(0);
+	rnn_load(rnn, gpuname);
+	lua_pushlightuserdata(L, rnn);
+	return 1;
+}
+
+static int l_rnn_enumname(lua_State *L)
+{
+	struct rnn *rnn = lua_touserdata(L, 1);
+	const char *name = lua_tostring(L, 2);
+	uint32_t val = (uint32_t)lua_tonumber(L, 3);
+	lua_pushstring(L, rnn_enumname(rnn, name, val));
+	return 1;
+}
+
+static int l_rnn_regname(lua_State *L)
+{
+	struct rnn *rnn = lua_touserdata(L, 1);
+	uint32_t regbase = (uint32_t)lua_tonumber(L, 2);
+	lua_pushstring(L, rnn_regname(rnn, regbase, 1));
+	return 1;
+}
+
+static int l_rnn_regval(lua_State *L)
+{
+	struct rnn *rnn = lua_touserdata(L, 1);
+	uint32_t regbase = (uint32_t)lua_tonumber(L, 2);
+	uint32_t regval = (uint32_t)lua_tonumber(L, 3);
+	struct rnndecaddrinfo *info = rnn_reginfo(rnn, regbase);
+	char *decoded;
+	if (info && info->typeinfo) {
+		decoded = rnndec_decodeval(rnn->vc, info->typeinfo, regval, info->width);
+	} else {
+		asprintf(&decoded, "%08x", regval);
+	}
+	lua_pushstring(L, decoded);
+	free(decoded);
+	if (info) {
+		free(info->name);
+		free(info);
+	}
+	return 1;
+}
+
+static const struct luaL_Reg l_rnn[] = {
+	{"init", l_rnn_init},
+	{"enumname", l_rnn_enumname},
+	{"regname", l_rnn_regname},
+	{"regval", l_rnn_regval},
+	{NULL, NULL}  /* sentinel */
+};
+
+
 
 /* Expose the register state to script enviroment as a "regs" library:
  */
@@ -91,6 +153,7 @@ int script_load(const char *file)
 	L = luaL_newstate();
 	luaL_openlibs(L);
 	luaL_openlib(L, "regs", l_regs, 0);
+	luaL_openlib(L, "rnn", l_rnn, 0);
 
 	ret = luaL_loadfile(L, file);
 	if (ret)
