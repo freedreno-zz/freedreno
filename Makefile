@@ -121,7 +121,7 @@ envytools/util/libenvyutil.a:
 	(cd envytools; make rnn)
 
 RNN = envytools/rnn/librnn.a envytools/util/libenvyutil.a
-cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c script.c io.c $(RNN)
+cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c script.c io.c rnnutil.c $(RNN)
 	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. -Ienvytools/include $^ -lxml2 -llua -larchive -o $@
 
 pgmdump: pgmdump.c disasm-a2xx.c disasm-a3xx.c

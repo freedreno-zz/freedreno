@@ -36,8 +36,7 @@
 #include "disasm.h"
 #include "script.h"
 #include "io.h"
-#include "rnn.h"
-#include "rnndec.h"
+#include "rnnutil.h"
 
 /* ************************************************************************* */
 /* originally based on kernel recovery dump code: */
@@ -578,28 +577,12 @@ static const const struct {
 #undef REG
 }, *type0_reg;
 
-static struct rnndeccontext *vc;
-static struct rnndeccontext *vc_nocolor;
-static struct rnndb *db;
-struct rnndomain *dom[2];
 static bool initialized = false;
+static struct rnn *rnn;
 
-static void init_rnn(char *file, char *domain)
+static void init_rnn(const char *gpuname)
 {
-	/* prepare rnn stuff for lookup */
-	rnn_parsefile(db, file);
-	rnn_prepdb(db);
-	dom[0] = rnn_finddomain(db, domain);
-	if (!strcmp(domain, "A4XX")) {
-		/* I think even the common registers move around in A4XX.. */
-		dom[1] = dom[0];
-	} else {
-		dom[1] = rnn_finddomain(db, "AXXX");
-	}
-	if (!dom[0] && dom[1]) {
-		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
-		exit(1);
-	}
+	rnn_load(rnn, gpuname);
 
 	initialized = true;
 
@@ -628,19 +611,19 @@ static void init_rnn(char *file, char *domain)
 static void init_a2xx(void)
 {
 	type0_reg = reg_a2xx;
-	init_rnn("adreno/a2xx.xml", "A2XX");
+	init_rnn("a2xx");
 }
 
 static void init_a3xx(void)
 {
 	type0_reg = reg_a3xx;
-	init_rnn("adreno/a3xx.xml", "A3XX");
+	init_rnn("a3xx");
 }
 
 static void init_a4xx(void)
 {
 	type0_reg = reg_a4xx;
-	init_rnn("adreno/a4xx.xml", "A4XX");
+	init_rnn("a4xx");
 }
 
 static void init(void)
@@ -651,37 +634,18 @@ static void init(void)
 	}
 }
 
-static struct rnndomain *finddom(uint32_t regbase)
-{
-	if (rnndec_checkaddr(vc, dom[0], regbase, 0))
-		return dom[0];
-	return dom[1];
-}
-
 static const char *regname(uint32_t regbase, int color)
 {
-	static char buf[128];
-	struct rnndecaddrinfo *info;
-
 	init();
-
-	info = rnndec_decodeaddr(color ? vc : vc_nocolor, finddom(regbase), regbase, 0);
-	if (info) {
-		strcpy(buf, info->name);
-		free(info->name);
-		free(info);
-		return buf;
-	}
-	return NULL;
+	return rnn_regname(rnn, regbase, color);
 }
 
 static void dump_register_val(uint32_t regbase, uint32_t dword, int level)
 {
-	struct rnndecaddrinfo *info =
-			rnndec_decodeaddr(vc, finddom(regbase), regbase, 0);
+	struct rnndecaddrinfo *info = rnn_reginfo(rnn, regbase);
 
 	if (info && info->typeinfo) {
-		char *decoded = rnndec_decodeval(vc, info->typeinfo, dword, info->width);
+		char *decoded = rnndec_decodeval(rnn->vc, info->typeinfo, dword, info->width);
 		printf("%s%s: %s\n", levels[level], info->name, decoded);
 		free(decoded);
 	} else if (info) {
@@ -727,7 +691,7 @@ static void dump_registers(uint32_t regbase,
 		 * TODO banked register range for a2xx??
 		 */
 		if (needs_wfi && !is_banked_reg(regbase))
-			printf("NEEDS WFI: %s (%x)\n", regname(regbase, 1), regbase);
+			printl(2, "NEEDS WFI: %s (%x)\n", regname(regbase, 1), regbase);
 
 		type0_reg_vals[regbase] = *dwords;
 		type0_reg_written[regbase/8] |= (1 << (regbase % 8));
@@ -746,17 +710,17 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 
 	init();
 
-	dom = rnn_finddomain(db, name);
+	dom = rnn_finddomain(rnn->db, name);
 
 	if (!dom)
 		return;
 
 	for (i = 0; i < sizedwords; i++) {
-		struct rnndecaddrinfo *info = rnndec_decodeaddr(vc, dom, i, 0);
+		struct rnndecaddrinfo *info = rnndec_decodeaddr(rnn->vc, dom, i, 0);
 		char *decoded;
 		if (!(info && info->typeinfo))
 			break;
-		decoded = rnndec_decodeval(vc, info->typeinfo, dwords[i], info->width);
+		decoded = rnndec_decodeval(rnn->vc, info->typeinfo, dwords[i], info->width);
 		printf("%s%s\n", levels[level], decoded);
 		free(decoded);
 		free(info->name);
@@ -1087,7 +1051,7 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	printl(2, "%sevent %s\n", levels[level],
-			rnndec_decode_enum(vc, "vgt_event_type", dwords[0]));
+			rnn_enumname(rnn, "vgt_event_type", dwords[0]));
 }
 
 static void dump_register_summary(int level)
@@ -1122,14 +1086,14 @@ static uint32_t draw_indx_common(uint32_t *dwords, int level)
 	uint32_t num_indices   = dwords[2];
 	const char *primtype;
 
-	primtype = rnndec_decode_enum(vc, "pc_di_primtype", prim_type);
+	primtype = rnn_enumname(rnn, "pc_di_primtype", prim_type);
 
 	do_query(primtype, num_indices);
 
 	printl(2, "%sprim_type:     %s (%d)\n", levels[level], primtype,
 			prim_type);
 	printl(2, "%ssource_select: %s (%d)\n", levels[level],
-			rnndec_decode_enum(vc, "pc_di_src_sel", source_select),
+			rnn_enumname(rnn, "pc_di_src_sel", source_select),
 			source_select);
 	printl(2, "%snum_indices:   %d\n", levels[level], num_indices);
 
@@ -1231,7 +1195,7 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 	uint32_t prim_type = dwords[0] & 0x1f;
 	bool saved_summary = summary;
 
-	do_query(rnndec_decode_enum(vc, "pc_di_primtype", prim_type), num_indices);
+	do_query(rnn_enumname(rnn, "pc_di_primtype", prim_type), num_indices);
 
 	summary = false;
 
@@ -1437,9 +1401,9 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			init();
 			if (!quiet(2)) {
 				const char *name;
-				name = rnndec_decode_enum(vc, "adreno_pm4_type3_packets", val);
+				name = rnn_enumname(rnn, "adreno_pm4_type3_packets", val);
 				printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
-						vc->colors->bctarg, name, vc->colors->reset,
+						rnn->vc->colors->bctarg, name, rnn->vc->colors->reset,
 						val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
 				if (name)
 					dump_domain(dwords+1, count-1, level+2, name);
@@ -1588,16 +1552,7 @@ static int handle_file(const char *filename, int start, int end)
 	clear_written();
 	clear_lastvals();
 
-	rnn_init();
-	db = rnn_newdb();
-	vc_nocolor = rnndec_newcontext(db);
-	vc_nocolor->colors = &envy_null_colors;
-	if (no_color) {
-		vc = vc_nocolor;
-	} else {
-		vc = rnndec_newcontext(db);
-		vc->colors = &envy_def_colors;
-	}
+	rnn = rnn_new(no_color);
 
 	if (check_extension(filename, ".txt")) {
 		/* read in from hexdump.. this could probably be more flexibile,
