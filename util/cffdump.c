@@ -35,6 +35,7 @@
 #include "redump.h"
 #include "disasm.h"
 #include "script.h"
+#include "io.h"
 #include "rnn.h"
 #include "rnndec.h"
 
@@ -1462,33 +1463,11 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 		printf("**** this ain't right!! dwords_left=%d\n", dwords_left);
 }
 
-ssize_t readn(int fd, void *buf, int nbytes)
-{
-	char *ptr = buf;
-	int ret = 0;
-	while (nbytes > 0) {
-		int n = read(fd, ptr, nbytes);
-		if (n < 0)
-			return n;
-		if (n == 0)
-			break;
-		ptr += n;
-		nbytes -= n;
-		ret += n;
-	}
-	return ret;
-}
-
-static int check_extension(const char *path, const char *ext)
-{
-	return strcmp(path + strlen(path) - strlen(ext), ext) == 0;
-}
-
 static int handle_file(const char *filename, int start, int end);
 
 int main(int argc, char **argv)
 {
-	int n = 1;
+	int ret, n = 1;
 	int start = 0, end = 0x7ffffff;
 
 	while (n < argc) {
@@ -1566,14 +1545,19 @@ int main(int argc, char **argv)
 	}
 
 	while (n < argc) {
-		int ret = handle_file(argv[n], start, end);
+		ret = handle_file(argv[n], start, end);
 		if (ret) {
-			// XXX tragically out of date usage msg.. maybe it is time
-			// for real cmdline arg parsing..
-			fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
-			return ret;
+			fprintf(stderr, "error reading: %s\n", argv[n]);
+			fprintf(stderr, "continuing..\n");
 		}
 		n++;
+	}
+
+	if (ret) {
+		// XXX tragically out of date usage msg.. maybe it is time
+		// for real cmdline arg parsing..
+		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
+		return ret;
 	}
 
 	script_finish();
@@ -1585,19 +1569,20 @@ static int handle_file(const char *filename, int start, int end)
 {
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
+	struct io *io;
 	int draw = 0, got_gpu_id = 0;
 	int fd, sz, i;
 
 	script_start_cmdstream(filename);
 
 	if (!strcmp(filename, "-"))
-		fd = 0;
+		io = io_openfd(0);
 	else
-		fd = open(filename, O_RDONLY);
+		io = io_open(filename);
 
-	if (fd < 0) {
+	if (!io) {
 		fprintf(stderr, "could not open: %s\n", filename);
-		return fd;
+		return -1;
 	}
 
 	clear_written();
@@ -1631,7 +1616,7 @@ static int handle_file(const char *filename, int start, int end)
 		uint32_t dummy, sizedwords = 0;
 		int n;
 
-		readn(fd, strbuf, SZ);
+		io_readn(io, strbuf, SZ);
 
 		do {
 			n = sscanf(strbuf, "%x: %x %x %x %x %x %x %x %x", &dummy,
@@ -1657,16 +1642,18 @@ static int handle_file(const char *filename, int start, int end)
 		dump_commands(buf, sizedwords, 0);
 		printf("############################################################\n");
 		printf("vertices: %d\n", vertices);
+
+		return 0;
 	}
 
-	while ((readn(fd, &type, sizeof(type)) > 0) && (readn(fd, &sz, 4) > 0)) {
+	while ((io_readn(io, &type, sizeof(type)) > 0) && (io_readn(io, &sz, 4) > 0)) {
 		free(buf);
 
 		needs_wfi = false;
 
 		buf = malloc(sz + 1);
 		((char *)buf)[sz] = '\0';
-		readn(fd, buf, sz);
+		io_readn(io, buf, sz);
 
 		switch(type) {
 		case RD_TEST:
@@ -1729,4 +1716,3 @@ static int handle_file(const char *filename, int start, int end)
 
 	return 0;
 }
-
