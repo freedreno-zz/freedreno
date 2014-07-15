@@ -154,13 +154,17 @@ void test_draw(GLenum mode)
 
 int main(int argc, char *argv[])
 {
-	test_draw(GL_POINTS);
-	test_draw(GL_LINES);
-	test_draw(GL_LINE_LOOP);
-	test_draw(GL_LINE_STRIP);
-	test_draw(GL_TRIANGLES);
-	test_draw(GL_TRIANGLE_STRIP);
-	test_draw(GL_TRIANGLE_FAN);
+	TEST_START();
+	TEST(test_draw(GL_POINTS));
+	TEST(test_draw(GL_LINES));
+	TEST(test_draw(GL_LINE_LOOP));
+	TEST(test_draw(GL_LINE_STRIP));
+	TEST(test_draw(GL_TRIANGLES));
+	TEST(test_draw(GL_TRIANGLE_STRIP));
+	TEST(test_draw(GL_TRIANGLE_FAN));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

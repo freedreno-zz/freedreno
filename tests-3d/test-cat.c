@@ -223,7 +223,10 @@ void test_cat(void)
 
 int main(int argc, char *argv[])
 {
-	test_cat();
+	TEST_START();
+	TEST(test_cat());
+	TEST_END();
+	return 0;
 }
 
 #ifdef BIONIC

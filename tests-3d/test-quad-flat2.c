@@ -137,15 +137,19 @@ void test_quad_flat2(int w, int h)
 int main(int argc, char *argv[])
 {
 	int i;
-	test_quad_flat2(64, 64);
-	test_quad_flat2(400, 240);
-	test_quad_flat2(500, 240);
-	test_quad_flat2(400, 340);
-	test_quad_flat2(800, 600);
+	TEST_START();
+	TEST(test_quad_flat2(64, 64));
+	TEST(test_quad_flat2(400, 240));
+	TEST(test_quad_flat2(500, 240));
+	TEST(test_quad_flat2(400, 340));
+	TEST(test_quad_flat2(800, 600));
 	for (i = 1; i < 2048; i *= 2)
-		test_quad_flat2(64, i);
+		TEST(test_quad_flat2(64, i));
 	for (i = 1; i < 2048; i *= 2)
-		test_quad_flat2(i, 64);
+		TEST(test_quad_flat2(i, 64));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

@@ -30,15 +30,28 @@ int openfile(const char *fmt, int i)
 	return open(path, 0);
 }
 
-int test_compiler(int i)
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#define NVERT 3
+
+static const char *attrnames[] = {
+		"aFoo", "aPosition", "aPosition0", "aPosition1", "aPosition2",
+		"aTexCoord", "aTexCoord0", "in_position",
+};
+
+static EGLDisplay display;
+static EGLSurface surface;
+
+int test_compiler(int n)
 {
 	static char vert_shader[64 * 1024], frag_shader[64 * 1024];
+	static GLfloat v[ARRAY_SIZE(attrnames)][NVERT * 4];
+	static int nattr = 0;
 	GLuint program;
 	int vert_fd, frag_fd;
-	int ret;
+	int i, ret;
 
-	vert_fd = openfile("shaders/%04d.vs", i);
-	frag_fd = openfile("shaders/%04d.fs", i);
+	vert_fd = openfile("shaders/%04d.vs", n);
+	frag_fd = openfile("shaders/%04d.fs", n);
 	if ((vert_fd < 0) || (frag_fd < 0))
 		return -1;
 
@@ -52,11 +65,31 @@ int test_compiler(int i)
 		return ret;
 	frag_shader[ret] = '\0';
 
-	RD_START("compiler", "%d", i);
+	RD_START("compiler", "%d", n);
 
 	program = get_program(vert_shader, frag_shader);
 
+	for (i = 0; i < ARRAY_SIZE(attrnames); i++) {
+		glBindAttribLocation(program, i, attrnames[i]);
+		if (glGetError() == GL_NO_ERROR) {
+			printf("use attribute: %s\n", attrnames[i]);
+			nattr++;
+		}
+		/* clear any errors, just in case: */
+		while (glGetError() != GL_NO_ERROR) {}
+	}
+
 	link_program(program);
+	GCHK(glFlush());
+
+	for (i = 0; i < nattr; i++) {
+		GCHK(glVertexAttribPointer(i, 4, GL_FLOAT, GL_FALSE, 0, v[i]));
+		GCHK(glEnableVertexAttribArray(i));
+	}
+
+	GCHK(glDrawArrays(GL_TRIANGLES, 0, NVERT));
+
+	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
 
 	RD_END();
@@ -86,12 +119,10 @@ int main(int argc, char *argv[])
 		EGL_CONTEXT_CLIENT_VERSION, 2,
 		EGL_NONE
 	};
-	EGLDisplay display;
 	EGLConfig config;
 	EGLint num_config;
 	EGLContext context;
-	EGLSurface surface;
-	int i;
+	TEST_START();
 
 	display = get_display();
 
@@ -112,14 +143,24 @@ int main(int argc, char *argv[])
 	ECHK(eglMakeCurrent(display, surface, surface, context));
 	GCHK(glFlush());
 
-	for (i = 0; ; i++) {
-		if (test_compiler(i)) {
-			break;
+	if (__test == -1) {
+		int i;
+		for (i = 0; ; i++) {
+			int ret = 0;
+			if (test_compiler(i)) {
+				break;
+			}
+		}
+	} else {
+		if (test_compiler(__test)) {
+			exit(42);
 		}
 	}
 
 	ECHK(eglDestroySurface(display, surface));
 	ECHK(eglTerminate(display));
+
+	return 0;
 }
 
 #ifdef BIONIC

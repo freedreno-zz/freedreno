@@ -150,9 +150,13 @@ void test_quad_flat_fbo(unsigned type)
 
 int main(int argc, char *argv[])
 {
-	test_quad_flat_fbo(GL_UNSIGNED_BYTE);
-	test_quad_flat_fbo(GL_HALF_FLOAT_OES);
-	test_quad_flat_fbo(GL_FLOAT);
+	TEST_START();
+	TEST(test_quad_flat_fbo(GL_UNSIGNED_BYTE));
+	TEST(test_quad_flat_fbo(GL_HALF_FLOAT_OES));
+	TEST(test_quad_flat_fbo(GL_FLOAT));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

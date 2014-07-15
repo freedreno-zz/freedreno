@@ -129,41 +129,45 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 
 int main(int argc, char *argv[])
 {
-	test_quad_flat(NULL,
+	TEST_START();
+	TEST(test_quad_flat(NULL,
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0});
-	test_quad_flat((GLfloat[]){0.3125, 0.3125, 0.3125, 1.0},
+				 0.45,  0.75, 0.0}));
+	TEST(test_quad_flat((GLfloat[]){0.3125, 0.3125, 0.3125, 1.0},
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0});
-	test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
+				 0.45,  0.75, 0.0}));
+	TEST(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0});
-	test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
+				 0.45,  0.75, 0.0}));
+	TEST(test_quad_flat((GLfloat[]){0.5125, 0.4125, 0.3125, 0.5},
 			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
 				 0.45, -0.75, 0.0,
 				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0});
-	test_quad_flat(NULL,
+				 0.45,  0.75, 0.0}));
+	TEST(test_quad_flat(NULL,
 			(GLfloat[]) {0.1, 0.2, 0.3, 0.4},
 			(GLfloat[]) {
 				-0.15, -0.23, 0.12,
 				 0.25, -0.33, 0.22,
 				-0.35,  0.43, 0.32,
-				 0.45,  0.53, 0.42});
+				 0.45,  0.53, 0.42}));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

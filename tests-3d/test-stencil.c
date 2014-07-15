@@ -273,7 +273,11 @@ void test_stencil(void)
 
 int main(int argc, char *argv[])
 {
-	test_stencil();
+	TEST_START();
+	TEST(test_stencil());
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

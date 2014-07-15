@@ -120,6 +120,8 @@ void test_caps(void)
 
 int main(int argc, char *argv[])
 {
+	TEST_START();
+
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -129,9 +131,13 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	test_caps();
+	TEST(test_caps());
 
 	ECHK(eglTerminate(display));
+
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

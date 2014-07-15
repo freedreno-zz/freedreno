@@ -123,13 +123,16 @@ test_clear(GLbitfield b, GLfloat clearcolor[4], GLint clearstencil, GLfloat clea
 
 int main(int argc, char *argv[])
 {
-	test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
-	test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
-	test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.6, 0.3, 0.4}, 0xf1, 0.5);
-	test_clear(GL_STENCIL_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
-	test_clear(GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
-	test_clear(GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
-	test_clear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75);
+	TEST_START();
+	TEST(test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75));
+	TEST(test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75));
+	TEST(test_clear(GL_COLOR_BUFFER_BIT, (GLfloat[]) {0.1, 0.6, 0.3, 0.4}, 0xf1, 0.5));
+	TEST(test_clear(GL_STENCIL_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75));
+	TEST(test_clear(GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75));
+	TEST(test_clear(GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75));
+	TEST(test_clear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, (GLfloat[]) {0.1, 0.2, 0.3, 0.4}, 0x1, 0.75));
+	TEST_END();
+	return 0;
 }
 
 #ifdef BIONIC

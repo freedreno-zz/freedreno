@@ -206,9 +206,12 @@ void test_strip_smoothed(int fbo)
 
 int main(int argc, char *argv[])
 {
-	test_strip_smoothed(0);
-	test_strip_smoothed(0);
-	test_strip_smoothed(1);
+	TEST_START();
+	TEST(test_strip_smoothed(0));
+	TEST(test_strip_smoothed(1));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

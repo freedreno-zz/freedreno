@@ -141,8 +141,12 @@ void test_triangle_smoothed(GLenum mode)
 
 int main(int argc, char *argv[])
 {
-	test_triangle_smoothed(GL_CCW);
-	test_triangle_smoothed(GL_CW);
+	TEST_START();
+	TEST(test_triangle_smoothed(GL_CCW));
+	TEST(test_triangle_smoothed(GL_CW));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

@@ -266,11 +266,13 @@ static void test_cubemap(int cube, int w, int h)
 
 int main(int argc, char *argv[])
 {
-	test_cubemap(0, 1, 1);
-	test_cubemap(0, 1, 1);
-	test_cubemap(1, 1, 1);
-	test_cubemap(1, 4, 4);
-	test_cubemap(1, 40, 40);
+	TEST_START();
+	TEST(test_cubemap(0, 1, 1));
+	TEST(test_cubemap(1, 1, 1));
+	TEST(test_cubemap(1, 4, 4));
+	TEST(test_cubemap(1, 40, 40));
+	TEST_END();
+	return 0;
 }
 
 #ifdef BIONIC

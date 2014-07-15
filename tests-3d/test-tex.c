@@ -251,6 +251,8 @@ void test_tex(int nvtex, int nftex)
 
 int main(int argc, char *argv[])
 {
+	TEST_START();
+
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -260,22 +262,20 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	/* do the first test multiple times to figure out what part is one-time
-	 * initialization:
-	 */
-
-	test_tex(0, 0);
-	test_tex(0, 0);
-	test_tex(0, 1);
-	test_tex(1, 0);
-	test_tex(1, 1);
-	test_tex(1, 2);
-	test_tex(2, 1);
-	test_tex(2, 2);
-	test_tex(0, 3);
-	test_tex(3, 2);
+	TEST(test_tex(0, 0));
+	TEST(test_tex(0, 1));
+	TEST(test_tex(1, 0));
+	TEST(test_tex(1, 1));
+	TEST(test_tex(1, 2));
+	TEST(test_tex(2, 1));
+	TEST(test_tex(2, 2));
+	TEST(test_tex(0, 3));
+	TEST(test_tex(3, 2));
 
 	ECHK(eglTerminate(display));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

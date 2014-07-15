@@ -30,9 +30,15 @@ void rd_start(const char *name, const char *fmt, ...)
 {
 	char buf[256];
 	static int cnt = 0;
+	int n = cnt++;
+	const char *testnum;
 	va_list  args;
 
-	sprintf(buf, "%s-%04d.rd", name, cnt++);
+	testnum = getenv("TESTNUM");
+	if (testnum)
+		n = strtol(testnum, NULL, 0);
+
+	sprintf(buf, "%s-%04d.rd", name, n);
 
 	fd = open(buf, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 

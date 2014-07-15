@@ -87,7 +87,7 @@ const char *fragment_shader_source =
 		"}                                  \n";
 
 
-void test_cat(void)
+void test_cube(void)
 {
 	GLint width, height;
 	GLint modelviewmatrix_handle, modelviewprojectionmatrix_handle, normalmatrix_handle;
@@ -292,7 +292,10 @@ void test_cat(void)
 
 int main(int argc, char *argv[])
 {
-	test_cat();
+	TEST_START();
+	TEST(test_cube());
+	TEST_END();
+	return 0;
 }
 
 #ifdef BIONIC

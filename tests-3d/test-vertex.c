@@ -216,6 +216,8 @@ void test_vertex(GLint *sizes, GLenum *types)
 
 int main(int argc, char *argv[])
 {
+	TEST_START();
+
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -225,30 +227,33 @@ int main(int argc, char *argv[])
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_BYTE, GL_BYTE, GL_BYTE, GL_BYTE });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_SHORT, GL_SHORT, GL_SHORT, GL_SHORT });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT });
-//	test_vertex((GLint[]){ 1, 2, 3, 4 },
-//			(GLenum[]){ GL_INT, GL_INT, GL_INT, GL_INT });
-//	test_vertex((GLint[]){ 1, 2, 3, 4 },
-//			(GLenum[]){ GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_FIXED, GL_FIXED, GL_FIXED, GL_FIXED });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES });
-	test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES });
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_FLOAT, GL_FLOAT, GL_FLOAT, GL_FLOAT }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_BYTE, GL_BYTE, GL_BYTE, GL_BYTE }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE, GL_UNSIGNED_BYTE }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_SHORT, GL_SHORT, GL_SHORT, GL_SHORT }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT }));
+//	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+//			(GLenum[]){ GL_INT, GL_INT, GL_INT, GL_INT }));
+//	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+//			(GLenum[]){ GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_FIXED, GL_FIXED, GL_FIXED, GL_FIXED }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES }));
 
 	ECHK(eglTerminate(display));
+	TEST_END();
+
+	return 0;
 }
 #ifdef BIONIC
 void _start(int argc, char **argv)

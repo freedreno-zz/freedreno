@@ -163,8 +163,8 @@ if (doquery) {
 
 int main(int argc, char *argv[])
 {
-	
-	test_quad_flat((GLfloat[]){0.0, 0.0, 0.0, 0.0},
+	TEST_START();
+	TEST(test_quad_flat((GLfloat[]){0.0, 0.0, 0.0, 0.0},
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.0,
@@ -176,9 +176,9 @@ int main(int argc, char *argv[])
 				-0.15, -0.23, 1.0,
 				 0.25, -0.33, 1.0,
 				-0.35,  0.43, 1.0,
-				 0.45,  0.53, 1.0});
+				 0.45,  0.53, 1.0}));
 
-	test_quad_flat((GLfloat[]){0.0, 0.0, 0.0, 0.0},
+	TEST(test_quad_flat((GLfloat[]){0.0, 0.0, 0.0, 0.0},
 			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
 			(GLfloat[]) {
 				-0.45, -0.75, 0.5,
@@ -190,8 +190,10 @@ int main(int argc, char *argv[])
 				-0.15, -0.23, 0.0,
 				 0.25, -0.33, 0.0,
 				-0.35,  0.43, 0.0,
-				 0.45,  0.53, 0.0});
-	
+				 0.45,  0.53, 0.0}));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

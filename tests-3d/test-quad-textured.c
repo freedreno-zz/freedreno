@@ -214,16 +214,19 @@ void test_quad_textured(int shadow, int cfunc)
 
 int main(int argc, char *argv[])
 {
-	test_quad_textured(0, 0);
-	test_quad_textured(0, 0);
-	test_quad_textured(1, GL_NEVER);
-	test_quad_textured(1, GL_LESS);
-	test_quad_textured(1, GL_EQUAL);
-	test_quad_textured(1, GL_LEQUAL);
-	test_quad_textured(1, GL_GREATER);
-	test_quad_textured(1, GL_NOTEQUAL);
-	test_quad_textured(1, GL_GEQUAL);
-	test_quad_textured(1, GL_ALWAYS);
+	TEST_START();
+	TEST(test_quad_textured(0, 0));
+	TEST(test_quad_textured(1, GL_NEVER));
+	TEST(test_quad_textured(1, GL_LESS));
+	TEST(test_quad_textured(1, GL_EQUAL));
+	TEST(test_quad_textured(1, GL_LEQUAL));
+	TEST(test_quad_textured(1, GL_GREATER));
+	TEST(test_quad_textured(1, GL_NOTEQUAL));
+	TEST(test_quad_textured(1, GL_GEQUAL));
+	TEST(test_quad_textured(1, GL_ALWAYS));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

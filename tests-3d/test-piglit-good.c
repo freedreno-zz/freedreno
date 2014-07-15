@@ -171,7 +171,11 @@ void test_piglit(void)
 
 int main(int argc, char *argv[])
 {
-	test_piglit();
+	TEST_START();
+	TEST(test_piglit());
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

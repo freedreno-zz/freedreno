@@ -120,6 +120,7 @@ int main(int argc, char *argv[])
 		"{                            \n"
 		"    gl_FragColor = uColor;   \n"
 		"}                            \n";
+	TEST_START();
 
 	display = get_display();
 
@@ -160,43 +161,46 @@ int main(int argc, char *argv[])
 
 	GCHK(glUniform4fv(uniform_location, 1, quad_color));
 
-//	test_enable_disable(GL_TEXTURE_2D);
-	test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(-15.0, -30.0));
-	test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(20.0, 320.0));
-	test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(1.0, -512.0));
-	test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(-13.33, -41.25));
-	test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(-1.333333, -41.25333));
+//	TEST(test_enable_disable(GL_TEXTURE_2D));
+	TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(-15.0, -30.0)));
+	TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(20.0, 320.0)));
+	TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(1.0, -512.0)));
+	TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(-13.33, -41.25)));
+	TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(-1.333333, -41.25333)));
 	for (i = -64; i < 64; i++)
-		test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(3.14159265359, i * 8.333));
+		TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(3.14159265359, i * 8.333)));
 	for (i = -64; i < 64; i++)
-		test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(i * 0.1333, 3.14159265359));
-	test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(0.0,0.0));
-	test_enable_disable(GL_SCISSOR_TEST, glScissor(10, 10, width - 20, height - 20));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_ZERO, GL_ZERO));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_ZERO, GL_ONE));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_ONE, GL_ZERO));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_DST_COLOR, GL_DST_COLOR));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_DST_COLOR));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_CONSTANT_COLOR));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA));
-	test_enable_disable(GL_BLEND, glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR));
-	test_enable_disable(GL_SAMPLE_ALPHA_TO_COVERAGE, 0);
-	test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_ALWAYS, 0.5));
-	test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_LEQUAL, 0.5));
-	test_enable_disable(GL_SAMPLE_COVERAGE, 0);
-	test_enable_disable(GL_STENCIL_TEST, 0);
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_NEVER));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_LESS));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_EQUAL));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_LEQUAL));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_GREATER));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_NOTEQUAL));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_GEQUAL));
-	test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_ALWAYS));
-	test_enable_disable(GL_DITHER, 0);
+		TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(i * 0.1333, 3.14159265359)));
+	TEST(test_enable_disable(GL_POLYGON_OFFSET_FILL, _glPolygonOffset(0.0,0.0)));
+	TEST(test_enable_disable(GL_SCISSOR_TEST, glScissor(10, 10, width - 20, height - 20)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_ZERO, GL_ZERO)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_ZERO, GL_ONE)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_ONE, GL_ZERO)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_DST_COLOR, GL_DST_COLOR)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_DST_COLOR)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_SRC_ALPHA_SATURATE, GL_CONSTANT_COLOR)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA)));
+	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR)));
+	TEST(test_enable_disable(GL_SAMPLE_ALPHA_TO_COVERAGE, 0));
+	TEST(test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_ALWAYS, 0.5)));
+	TEST(test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_LEQUAL, 0.5)));
+	TEST(test_enable_disable(GL_SAMPLE_COVERAGE, 0));
+	TEST(test_enable_disable(GL_STENCIL_TEST, 0));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_NEVER)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_LESS)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_EQUAL)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_LEQUAL)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_GREATER)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_NOTEQUAL)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_GEQUAL)));
+	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_ALWAYS)));
+	TEST(test_enable_disable(GL_DITHER, 0));
+	TEST_END();
 
 	ECHK(eglTerminate(display));
+
+	return 0;
 }
 
 #ifdef BIONIC

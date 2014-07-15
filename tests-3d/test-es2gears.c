@@ -635,8 +635,7 @@ gears_init(void)
 	gear3 = create_gear(1.3, 2.0, 0.5, 10, 0.7);
 }
 
-int
-main(int argc, char *argv[])
+static void test_gears(void)
 {
 	RD_START("es2gears", "");
 	display = get_display();
@@ -665,7 +664,14 @@ main(int argc, char *argv[])
 	GCHK(glFlush());
 
 	RD_END();
+}
 
+int
+main(int argc, char *argv[])
+{
+	TEST_START();
+	TEST(test_gears());
+	TEST_END();
 	return 0;
 }
 

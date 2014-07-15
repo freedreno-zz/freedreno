@@ -369,14 +369,18 @@ static void test_mipmap(int maxlevels, int w, int h, unsigned filt,
 
 int main(int argc, char *argv[])
 {
-	test_mipmap(0, 64, 64, GL_NEAREST_MIPMAP_NEAREST, -1000, 1000);
-	test_mipmap(3, 64, 64, GL_LINEAR_MIPMAP_NEAREST, -1000, 1000);
-	test_mipmap(8, 256, 256, GL_NEAREST_MIPMAP_LINEAR, -1000, 1000);
-	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -1000, 1000);
-	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -100, 100);
-	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -10, 10);
-	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -5, 5);
-	test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -1, 1);
+	TEST_START();
+	TEST(test_mipmap(0, 64, 64, GL_NEAREST_MIPMAP_NEAREST, -1000, 1000));
+	TEST(test_mipmap(3, 64, 64, GL_LINEAR_MIPMAP_NEAREST, -1000, 1000));
+	TEST(test_mipmap(8, 256, 256, GL_NEAREST_MIPMAP_LINEAR, -1000, 1000));
+	TEST(test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -1000, 1000));
+	TEST(test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -100, 100));
+	TEST(test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -10, 10));
+	TEST(test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -5, 5));
+	TEST(test_mipmap(10, 1024, 1024, GL_LINEAR_MIPMAP_LINEAR, -1, 1));
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC

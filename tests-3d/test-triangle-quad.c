@@ -147,13 +147,17 @@ int main(int argc, char *argv[])
 {
 	static const int samples[] = { 0, 2, 4, };
 	int i;
+	TEST_START();
 
 	for (i = 0;  i < ARRAY_SIZE(samples); i++) {
 		/* seems like, similar to a2xx, we only have z16 and z24s8: */
-		test_triangle_quad(samples[i], EGL_DONT_CARE, EGL_DONT_CARE);
-		test_triangle_quad(samples[i], 16, EGL_DONT_CARE);
-		test_triangle_quad(samples[i], 24, 8);
+		TEST(test_triangle_quad(samples[i], EGL_DONT_CARE, EGL_DONT_CARE));
+		TEST(test_triangle_quad(samples[i], 16, EGL_DONT_CARE));
+		TEST(test_triangle_quad(samples[i], 24, 8));
 	}
+	TEST_END();
+
+	return 0;
 }
 
 #ifdef BIONIC
