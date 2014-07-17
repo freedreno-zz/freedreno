@@ -62,16 +62,17 @@ static unsigned gpu_id = 220;
  * defer parsing query string until after gpu_id is know and rnn db
  * loaded:
  */
-static char *querystr;
-static int queryval;
+static char **querystrs;
+static int *queryvals;
+int nquery;
 
 static char *script;
 
 static bool quiet(int lvl)
 {
-	if ((lvl >= 3) && (summary || querystr || script))
+	if ((lvl >= 3) && (summary || querystrs || script))
 		return true;
-	if ((lvl >= 2) && (querystr || script))
+	if ((lvl >= 2) && (querystrs || script))
 		return true;
 	return false;
 }
@@ -586,25 +587,30 @@ static void init_rnn(const char *gpuname)
 
 	initialized = true;
 
-	if (querystr) {
-		int val = strtol(querystr, NULL, 0);
+	if (querystrs) {
+		int i;
+		queryvals = calloc(nquery, sizeof(queryvals[0]));
 
-		if (val == 0) {
-			unsigned regbase;
-			/* really need a better way to do this this!! */
-			for (regbase = 0; regbase < 0x7fff; regbase++) {
-				const char *name = regname(regbase, 0);
-				if (!name)
-					continue;
-				if (!strcmp(name, querystr)) {
-					val = regbase;
-					break;
+		for (i = 0; i < nquery; i++) {
+			int val = strtol(querystrs[i], NULL, 0);
+
+			if (val == 0) {
+				unsigned regbase;
+				/* really need a better way to do this this!! */
+				for (regbase = 0; regbase < 0x7fff; regbase++) {
+					const char *name = regname(regbase, 0);
+					if (!name)
+						continue;
+					if (!strcmp(name, querystrs[i])) {
+						val = regbase;
+						break;
+					}
 				}
 			}
-		}
 
-		queryval = val;
-		printf("querystr: %s -> 0x%x\n", querystr, queryval);
+			queryvals[i] = val;
+			printf("querystr: %s -> 0x%x\n", querystrs[i], queryvals[i]);
+		}
 	}
 }
 
@@ -734,8 +740,9 @@ static uint32_t bin_x1, bin_x2, bin_y1, bin_y2;
 /* well, actually query and script.. */
 static void do_query(const char *mode, uint32_t num_indices)
 {
-	if (querystr) {
-		uint32_t regbase = queryval;
+	int i;
+	for (i = 0; i < nquery; i++) {
+		uint32_t regbase = queryvals[i];
 		if (reg_written(regbase)) {
 			uint32_t lastval = reg_val(regbase);
 			printf("%s(%u,%u-%u,%u)", mode,
@@ -1076,7 +1083,8 @@ static void dump_register_summary(int level)
 			dump_register(regbase, lastval, level+1);
 	}
 
-	clear_written();
+// XXX we probably want to separate "written ever" from "written since last draw"
+//	clear_written();
 }
 
 static uint32_t draw_indx_common(uint32_t *dwords, int level)
@@ -1500,7 +1508,9 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[n], "--query") ||
 				!strcmp(argv[n], "-q")) {
 			n++;
-			querystr = argv[n];
+			querystrs = realloc(querystrs, (nquery + 1) * sizeof(*querystrs));
+			querystrs[nquery] = argv[n];
+			nquery++;
 			n++;
 			continue;
 		}
