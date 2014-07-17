@@ -278,7 +278,7 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 #define	REG_CP_TIMESTAMP		 REG_SCRATCH_REG0
 
 
-static uint32_t type0_reg_vals[0x7fff];
+static uint32_t type0_reg_vals[0x7fff + 1];
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
 static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 
@@ -362,9 +362,14 @@ static void reg_vsc_pipe_data_length(const char *name, uint32_t dword, int level
 typedef struct {
 	uint32_t fetchsize  : 7;
 	uint32_t bufstride  : 10;
+	/* warning: after here differs for a4xx */
+#if 1
+	uint32_t pad : 15;
+#else
 	uint32_t switchnext : 1;
 	uint32_t indexcode  : 6;
 	uint32_t steprate   : 8;
+#endif
 } vfd_fetch_state_t;
 static vfd_fetch_state_t vfd_fetch_state[0xf];
 
@@ -458,13 +463,19 @@ static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 #define REG_A3XX_VSC_PIPE_CONFIG(i0)        (0x00000c06 + 0x3*(i0))
 #define REG_A3XX_VSC_PIPE_DATA_ADDRESS(i0)  (0x00000c07 + 0x3*(i0))
 #define REG_A3XX_VSC_PIPE_DATA_LENGTH(i0)   (0x00000c08 + 0x3*(i0))
+#define REG_A3XX_VFD_FETCH_INSTR_0(i0)      (0x00002246 + 0x2*(i0))
+#define REG_A3XX_VFD_FETCH_INSTR_1(i0)      (0x00002247 + 0x2*(i0))
+
+#define REG_A4XX_VFD_FETCH_INSTR_0(i0)      (0x0000220a + 0x4*(i0))
+#define REG_A4XX_VFD_FETCH_INSTR_1(i0)      (0x0000220b + 0x4*(i0))
+
 
 /*
  * Registers with special handling (rnndec_decode() handles rest):
  */
 static const const struct {
 	void (*fxn)(const char *name, uint32_t dword, int level);
-} reg_axxx[0x7fff] = {
+} reg_axxx[0x7fff + 1] = {
 #define REG(x, fxn) [REG_AXXX_ ## x] = { fxn }
 		REG(CP_SCRATCH_REG0, reg_dump_scratch),
 		REG(CP_SCRATCH_REG1, reg_dump_scratch),
@@ -475,7 +486,7 @@ static const const struct {
 		REG(CP_SCRATCH_REG6, reg_dump_scratch),
 		REG(CP_SCRATCH_REG7, reg_dump_scratch),
 #undef REG
-}, reg_a2xx[0x7fff] = {
+}, reg_a2xx[0x7fff + 1] = {
 #define REG(x, fxn) [REG_A2XX_ ## x] = { fxn }
 		REG(VSC_PIPE_CONFIG(0), reg_vsc_pipe_config),
 		REG(VSC_PIPE_DATA_ADDRESS(0), reg_vsc_pipe_data_address),
@@ -502,7 +513,7 @@ static const const struct {
 		REG(VSC_PIPE_DATA_ADDRESS(7), reg_vsc_pipe_data_address),
 		REG(VSC_PIPE_DATA_LENGTH(7), reg_vsc_pipe_data_length),
 #undef REG
-}, reg_a3xx[0x7fff] = {
+}, reg_a3xx[0x7fff + 1] = {
 #define REG(x, fxn) [REG_A3XX_ ## x] = { fxn }
 		REG(VSC_SIZE_ADDRESS, reg_dump_gpuaddr),
 		REG(VSC_PIPE_CONFIG(0), reg_vsc_pipe_config),
@@ -529,7 +540,6 @@ static const const struct {
 		REG(VSC_PIPE_CONFIG(7), reg_vsc_pipe_config),
 		REG(VSC_PIPE_DATA_ADDRESS(7), reg_vsc_pipe_data_address),
 		REG(VSC_PIPE_DATA_LENGTH(7), reg_vsc_pipe_data_length),
-#if 0
 		REG(VFD_FETCH_INSTR_0(0), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(0), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(1), reg_vfd_fetch_instr_0_x),
@@ -562,19 +572,50 @@ static const const struct {
 		REG(VFD_FETCH_INSTR_1(14), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(15), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(15), reg_vfd_fetch_instr_1_x),
-#endif
 		REG(SP_VS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
 		REG(SP_FS_PVT_MEM_ADDR_REG, reg_dump_gpuaddr),
 		REG(SP_VS_OBJ_START_REG, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START_REG, reg_disasm_gpuaddr),
 		REG(TPL1_TP_FS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
 #undef REG
-}, reg_a4xx[0x7fff] = {
+}, reg_a4xx[0x7fff + 1] = {
 #define REG(x, fxn) [REG_A4XX_ ## x] = { fxn }
 		REG(SP_VS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_FS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_VS_OBJ_START, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START, reg_disasm_gpuaddr),
+		REG(VFD_FETCH_INSTR_0(0), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(0), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(1), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(1), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(2), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(2), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(3), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(3), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(4), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(4), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(5), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(5), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(6), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(6), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(7), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(7), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(8), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(8), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(9), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(9), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(10), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(10), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(11), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(11), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(12), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(12), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(13), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(13), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(14), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(14), reg_vfd_fetch_instr_1_x),
+		REG(VFD_FETCH_INSTR_0(15), reg_vfd_fetch_instr_0_x),
+		REG(VFD_FETCH_INSTR_1(15), reg_vfd_fetch_instr_1_x),
 #undef REG
 }, *type0_reg;
 
@@ -583,6 +624,8 @@ static struct rnn *rnn;
 
 static void init_rnn(const char *gpuname)
 {
+	rnn = rnn_new(no_color);
+
 	rnn_load(rnn, gpuname);
 
 	initialized = true;
@@ -616,18 +659,24 @@ static void init_rnn(const char *gpuname)
 
 static void init_a2xx(void)
 {
+	if (type0_reg == reg_a2xx)
+		return;
 	type0_reg = reg_a2xx;
 	init_rnn("a2xx");
 }
 
 static void init_a3xx(void)
 {
+	if (type0_reg == reg_a3xx)
+		return;
 	type0_reg = reg_a3xx;
 	init_rnn("a3xx");
 }
 
 static void init_a4xx(void)
 {
+	if (type0_reg == reg_a4xx)
+		return;
 	type0_reg = reg_a4xx;
 	init_rnn("a4xx");
 }
@@ -1300,6 +1349,11 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		for (i = 0; i < count; ) {
 			uint32_t regbase = ptr[i] & 0xffff;
 			uint32_t count2 = (ptr[i] >> 16) + 1;
+			if (count2 > (count - i)) {
+				printf("hrm, bogus count..  count=%d, count2=%d\n",
+						count, count2);
+				count2 = count - i;
+			}
 			dump_registers(regbase, &ptr[i+1], count2, level+1);
 			i += count2 + 1;
 		}
@@ -1518,6 +1572,8 @@ int main(int argc, char **argv)
 		break;
 	}
 
+	rnn = rnn_new(no_color);
+
 	while (n < argc) {
 		ret = handle_file(argv[n], start, end);
 		if (ret) {
@@ -1545,7 +1601,9 @@ static int handle_file(const char *filename, int start, int end)
 	void *buf = NULL;
 	struct io *io;
 	int draw = 0, got_gpu_id = 0;
-	int fd, sz, i;
+	int sz, i;
+
+	printf("Reading %s...\n", filename);
 
 	script_start_cmdstream(filename);
 
@@ -1561,8 +1619,6 @@ static int handle_file(const char *filename, int start, int end)
 
 	clear_written();
 	clear_lastvals();
-
-	rnn = rnn_new(no_color);
 
 	if (check_extension(filename, ".txt")) {
 		/* read in from hexdump.. this could probably be more flexibile,
@@ -1678,6 +1734,8 @@ static int handle_file(const char *filename, int start, int end)
 	}
 
 	script_end_cmdstream();
+
+	io_close(io);
 
 	return 0;
 }
