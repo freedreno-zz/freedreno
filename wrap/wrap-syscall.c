@@ -67,6 +67,7 @@ static struct device_info kgsl_3d_info = {
 				IOCTL_INFO(IOCTL_KGSL_GPUMEM_FREE_ID),
 				/* kgsl-3d specific ioctls: */
 				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET),
+				IOCTL_INFO(IOCTL_KGSL_SUBMIT_COMMANDS),
 		},
 };
 
@@ -406,6 +407,36 @@ static void log_gpuaddr(uint32_t gpuaddr, uint32_t len)
 	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 }
 
+static void dump_ib(struct kgsl_ibdesc *ibdesc)
+{
+	struct buffer *buf = find_buffer(NULL, ibdesc->gpuaddr, 0, 0, 0);
+	if (buf && buf->hostptr) {
+		struct buffer *other_buf;
+		uint32_t off = ibdesc->gpuaddr - buf->gpuaddr;
+		uint32_t *ptr = buf->hostptr + off;
+
+		printf("\t\tcmd:\n");
+
+		hexdump_dwords(ptr, ibdesc->sizedwords);
+
+		list_for_each_entry(other_buf, &buffers_of_interest, node) {
+			if (other_buf && other_buf->hostptr) {
+				log_gpuaddr(other_buf->gpuaddr, other_buf->len);
+				rd_write_section(RD_BUFFER_CONTENTS,
+						other_buf->hostptr, other_buf->len);
+			}
+		}
+
+		/* we already dump all the buffer contents, so just need
+		 * to dump the address/size of the cmdstream:
+		 */
+		rd_write_section(RD_CMDSTREAM_ADDR, (uint32_t[2]) {
+			ibdesc->gpuaddr, ibdesc->sizedwords,
+		}, 8);
+	}
+
+}
+
 static void kgsl_ioctl_ringbuffer_issueibcmds_pre(int fd,
 		struct kgsl_ringbuffer_issueibcmds *param)
 {
@@ -497,37 +528,39 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 				hexdump_dwords(ibdesc[i].hostptr, ibdesc[i].sizedwords);
 			}
 		} else {
-			struct buffer *buf = find_buffer(NULL, ibdesc[i].gpuaddr, 0, 0, 0);
-			if (buf && buf->hostptr) {
-				struct buffer *other_buf;
-				uint32_t off = ibdesc[i].gpuaddr - buf->gpuaddr;
-				uint32_t *ptr = buf->hostptr + off;
-
-				printf("\t\tcmd:\n");
-
-				hexdump_dwords(ptr, ibdesc[i].sizedwords);
-
-				list_for_each_entry(other_buf, &buffers_of_interest, node) {
-					if (other_buf && other_buf->hostptr) {
-						log_gpuaddr(other_buf->gpuaddr, other_buf->len);
-						rd_write_section(RD_BUFFER_CONTENTS,
-								other_buf->hostptr, other_buf->len);
-					}
-				}
-
-				/* we already dump all the buffer contents, so just need
-				 * to dump the address/size of the cmdstream:
-				 */
-				rd_write_section(RD_CMDSTREAM_ADDR, (uint32_t[2]) {
-					ibdesc[i].gpuaddr, ibdesc[i].sizedwords,
-				}, 8);
-			}
+			dump_ib(&ibdesc[i]);
 		}
 	}
 }
 
 static void kgsl_ioctl_ringbuffer_issueibcmds_post(int fd,
 		struct kgsl_ringbuffer_issueibcmds *param)
+{
+	printf("\t\ttimestamp:\t%08x\n", param->timestamp);
+}
+
+static void kgsl_ioctl_submit_commands_pre(int fd,
+		struct kgsl_submit_commands *param)
+{
+	int i;
+	struct kgsl_ibdesc *ibdesc;
+
+	ibdesc = (struct kgsl_ibdesc *)param->cmdlist;
+
+	printf("\t\tdrawctxt_id:\t%08x\n", param->context_id);
+	printf("\t\tflags:\t\t%08x\n", param->flags);
+	printf("\t\tnumibs:\t\t%08x\n", param->numcmds);
+	for (i = 0; i < param->numcmds; i++) {
+		printf("\t\tibdesc[%d].ctrl:\t\t%08x\n", i, ibdesc[i].ctrl);
+		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, ibdesc[i].sizedwords);
+		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
+		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
+		dump_ib(&ibdesc[i]);
+	}
+}
+
+static void kgsl_ioctl_submit_commands_post(int fd,
+		struct kgsl_submit_commands *param)
 {
 	printf("\t\ttimestamp:\t%08x\n", param->timestamp);
 }
@@ -831,6 +864,9 @@ static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 	case _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS):
 		kgsl_ioctl_ringbuffer_issueibcmds_pre(fd, ptr);
 		break;
+	case _IOC_NR(IOCTL_KGSL_SUBMIT_COMMANDS):
+		kgsl_ioctl_submit_commands_pre(fd, ptr);
+		break;
 	case _IOC_NR(IOCTL_KGSL_DRAWCTXT_CREATE):
 		kgsl_ioctl_drawctxt_create_pre(fd, ptr);
 		break;
@@ -858,6 +894,9 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 	switch(_IOC_NR(request)) {
 	case _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS):
 		kgsl_ioctl_ringbuffer_issueibcmds_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_SUBMIT_COMMANDS):
+		kgsl_ioctl_submit_commands_post(fd, ptr);
 		break;
 	case _IOC_NR(IOCTL_KGSL_DRAWCTXT_CREATE):
 		kgsl_ioctl_drawctxt_create_post(fd, ptr);
