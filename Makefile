@@ -124,8 +124,8 @@ RNN = envytools/rnn/librnn.a envytools/util/libenvyutil.a
 cffdump: cffdump.c disasm-a2xx.c disasm-a3xx.c script.c io.c rnnutil.c $(RNN)
 	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. -Ienvytools/include $^ -lxml2 -llua -larchive -o $@
 
-pgmdump: pgmdump.c disasm-a2xx.c disasm-a3xx.c
-	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -o $@
+pgmdump: pgmdump.c disasm-a2xx.c disasm-a3xx.c io.c
+	gcc -g $(CFLAGS) -Wno-packed-bitfield-compat -I. $^ -larchive -o $@
 zdump: zdump.c
 	gcc -g $(CFLAGS) -Wall -Wno-packed-bitfield-compat -I. $^ -o $@
 

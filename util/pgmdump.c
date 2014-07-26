@@ -32,6 +32,7 @@
 
 #include "redump.h"
 #include "disasm.h"
+#include "io.h"
 
 struct pgm_header {
 	uint32_t size;
@@ -1023,17 +1024,13 @@ void dump_program(struct state *state)
 		free (state->uniformblocks[i].members);
 }
 
-static int check_extension(const char *path, const char *ext)
-{
-	return strcmp(path + strlen(path) - strlen(ext), ext) == 0;
-}
-
 int main(int argc, char **argv)
 {
 	enum rd_sect_type type = RD_NONE;
 	enum debug_t debug = 0;
 	void *buf = NULL;
-	int fd, sz, i;
+	int sz, i;
+	struct io *io;
 	int raw_program = 0;
 
 	/* lame argument parsing: */
@@ -1088,22 +1085,22 @@ int main(int argc, char **argv)
 
 	infile = argv[1];
 
-	fd = open(infile, O_RDONLY);
-	if (fd < 0) {
+	io = io_open(infile);
+	if (!io) {
 		fprintf(stderr, "could not open: %s\n", infile);
 		return -1;
 	}
 
 	if (raw_program)
 	{
-		read(fd, &sz, 4);
+		io_readn(io, &sz, 4);
 		free(buf);
 
 		/* note: allow hex dumps to go a bit past the end of the buffer..
 		 * might see some garbage, but better than missing the last few bytes..
 		 */
 		buf = calloc(1, sz + 3);
-		read(fd, buf + 4, sz);
+		io_readn(io, buf + 4, sz);
 		(*(int*)buf) = sz;
 
 		struct state state = {
@@ -1118,7 +1115,7 @@ int main(int argc, char **argv)
 	}
 
 	/* figure out what sort of input we are dealing with: */
-	if (!check_extension(infile, ".rd")) {
+	if (!(check_extension(infile, ".rd") || check_extension(infile, ".rd.gz"))) {
 		int (*disasm)(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
 		enum shader_t shader = 0;
 		int ret;
@@ -1142,7 +1139,7 @@ int main(int argc, char **argv)
 			return -1;
 		}
 		buf = calloc(1, 100 * 1024);
-		ret = read(fd, buf, 100 * 1024);
+		ret = io_readn(io, buf, 100 * 1024);
 		if (ret < 0) {
 			fprintf(stderr, "error: %m");
 			return -1;
@@ -1150,14 +1147,14 @@ int main(int argc, char **argv)
 		return disasm(buf, ret/4, 0, shader);
 	}
 
-	while ((read(fd, &type, sizeof(type)) > 0) && (read(fd, &sz, 4) > 0)) {
+	while ((io_readn(io, &type, sizeof(type)) > 0) && (io_readn(io, &sz, 4) > 0)) {
 		free(buf);
 
 		/* note: allow hex dumps to go a bit past the end of the buffer..
 		 * might see some garbage, but better than missing the last few bytes..
 		 */
 		buf = calloc(1, sz + 3);
-		read(fd, buf, sz);
+		io_readn(io, buf, sz);
 
 		switch(type) {
 		case RD_TEST:
@@ -1187,6 +1184,8 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
+
+	io_close(io);
 
 	return 0;
 }
