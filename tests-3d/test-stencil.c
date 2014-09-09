@@ -24,6 +24,7 @@
 /* Code based on example from https://code.google.com/p/opengles-book-samples/
  */
 
+#include <GLES3/gl3.h>
 #include "test-util-3d.h"
 
 
@@ -155,6 +156,7 @@ void test_stencil(void)
 
 	GCHK(glEnable(GL_DEPTH_TEST));
 	GCHK(glEnable(GL_STENCIL_TEST));
+	GCHK(glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX));
 
 	// Set the viewport
 	GCHK(glViewport(0, 0, width, height));
