@@ -30,8 +30,6 @@
 #include <GLES3/gl3.h>
 #include "test-util-3d.h"
 
-#include "cubetex.h"
-
 static EGLint const config_attribute_list[] = {
 	EGL_RED_SIZE, 8,
 	EGL_GREEN_SIZE, 8,
@@ -92,7 +90,7 @@ const char *fragment_shader_source_array =
 		"}                            \n";
 
 
-void test_quad_textured(GLenum type)
+void test_quad_textured(GLenum type, GLenum format, int w, int h, int d)
 {
 	GLint width, height;
 	GLuint texturename = 0, texture_handle;
@@ -110,10 +108,18 @@ void test_quad_textured(GLenum type)
 			1.0f, 0.0f,
 			0.0f, 0.0f,
 	};
+	uint8_t *pixel_data;
+	int i;
 
 	EGLSurface surface;
 
-	RD_START("quad-textured-3d", "");
+	RD_START("quad-textured-3d", "type=%x, format=%x, %dx%dx%d", type, format, w, h, d);
+
+	pixel_data = malloc(w * h * d * 4);
+
+	/* initialize to a recognizable pattern: */
+	for (i = 0; i < (w * h * d * 4); i++)
+		pixel_data[i] = i;
 
 	display = get_display();
 
@@ -167,9 +173,9 @@ void test_quad_textured(GLenum type)
 //void glTexImage3D (GLenum target, GLint level, GLint internalformat,
 //		GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format,
 //		GLenum type, const void *pixels);
-	GCHK(glTexImage3D(type, 0, GL_ALPHA,
-			4, 4, 4, 0,
-			GL_ALPHA, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
+	GCHK(glTexImage3D(type, 0, format,
+			w, h, d, 0,
+			format, GL_UNSIGNED_BYTE, pixel_data));
 
 	/* Note: cube turned black until these were defined. */
 	GCHK(glTexParameteri(type, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
@@ -195,14 +201,24 @@ void test_quad_textured(GLenum type)
 
 	ECHK(eglTerminate(display));
 
+	free(pixel_data);
+
 	RD_END();
 }
 
 int main(int argc, char *argv[])
 {
 	TEST_START();
-	TEST(test_quad_textured(GL_TEXTURE_3D));
-	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_ALPHA, 4, 4, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_ALPHA, 4, 4, 4));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_ALPHA, 33, 4, 4));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_ALPHA, 4, 33, 4));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 33, 4, 4));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 4, 33, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_ALPHA, 33, 4, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_ALPHA, 4, 33, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 33, 4, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 4, 33, 4));
 	TEST_END();
 
 	return 0;
