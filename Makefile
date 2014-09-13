@@ -30,6 +30,7 @@ TESTS_3D = \
 	test-quad-flat \
 	test-quad-flat2 \
 	test-quad-textured \
+	test-quad-textured-3d \
 	test-quad-flat-fbo \
 	test-strip-smoothed \
 	test-cat \
