@@ -78,8 +78,21 @@ const char *fragment_shader_source =
 		"    gl_FragColor = texture(uTexture, vTexCoord);\n"
 		"}                            \n";
 
+const char *fragment_shader_source_array =
+		"#version 300 es              \n"
+		"precision mediump float;     \n"
+		"                             \n"
+		"uniform sampler2DArray uTexture;  \n"
+		"in vec3 vTexCoord;           \n"
+		"out vec4 gl_FragColor;       \n"
+		"                             \n"
+		"void main()                  \n"
+		"{                            \n"
+		"    gl_FragColor = texture(uTexture, vTexCoord);\n"
+		"}                            \n";
 
-void test_quad_textured(void)
+
+void test_quad_textured(GLenum type)
 {
 	GLint width, height;
 	GLuint texturename = 0, texture_handle;
@@ -127,7 +140,8 @@ void test_quad_textured(void)
 	printf("GL Version %s\n", glGetString(GL_VERSION));
 	printf("GL extensions: %s\n", glGetString(GL_EXTENSIONS));
 
-	program = get_program(vertex_shader_source, fragment_shader_source);
+	program = get_program(vertex_shader_source,
+			(type == GL_TEXTURE_3D) ? fragment_shader_source : fragment_shader_source_array);
 
 	GCHK(glBindAttribLocation(program, 0, "in_position"));
 	GCHK(glBindAttribLocation(program, 1, "in_TexCoord"));
@@ -148,22 +162,21 @@ void test_quad_textured(void)
 
 	GCHK(glActiveTexture(GL_TEXTURE0));
 	GCHK(glGenTextures(1, &texturename));
-	GCHK(glBindTexture(GL_TEXTURE_3D, texturename));
+	GCHK(glBindTexture(type, texturename));
 
 //void glTexImage3D (GLenum target, GLint level, GLint internalformat,
 //		GLsizei width, GLsizei height, GLsizei depth, GLint border, GLenum format,
 //		GLenum type, const void *pixels);
-	GCHK(glTexImage3D(
-			GL_TEXTURE_3D, 0, GL_RGB,
-			3, 3, cube_texture.height-1, 0,
-			GL_RGB, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
+	GCHK(glTexImage3D(type, 0, GL_ALPHA,
+			4, 4, 4, 0,
+			GL_ALPHA, GL_UNSIGNED_BYTE, cube_texture.pixel_data));
 
 	/* Note: cube turned black until these were defined. */
-	GCHK(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-	GCHK(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-	GCHK(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-	GCHK(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-	GCHK(glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+	GCHK(glTexParameteri(type, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+	GCHK(glTexParameteri(type, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+	GCHK(glTexParameteri(type, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+	GCHK(glTexParameteri(type, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+	GCHK(glTexParameteri(type, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 
 	GCHK(texture_handle = glGetUniformLocation(program, "uTexture"));
 
@@ -188,7 +201,8 @@ void test_quad_textured(void)
 int main(int argc, char *argv[])
 {
 	TEST_START();
-	TEST(test_quad_textured());
+	TEST(test_quad_textured(GL_TEXTURE_3D));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY));
 	TEST_END();
 
 	return 0;
