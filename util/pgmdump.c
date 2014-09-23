@@ -425,6 +425,9 @@ void *next_sect(struct state *state, int *sect_size)
 	char *end = find_sect_end(state->buf, state->sz);
 	void *sect;
 
+	if (!end)
+		return NULL;
+
 	*sect_size = end - state->buf;
 
 	/* copy the section to keep things nicely 32b aligned: */
@@ -930,6 +933,14 @@ void dump_program(struct state *state)
 			printf("######## VARYING: (size %d)\n", sect_size);
 			dump_varying(state->varyings[i]);
 			dump_hex((char *)state->varyings[i], sect_size);
+		}
+	}
+
+	/* show up again for revision >= 14?? */
+	if (state->hdr->revision >= 14) {
+		for (i = 0; (i < state->hdr->num_varyings) && (state->sz > 0); i++) {
+			ptr = next_sect(state, &sect_size);
+			dump_hex_ascii(ptr, sect_size);
 		}
 	}
 
