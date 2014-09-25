@@ -26,6 +26,7 @@
  * logging that I use..
  */
 
+#include <GLES3/gl3.h>
 #include "test-util-3d.h"
 
 
@@ -51,37 +52,31 @@ static EGLContext context;
 static GLuint program;
 // note: GL_MAX_VERTEX_ATTRIBS is 16
 const char *vertex_shader_source =
-		"attribute vec4 aPosition;    \n"
-		"attribute vec4 aColor1;      \n"
-		"attribute vec4 aColor2;      \n"
-		"attribute vec4 aColor3;      \n"
-		"attribute vec4 aColor4;      \n"
-		"attribute vec4 aColor5;      \n"
-		"attribute vec4 aColor6;      \n"
-		"attribute vec4 aColor7;      \n"
-		"attribute vec4 aColor8;      \n"
-		"attribute vec4 aColor9;      \n"
-		"attribute vec4 aColor10;     \n"
-		"attribute vec4 aColor11;     \n"
-		"attribute vec4 aColor12;     \n"
-		"attribute vec4 aColor13;     \n"
-		"attribute vec4 aColor14;     \n"
-		"attribute vec4 aColor15;     \n"
+		"#version 300 es              \n"
+		"in vec4 aPosition;           \n"
+		"in vec4 aColor1;             \n"
+		"in vec4 aColor2;             \n"
+		"in vec4 aColor3;             \n"
+		"in vec4 aColor4;             \n"
+		"in vec4 aColor5;             \n"
+		"in vec4 aColor6;             \n"
+		"in vec4 aColor7;             \n"
+		"in vec4 aColor8;             \n"
 		"                             \n"
-		"varying vec4 vColor;         \n"
+		"out vec4 vColor;             \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
 		"    vColor = aColor1 * aColor2 * aColor3 * aColor4 * \n"
-		"             aColor5 * aColor6 * aColor7 * aColor8 * \n"
-		"             aColor9 * aColor10 * aColor11 * aColor12 * \n"
-		"             aColor13 * aColor14 * aColor15; \n"
+		"             aColor5 * aColor6 * aColor7 * aColor8; \n"
 		"    gl_Position = aPosition; \n"
 		"}                            \n";
 const char *fragment_shader_source =
+		"#version 300 es              \n"
 		"precision mediump float;     \n"
 		"                             \n"
-		"varying vec4 vColor;         \n"
+		"in vec4 vColor;              \n"
+		"out vec4 gl_FragColor;       \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
@@ -160,13 +155,6 @@ void test_vertex(GLint *sizes, GLenum *types)
 	GCHK(glBindAttribLocation(program, 6, "aColor6"));
 	GCHK(glBindAttribLocation(program, 7, "aColor7"));
 	GCHK(glBindAttribLocation(program, 8, "aColor8"));
-	GCHK(glBindAttribLocation(program, 9, "aColor9"));
-	GCHK(glBindAttribLocation(program, 10, "aColor10"));
-	GCHK(glBindAttribLocation(program, 11, "aColor11"));
-	GCHK(glBindAttribLocation(program, 12, "aColor12"));
-	GCHK(glBindAttribLocation(program, 13, "aColor13"));
-	GCHK(glBindAttribLocation(program, 14, "aColor14"));
-	GCHK(glBindAttribLocation(program, 15, "aColor15"));
 
 	link_program(program);
 	GCHK(glFlush());
@@ -192,15 +180,6 @@ void test_vertex(GLint *sizes, GLenum *types)
 	GCHK(_glVertexAttribPointer(6, sizes[1], types[2], GL_TRUE, 0, vColors2));
 	GCHK(_glVertexAttribPointer(7, sizes[2], types[3], GL_TRUE, 0, vColors3));
 	GCHK(_glVertexAttribPointer(8, sizes[3], types[0], GL_TRUE, 0, vColors4));
-
-	GCHK(_glVertexAttribPointer(9, sizes[0], types[2], GL_FALSE, 0, vColors1));
-	GCHK(_glVertexAttribPointer(10, sizes[1], types[3], GL_FALSE, 0, vColors2));
-	GCHK(_glVertexAttribPointer(11, sizes[2], types[0], GL_FALSE, 0, vColors3));
-	GCHK(_glVertexAttribPointer(12, sizes[3], types[1], GL_FALSE, 0, vColors4));
-
-	GCHK(_glVertexAttribPointer(13, sizes[0], types[3], GL_FALSE, 0, vColors1));
-	GCHK(_glVertexAttribPointer(14, sizes[1], types[0], GL_FALSE, 0, vColors2));
-	GCHK(_glVertexAttribPointer(15, sizes[2], types[1], GL_FALSE, 0, vColors3));
 
 	GCHK(glDrawArrays(GL_TRIANGLES, 0, 3));
 	GCHK(glFlush());
@@ -237,18 +216,18 @@ int main(int argc, char *argv[])
 			(GLenum[]){ GL_SHORT, GL_SHORT, GL_SHORT, GL_SHORT }));
 	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT, GL_UNSIGNED_SHORT }));
-//	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
-//			(GLenum[]){ GL_INT, GL_INT, GL_INT, GL_INT }));
-//	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
-//			(GLenum[]){ GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_INT, GL_INT, GL_INT, GL_INT }));
+	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
+			(GLenum[]){ GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT, GL_UNSIGNED_INT }));
 	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
 			(GLenum[]){ GL_FIXED, GL_FIXED, GL_FIXED, GL_FIXED }));
 	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES, GL_HALF_FLOAT_OES }));
+			(GLenum[]){ GL_HALF_FLOAT, GL_HALF_FLOAT, GL_HALF_FLOAT, GL_HALF_FLOAT }));
 	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES, GL_UNSIGNED_INT_10_10_10_2_OES }));
+			(GLenum[]){ GL_UNSIGNED_INT_2_10_10_10_REV, GL_UNSIGNED_INT_2_10_10_10_REV, GL_UNSIGNED_INT_2_10_10_10_REV, GL_UNSIGNED_INT_2_10_10_10_REV }));
 	TEST(test_vertex((GLint[]){ 1, 2, 3, 4 },
-			(GLenum[]){ GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES, GL_INT_10_10_10_2_OES }));
+			(GLenum[]){ GL_INT_2_10_10_10_REV, GL_INT_2_10_10_10_REV, GL_INT_2_10_10_10_REV, GL_INT_2_10_10_10_REV }));
 
 	ECHK(eglTerminate(display));
 	TEST_END();

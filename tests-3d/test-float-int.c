@@ -68,7 +68,7 @@ const char *vert_float_float =
 const char *vert_int_float =
 		"#version 300 es              \n"
 		"in vec4 in_position;         \n"
-		"in ivec2 in_TexCoord;        \n"
+		"flat in ivec2 in_TexCoord;   \n"
 		"\n"
 		"out vec2 vTexCoord;          \n"
 		"                             \n"
@@ -83,7 +83,7 @@ const char *vert_float_int =
 		"in vec4 in_position;         \n"
 		"in vec2 in_TexCoord;         \n"
 		"\n"
-		"out ivec2 vTexCoord;         \n"
+		"flat out ivec2 vTexCoord;    \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
@@ -94,9 +94,9 @@ const char *vert_float_int =
 const char *vert_int_int =
 		"#version 300 es              \n"
 		"in vec4 in_position;         \n"
-		"in ivec2 in_TexCoord;        \n"
+		"flat in ivec2 in_TexCoord;   \n"
 		"\n"
-		"out ivec2 vTexCoord;         \n"
+		"flat out ivec2 vTexCoord;    \n"
 		"                             \n"
 		"void main()                  \n"
 		"{                            \n"
@@ -122,7 +122,7 @@ const char *frag_int =
 		"precision mediump float;     \n"
 		"                             \n"
 		"uniform sampler2D uTexture;  \n"
-		"in ivec2 vTexCoord;          \n"
+		"flat in ivec2 vTexCoord;     \n"
 		"out vec4 gl_FragColor;       \n"
 		"                             \n"
 		"void main()                  \n"
@@ -178,7 +178,7 @@ void test_float_int(int test)
 		return;
 	}
 
-	RD_START("quad-textured", "%s", desc);
+	RD_START("float-int", "%s", desc);
 
 	display = get_display();
 
