@@ -15,6 +15,7 @@ TESTS_2D = \
 	test-multi
 
 TESTS_3D = \
+	test-float-int \
 	test-occquery \
 	test-draw \
 	test-clear \

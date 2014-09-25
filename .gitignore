@@ -9,6 +9,7 @@ test-multi
 test-fb
 
 # 3d tests:
+test-float-int
 test-occquery
 test-draw
 test-clear
