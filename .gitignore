@@ -9,6 +9,8 @@ test-multi
 test-fb
 
 # 3d tests:
+test-varyings
+test-quad-attributeless
 test-float-int
 test-occquery
 test-draw
