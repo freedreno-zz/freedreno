@@ -51,20 +51,25 @@ static EGLContext context;
 static EGLSurface surface;
 static GLuint program;
 static GLint width, height;
+static int uniform_location;
 
 static char * get_vs(int cnt)
 {
 	static char buf[40960];
 	char *ptr = buf;
-	int i;
+	int i, j;
 
 	ptr += sprintf(ptr, "attribute vec4 aPosition;\n");
+	ptr += sprintf(ptr, "uniform float i;\n");
 	for (i = 0; i < cnt; i++)
 		ptr += sprintf(ptr, "varying vec4 v%d;\n", i);
 	ptr += sprintf(ptr, "void main()\n");
 	ptr += sprintf(ptr, "{\n");
-	for (i = 0; i < cnt; i++)
-		ptr += sprintf(ptr, "  v%d = aPosition * %d.0;\n", i, i+1);
+	for (i = 0; i < cnt; i++) {
+		for (j = 0; j < 4; j++) {
+			ptr += sprintf(ptr, "  v%d[%d] = i + %d.0;\n", i, j, (i * 4) + j);
+		}
+	}
 	ptr += sprintf(ptr, "  gl_Position = aPosition;\n");
 	ptr += sprintf(ptr, "}\n");
 
@@ -75,17 +80,25 @@ static char * get_fs(int cnt)
 {
 	static char buf[40960];
 	char *ptr = buf;
-	int i;
+	int i, j;
 
 	ptr += sprintf(ptr, "precision highp float;\n");
+	ptr += sprintf(ptr, "uniform float i;\n");
 	for (i = 0; i < cnt; i++)
 		ptr += sprintf(ptr, "varying vec4 v%d;\n", i);
 	ptr += sprintf(ptr, "void main()\n");
 	ptr += sprintf(ptr, "{\n");
-	ptr += sprintf(ptr, "  vec4 v = v0;\n");
-	for (i = 1; i < cnt; i++)
-		ptr += sprintf(ptr, "  v += v%d;\n", i);
-	ptr += sprintf(ptr, "  gl_FragColor = v;\n");
+	ptr += sprintf(ptr, "  bool failed = false;\n");
+	for (i = 0; i < cnt; i++) {
+		for (j = 0; j < 4; j++) {
+			ptr += sprintf(ptr, "  if (v%d[%d] != (i + %d.0))\n", i, j, (i * 4) + j);
+			ptr += sprintf(ptr, "    failed = true;\n");
+		}
+	}
+	ptr += sprintf(ptr, "  if (failed)\n");
+	ptr += sprintf(ptr, "    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n");
+	ptr += sprintf(ptr, "  else\n");
+	ptr += sprintf(ptr, "    gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);\n");
 	ptr += sprintf(ptr, "}\n");
 
 	return buf;
@@ -133,6 +146,10 @@ void test_varyings(int cnt)
 	link_program(program);
 
 	GCHK(glViewport(0, 0, width, height));
+
+	/* now set up our uniform. */
+	GCHK(uniform_location = glGetUniformLocation(program, "i"));
+	GCHK(glUniform1f(uniform_location, 0.0f));
 
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices));
 	GCHK(glEnableVertexAttribArray(0));
