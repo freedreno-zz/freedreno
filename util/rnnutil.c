@@ -41,13 +41,8 @@ static struct rnndomain *finddom(struct rnn *rnn, uint32_t regbase)
 	return rnn->dom[1];
 }
 
-struct rnn *rnn_new(int nocolor)
+void _rnn_init(struct rnn *rnn, int nocolor)
 {
-	struct rnn *rnn = calloc(sizeof(*rnn), 1);
-
-	if (!rnn)
-		return NULL;
-
 	rnn_init();
 
 	rnn->db = rnn_newdb();
@@ -59,6 +54,16 @@ struct rnn *rnn_new(int nocolor)
 		rnn->vc = rnndec_newcontext(rnn->db);
 		rnn->vc->colors = &envy_def_colors;
 	}
+}
+
+struct rnn *rnn_new(int nocolor)
+{
+	struct rnn *rnn = calloc(sizeof(*rnn), 1);
+
+	if (!rnn)
+		return NULL;
+
+	_rnn_init(rnn, nocolor);
 
 	return rnn;
 }
@@ -115,4 +120,44 @@ struct rnndecaddrinfo *rnn_reginfo(struct rnn *rnn, uint32_t regbase)
 const char *rnn_enumname(struct rnn *rnn, const char *name, uint32_t val)
 {
 	return rnndec_decode_enum(rnn->vc, name, val);
+}
+
+static struct rnndelem *regelem(struct rnndomain *domain, const char *name)
+{
+	int i;
+	for (i = 0; i < domain->subelemsnum; i++) {
+		struct rnndelem *elem = domain->subelems[i];
+		if (!strcmp(elem->name, name))
+			return elem;
+	}
+	return NULL;
+}
+
+struct rnndelem *rnn_regelem(struct rnn *rnn, const char *name)
+{
+	struct rnndelem *elem = regelem(rnn->dom[0], name);
+	if (elem)
+		return elem;
+	return regelem(rnn->dom[1], name);
+}
+
+enum rnnttype rnn_decodelem(struct rnn *rnn, struct rnntypeinfo *info,
+		uint32_t regval, union rnndecval *val)
+{
+	val->u = regval;
+	switch (info->type) {
+	case RNN_TTYPE_INLINE_ENUM:
+	case RNN_TTYPE_ENUM:
+	case RNN_TTYPE_HEX:
+	case RNN_TTYPE_INT:
+	case RNN_TTYPE_UINT:
+	case RNN_TTYPE_FLOAT:
+	case RNN_TTYPE_BOOLEAN:
+		return info->type;
+	case RNN_TTYPE_FIXED:
+	case RNN_TTYPE_UFIXED:
+		/* TODO */
+	default:
+		return RNN_TTYPE_INVALID;
+	}
 }

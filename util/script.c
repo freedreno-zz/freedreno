@@ -41,6 +41,19 @@
 
 static lua_State *L;
 
+#if 0
+#define DBG(fmt, ...) \
+		do { printf(" ** %s:%d ** "fmt "\n", \
+				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+#else
+#define DBG(fmt, ...) do {} while (0)
+#endif
+
+uint32_t reg_written(uint32_t regbase);
+uint32_t reg_lastval(uint32_t regbase);
+uint32_t reg_val(uint32_t regbase);
+
+
 /* does not return */
 static void error(const char *fmt)
 {
@@ -51,12 +64,273 @@ static void error(const char *fmt)
 /* Expose rnn decode to script environment as "rnn" library:
  */
 
+struct rnndoff {
+	struct rnn *rnn;
+	struct rnndelem *elem;
+	uint64_t offset;
+};
+
+static void push_rnndoff(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset)
+{
+	struct rnndoff *rnndoff = lua_newuserdata(L, sizeof(*rnndoff));
+	rnndoff->rnn = rnn;
+	rnndoff->elem = elem;
+	rnndoff->offset = offset;
+}
+
+static int l_rnn_etype_array(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset);
+static int l_rnn_etype_reg(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset);
+
+static int pushdecval(struct lua_State *L, struct rnn *rnn,
+		uint32_t regval, struct rnntypeinfo *info)
+{
+	union rnndecval val;
+	switch (rnn_decodelem(rnn, info, regval, &val)) {
+	case RNN_TTYPE_INT:
+	case RNN_TTYPE_ENUM:
+	case RNN_TTYPE_INLINE_ENUM:
+		lua_pushinteger(L, val.i);
+		return 1;
+	case RNN_TTYPE_UINT:
+	case RNN_TTYPE_HEX:
+		lua_pushunsigned(L, val.u);
+		return 1;
+	case RNN_TTYPE_FLOAT:
+		lua_pushnumber(L, val.f);
+		return 1;
+	case RNN_TTYPE_BOOLEAN:
+		lua_pushboolean(L, val.u);
+		return 1;
+	case RNN_TTYPE_INVALID:
+	default:
+		return 0;
+	}
+
+}
+
+static int l_rnn_etype(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset)
+{
+	int ret;
+	DBG("elem=%p (%d), offset=%lu", elem, elem->type, offset);
+	switch (elem->type) {
+	case RNN_ETYPE_REG:
+		/* if a register has no bitfields, just return
+		 * the raw value:
+		 */
+		ret = pushdecval(L, rnn, reg_val(offset), &elem->typeinfo);
+		if (ret)
+			return ret;
+		return l_rnn_etype_reg(L, rnn, elem, offset);
+	case RNN_ETYPE_ARRAY:
+		return l_rnn_etype_array(L, rnn, elem, offset);
+	default:
+		/* hmm.. */
+		printf("unhandled type: %d\n", elem->type);
+		return 0;
+	}
+}
+
+/*
+ * Struct Object:
+ * To implement stuff like 'RB_MRT[n].CONTROL' we need a struct-object
+ * to represent the current array index (ie. 'RB_MRT[n]')
+ */
+
+static int l_rnn_struct_meta_index(lua_State *L)
+{
+	struct rnndoff *rnndoff = lua_touserdata(L, 1);
+	const char *name = lua_tostring(L, 2);
+	struct rnndelem *elem = rnndoff->elem;
+	int i;
+
+	for (i = 0; i < elem->subelemsnum; i++) {
+		struct rnndelem *subelem = elem->subelems[i];
+		if (!strcmp(name, subelem->name)) {
+			return l_rnn_etype(L, rnndoff->rnn, subelem,
+					rnndoff->offset + subelem->offset);
+		}
+	}
+
+	return 0;
+}
+
+static const struct luaL_Reg l_meta_rnn_struct[] = {
+	{"__index", l_rnn_struct_meta_index},
+	{NULL, NULL}  /* sentinel */
+};
+
+static int l_rnn_etype_struct(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset)
+{
+	push_rnndoff(L, rnn, elem, offset);
+
+	luaL_newmetatable(L, "rnnmetastruct");
+	luaL_setfuncs(L, l_meta_rnn_struct, 0);
+	lua_pop(L, 1);
+
+	luaL_setmetatable(L, "rnnmetastruct");
+
+	return 1;
+}
+
+/*
+ * Array Object:
+ */
+
+static int l_rnn_array_meta_index(lua_State *L)
+{
+	struct rnndoff *rnndoff = lua_touserdata(L, 1);
+	int idx = lua_tointeger(L, 2);
+	struct rnndelem *elem = rnndoff->elem;
+	uint64_t offset = rnndoff->offset + (elem->stride * idx);
+
+	DBG("rnndoff=%p, idx=%d, numsubelems=%d",
+			rnndoff, idx, rnndoff->elem->subelemsnum);
+
+	/* if just a single sub-element, it is directly a register,
+	 * otherwise we need to accumulate the array index while
+	 * we wait for the register name within the array..
+	 */
+	if (elem->subelemsnum == 1) {
+		return l_rnn_etype(L, rnndoff->rnn, elem->subelems[0], offset);
+	} else {
+		return l_rnn_etype_struct(L, rnndoff->rnn, elem, offset);
+	}
+
+	return 0;
+}
+
+static const struct luaL_Reg l_meta_rnn_array[] = {
+	{"__index", l_rnn_array_meta_index},
+	{NULL, NULL}  /* sentinel */
+};
+
+static int l_rnn_etype_array(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset)
+{
+	push_rnndoff(L, rnn, elem, offset);
+
+	luaL_newmetatable(L, "rnnmetaarray");
+	luaL_setfuncs(L, l_meta_rnn_array, 0);
+	lua_pop(L, 1);
+
+	luaL_setmetatable(L, "rnnmetaarray");
+
+	return 1;
+}
+
+/*
+ * Register element:
+ */
+
+static int l_rnn_reg_meta_index(lua_State *L)
+{
+	struct rnndoff *rnndoff = lua_touserdata(L, 1);
+	const char *name = lua_tostring(L, 2);
+	struct rnndelem *elem = rnndoff->elem;
+	struct rnntypeinfo *info = &elem->typeinfo;
+	struct rnnbitfield **bitfields;
+	int bitfieldsnum;
+	int i;
+
+	switch (info->type) {
+	case RNN_TTYPE_BITSET:
+		bitfields = info->ebitset->bitfields;
+		bitfieldsnum = info->ebitset->bitfieldsnum;
+		break;
+	case RNN_TTYPE_INLINE_BITSET:
+		bitfields = info->bitfields;
+		bitfieldsnum = info->bitfieldsnum;
+		break;
+	default:
+		printf("invalid register type: %d\n", info->type);
+		return 0;
+	}
+
+	for (i = 0; i < bitfieldsnum; i++) {
+		struct rnnbitfield *bf = bitfields[i];
+		if (!strcmp(name, bf->name)) {
+			uint32_t regval = (reg_val(rnndoff->offset) & bf->mask) >> bf->low;
+
+			DBG("name=%s, info=%p, subelemsnum=%d, type=%d, regval=%x",
+					name, info, rnndoff->elem->subelemsnum,
+					bf->typeinfo.type, regval);
+
+			return pushdecval(L, rnndoff->rnn, regval, &bf->typeinfo);
+		}
+	}
+
+	printf("invalid member: %s\n", name);
+	return 0;
+}
+
+static const struct luaL_Reg l_meta_rnn_reg[] = {
+	{"__index", l_rnn_reg_meta_index},
+	{NULL, NULL}  /* sentinel */
+};
+
+static int l_rnn_etype_reg(lua_State *L, struct rnn *rnn,
+		struct rnndelem *elem, uint64_t offset)
+{
+	push_rnndoff(L, rnn, elem, offset);
+
+	luaL_newmetatable(L, "rnnmetareg");
+	luaL_setfuncs(L, l_meta_rnn_reg, 0);
+	lua_pop(L, 1);
+
+	luaL_setmetatable(L, "rnnmetareg");
+
+	return 1;
+}
+
+/*
+ *
+ */
+
+static int l_rnn_meta_index(lua_State *L)
+{
+	struct rnn *rnn = lua_touserdata(L, 1);
+	const char *name = lua_tostring(L, 2);
+	struct rnndelem *elem;
+
+	elem = rnn_regelem(rnn, name);
+	if (!elem)
+		return 0;
+
+	return l_rnn_etype(L, rnn, elem, elem->offset);
+}
+
+static int l_rnn_meta_gc(lua_State *L)
+{
+	// TODO
+	//struct rnn *rnn = lua_touserdata(L, 1);
+	//rnn_deinit(rnn);
+	return 0;
+}
+
+static const struct luaL_Reg l_meta_rnn[] = {
+	{"__index", l_rnn_meta_index},
+	{"__gc", l_rnn_meta_gc},
+	{NULL, NULL}  /* sentinel */
+};
+
 static int l_rnn_init(lua_State *L)
 {
 	const char *gpuname = lua_tostring(L, 1);
-	struct rnn *rnn = rnn_new(0);
+	struct rnn *rnn = lua_newuserdata(L, sizeof(*rnn));
+	_rnn_init(rnn, 0);
 	rnn_load(rnn, gpuname);
-	lua_pushlightuserdata(L, rnn);
+
+	luaL_newmetatable(L, "rnnmeta");
+	luaL_setfuncs(L, l_meta_rnn, 0);
+	lua_pop(L, 1);
+
+	luaL_setmetatable(L, "rnnmeta");
+
 	return 1;
 }
 
@@ -110,10 +384,6 @@ static const struct luaL_Reg l_rnn[] = {
 
 /* Expose the register state to script enviroment as a "regs" library:
  */
-
-uint32_t reg_written(uint32_t regbase);
-uint32_t reg_lastval(uint32_t regbase);
-uint32_t reg_val(uint32_t regbase);
 
 static int l_reg_written(lua_State *L)
 {
