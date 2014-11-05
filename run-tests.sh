@@ -5,7 +5,16 @@
 for f in test-*; do
 	if [ -x $f ]; then
 		echo "Running: $f"
-		LD_PRELOAD=`pwd`/libwrap.so ./$f > $f.log
+		i=0
+		while `true`; do
+			echo "Running: $f ($i)"
+			TESTNUM=$i LD_PRELOAD=`pwd`/libwrap.so ./$f > $f.$i.log
+			if [ "$?" = "42" ]; then
+				break;
+			fi
+			sync
+			i=$((i+1))
+		done
 	fi
 done
 
