@@ -870,6 +870,11 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			enum shader_t disasm_type;
 			const char *ext = NULL;
 
+			if (gpu_id >= 400)
+				num_unit *= 16;
+			else if (gpu_id >= 300)
+				num_unit *= 4;
+
 			/* shaders:
 			 *
 			 * note: num_unit seems to be # of instruction groups, where
@@ -884,7 +889,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			}
 
 			if (contents)
-				disasm_a3xx(contents, num_unit * 4 * 2, level+2, disasm_type);
+				disasm_a3xx(contents, num_unit * 2, level+2, disasm_type);
 
 			/* dump raw shader: */
 			if (ext && dump_shaders) {
@@ -900,6 +905,10 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			 *
 			 * note: num_unit seems to be # of pairs of dwords??
 			 */
+
+			if (gpu_id >= 400)
+				num_unit *= 2;
+
 			dump_float(contents, num_unit*2, level+1);
 			dump_hex(contents, num_unit*2, level+1);
 		}
@@ -923,9 +932,8 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	case SB_FRAG_TEX:
 	case SB_VERT_TEX:
 		if (state_type == ST_SHADER) {
+			uint32_t *texsamp = (uint32_t *)contents;
 			for (i = 0; i < num_unit; i++) {
-				uint32_t *texsamp = &((uint32_t *)contents)[2 * i];
-
 				/* work-around to reduce noise for opencl blob which always
 				 * writes the max # regardless of # of textures used
 				 */
@@ -937,11 +945,12 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 				else if ((400 <= gpu_id) && (gpu_id < 500))
 					dump_domain(texsamp, 2, level+2, "A4XX_TEX_SAMP");
 				dump_hex(texsamp, 2, level+1);
+
+				texsamp += 2;
 			}
 		} else {
+			uint32_t *texconst = (uint32_t *)contents;
 			for (i = 0; i < num_unit; i++) {
-				uint32_t *texconst = &((uint32_t *)contents)[4 * i];
-
 				/* work-around to reduce noise for opencl blob which always
 				 * writes the max # regardless of # of textures used
 				 */
@@ -950,11 +959,15 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 					(texconst[2] == 0) && (texconst[3] == 0))
 					break;
 
-				if ((300 <= gpu_id) && (gpu_id < 400))
+				if ((300 <= gpu_id) && (gpu_id < 400)) {
 					dump_domain(texconst, 4, level+2, "A3XX_TEX_CONST");
-				else if ((400 <= gpu_id) && (gpu_id < 500))
-					dump_domain(texconst, 4, level+2, "A4XX_TEX_CONST");
-				dump_hex(texconst, 4, level+1);
+					dump_hex(texconst, 4, level+1);
+					texconst += 4;
+				} else if ((400 <= gpu_id) && (gpu_id < 500)) {
+					dump_domain(texconst, 8, level+2, "A4XX_TEX_CONST");
+					dump_hex(texconst, 8, level+1);
+					texconst += 8;
+				}
 			}
 		}
 		break;
@@ -1346,17 +1359,7 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		if (!quiet(2))
 			dump_hex(ptr, count, level+1);
 
-		for (i = 0; i < count; ) {
-			uint32_t regbase = ptr[i] & 0xffff;
-			uint32_t count2 = (ptr[i] >> 16) + 1;
-			if (count2 > (count - i)) {
-				printf("hrm, bogus count..  count=%d, count2=%d\n",
-						count, count2);
-				count2 = count - i;
-			}
-			dump_registers(regbase, &ptr[i+1], count2, level+1);
-			i += count2 + 1;
-		}
+		dump_commands(ptr, count, level+1);
 	}
 }
 
@@ -1429,6 +1432,13 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	while (dwords_left > 0) {
 		int type = dwords[0] >> 30;
+
+		/* hack, this looks like a -1 underflow, in some versions
+		 * when it tries to write zero registers via pkt0
+		 */
+		if ((dwords[0] >> 16) == 0xffff)
+			goto skip;
+
 		printl(3, "t%d", type);
 		switch (type) {
 		case 0x0: /* type-0 */
@@ -1480,6 +1490,7 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			return;
 		}
 
+skip:
 		dwords += count;
 		dwords_left -= count;
 
@@ -1668,6 +1679,12 @@ static int handle_file(const char *filename, int start, int end)
 	}
 
 	while ((io_readn(io, &type, sizeof(type)) > 0) && (io_readn(io, &sz, 4) > 0)) {
+
+		if (sz < 0) {
+			printf("corrupt file\n");
+			break;
+		}
+
 		free(buf);
 
 		needs_wfi = false;
