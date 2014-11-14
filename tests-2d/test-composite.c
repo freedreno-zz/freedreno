@@ -148,6 +148,8 @@ int main(int argc, char **argv)
 {
 	uint32_t i, j, k, l;
 
+	TEST_START();
+
 	/* NOTE: my assumption here is that repeat, op, and color formats
 	 * are rather independent, so we don't need to dump every possible
 	 * combination (which would be a huge list)..  possibly need to
@@ -156,10 +158,10 @@ int main(int argc, char **argv)
 
 	/* test composite ops: */
 	for (i = 0; i < ARRAY_SIZE(blend_modes); i++) {
-		test_composite("composite-op", &blend_modes[i],
+		TEST(test_composite("composite-op", &blend_modes[i],
 				&format_modes[2], 17, 19,
 				&format_modes[0], FALSE, 17, 19,
-				NULL, FALSE, 17, 19);
+				NULL, FALSE, 17, 19));
 	}
 
 	/* test formats, by dst: */
@@ -168,10 +170,10 @@ int main(int argc, char **argv)
 		sprintf(name, "composite-dst-%s", format_modes[i].name);
 		for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 			// TODO add mask:
-			test_composite(name, &blend_modes[4],
+			TEST(test_composite(name, &blend_modes[4],
 					&format_modes[i], 17, 19,
 					&format_modes[j], FALSE, 17, 19,
-					NULL, FALSE, 17, 19);
+					NULL, FALSE, 17, 19));
 		}
 	}
 
@@ -181,10 +183,10 @@ int main(int argc, char **argv)
 		sprintf(name, "composite-src-%s", format_modes[i].name);
 		for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 			// TODO add mask:
-			test_composite(name, &blend_modes[4],
+			TEST(test_composite(name, &blend_modes[4],
 					&format_modes[j], 17, 19,
 					&format_modes[i], FALSE, 17, 19,
-					NULL, FALSE, 17, 19);
+					NULL, FALSE, 17, 19));
 		}
 	}
 
@@ -193,52 +195,54 @@ int main(int argc, char **argv)
 		for (i = 0; i < ARRAY_SIZE(format_modes); i++) {
 			for (j = 0; j < ARRAY_SIZE(format_modes); j++) {
 				for (k = 0; k < ARRAY_SIZE(format_modes); k++) {
-					test_composite("composite-all", &blend_modes[l],
+					TEST(test_composite("composite-all", &blend_modes[l],
 							&format_modes[i], 17, 19,
 							&format_modes[j], FALSE, 17, 19,
-							&format_modes[k], FALSE, 17, 19);
+							&format_modes[k], FALSE, 17, 19));
 				}
-				test_composite("composite-all", &blend_modes[l],
+				TEST(test_composite("composite-all", &blend_modes[l],
 						&format_modes[i], 17, 19,
 						&format_modes[j], FALSE, 17, 19,
-						NULL, FALSE, 17, 19);
+						NULL, FALSE, 17, 19));
 			}
 		}
 	}
 
 	/* test with/without mask: */
-	test_composite("composite-mask", &blend_modes[3],
+	TEST(test_composite("composite-mask", &blend_modes[3],
 			&format_modes[0], 17, 19,
 			&format_modes[0], FALSE, 17, 19,
-			NULL, FALSE, 17, 19);
+			NULL, FALSE, 17, 19));
 	for (i = 0; i < ARRAY_SIZE(format_modes); i++) {
-		test_composite("composite-mask", &blend_modes[3],
+		TEST(test_composite("composite-mask", &blend_modes[3],
 				&format_modes[0], 17, 19,
 				&format_modes[0], FALSE, 17, 19,
-				&format_modes[i], FALSE, 17, 19);
+				&format_modes[i], FALSE, 17, 19));
 	}
 
 	/* test repeat: */
-	test_composite("composite-repeat", &blend_modes[4],
+	TEST(test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0], 17, 19,
 			&format_modes[0], FALSE, 17, 19,
-			NULL, FALSE, 17, 19);
-	test_composite("composite-repeat", &blend_modes[4],
+			NULL, FALSE, 17, 19));
+	TEST(test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0], 17, 19,
 			&format_modes[0], TRUE, 5, 5,
-			NULL, FALSE, 0, 0);
-	test_composite("composite-repeat", &blend_modes[4],
+			NULL, FALSE, 0, 0));
+	TEST(test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0], 17, 19,
 			&format_modes[0], TRUE, 6, 6,
-			NULL, FALSE, 0, 0);
-	test_composite("composite-repeat", &blend_modes[4],
+			NULL, FALSE, 0, 0));
+	TEST(test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0], 17, 19,
 			&format_modes[0], TRUE, 7, 7,
-			&format_modes[2], TRUE, 5, 5);
-	test_composite("composite-repeat", &blend_modes[4],
+			&format_modes[2], TRUE, 5, 5));
+	TEST(test_composite("composite-repeat", &blend_modes[4],
 			&format_modes[0], 17, 19,
 			&format_modes[0], TRUE, 8, 8,
-			&format_modes[2], TRUE, 1, 1);
+			&format_modes[2], TRUE, 1, 1));
+
+	TEST_END();
 
 	return 0;
 }

@@ -113,7 +113,9 @@ void test_multi(void)
 
 int main(int argc, char **argv)
 {
-	test_multi();
+	TEST_START();
+	TEST(test_multi());
+	TEST_END();
 
 	return 0;
 }

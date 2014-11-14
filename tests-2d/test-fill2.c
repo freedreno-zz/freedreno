@@ -51,18 +51,22 @@ void test_fill(uint32_t w, uint32_t h, uint32_t format,
 
 int main(int argc, char **argv)
 {
-	test_fill(1920, 1080, xRGB, 0, 0, 1920, 1080);
-	test_fill(1920, 1080, xRGB, 717, 395, 718, 685);
+	TEST_START();
+
+	TEST(test_fill(1920, 1080, xRGB, 0, 0, 1920, 1080));
+	TEST(test_fill(1920, 1080, xRGB, 717, 395, 718, 685));
 
 	/* test limits of x, y */
-	test_fill(1920, 1080, xRGB, 0x100, 0, 0x101, 0);
-	test_fill(1920, 1080, xRGB, 0, 0x100, 0, 0x101);
+	TEST(test_fill(1920, 1080, xRGB, 0x100, 0, 0x101, 0));
+	TEST(test_fill(1920, 1080, xRGB, 0, 0x100, 0, 0x101));
 
 	/* test limits of width, height */
-	test_fill(1920, 1080, xRGB, 0, 0, 0x100, 0);
-	test_fill(1920, 1080, xRGB, 0, 0, 0, 0x100);
+	TEST(test_fill(1920, 1080, xRGB, 0, 0, 0x100, 0));
+	TEST(test_fill(1920, 1080, xRGB, 0, 0, 0, 0x100));
 
-	test_fill(1, 1, xRGB, 0, 0, 1, 1);
+	TEST(test_fill(1, 1, xRGB, 0, 0, 1, 1));
+
+	TEST_END();
 
 	return 0;
 }

@@ -118,11 +118,13 @@ int main(int argc, char **argv)
 [  1340.258] (II) freedreno(0): MSMComposite:766 srcX=0 srcY=0  maskX=0 maskY=0 dstX=0  dstY=2  width=7 height=6
  */
 
-	test_composite(C2D_ALPHA_BLEND_ADDITIVE,
+	TEST_START();
+	TEST(test_composite(C2D_ALPHA_BLEND_ADDITIVE,
 			ARGB, 35,   8,
 			A8,   1024, 320,
 			0,    0,    0,
-			0, 0, 0, 0, 0, 2, 7, 6);
+			0, 0, 0, 0, 0, 2, 7, 6));
+	TEST_END();
 
 	return 0;
 }

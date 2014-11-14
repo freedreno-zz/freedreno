@@ -109,16 +109,20 @@ int main(int argc, char **argv)
 {
 	int i, j;
 
+	TEST_START();
+
 	for (i = 0; i < ARRAY_SIZE(formats); i++) {
 		for (j = 0; j < ARRAY_SIZE(formats); j++) {
-			test_copy(63, 67, formats[i].fmt, formats[j].fmt);
+			TEST(test_copy(63, 67, formats[i].fmt, formats[j].fmt));
 		}
 	}
 
-	test_copy(63, 65, xRGB, RGBx);
-	test_copy(127, 260, xRGB, xRGB);
-	test_copy(62, 66, ARGB, C2D_COLOR_FORMAT_565_RGB);
-	test_copy(59, 69, C2D_COLOR_FORMAT_565_RGB, ARGB);
+	TEST(test_copy(63, 65, xRGB, RGBx));
+	TEST(test_copy(127, 260, xRGB, xRGB));
+	TEST(test_copy(62, 66, ARGB, C2D_COLOR_FORMAT_565_RGB));
+	TEST(test_copy(59, 69, C2D_COLOR_FORMAT_565_RGB, ARGB));
+
+	TEST_END();
 
 	return 0;
 }
