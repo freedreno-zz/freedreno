@@ -123,6 +123,24 @@ formatname(GLenum format)
 	return NULL;
 }
 
+static inline const char *
+textypename(GLenum type)
+{
+	switch (type) {
+	ENUM(GL_TEXTURE_2D);
+#ifdef GL_TEXTURE_2D_ARRAY
+	ENUM(GL_TEXTURE_2D_ARRAY);
+#endif
+#ifdef GL_TEXTURE_3D
+	ENUM(GL_TEXTURE_3D);
+#endif
+	ENUM(GL_TEXTURE_CUBE_MAP);
+	}
+	ERROR_MSG("invalid type: %04x", type);
+	exit(1);
+	return NULL;
+}
+
 static char *
 eglStrError(EGLint error)
 {
@@ -279,6 +297,12 @@ static void dump_bmp(EGLDisplay display, EGLSurface surface, const char *filenam
 	GCHK(glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buf));
 
 	wrap_bmp_dump(buf, width, height, width*4, filename);
+}
+
+static void readback(void)
+{
+	char buf[64];
+	GCHK(glReadPixels(0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, buf));
 }
 
 static GLuint

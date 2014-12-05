@@ -89,7 +89,7 @@ static GLbyte fShaderStr2d[] =
 
 static GLubyte *tex(GLubyte *fill)
 {
-	static GLubyte buf[256*256*3];
+	static GLubyte buf[1024*1024*4];
 #if 1
 	int i, j;
 	for (i = 0; i < ARRAY_SIZE(buf); )
@@ -271,6 +271,9 @@ int main(int argc, char *argv[])
 	TEST(test_cubemap(1, 1, 1));
 	TEST(test_cubemap(1, 4, 4));
 	TEST(test_cubemap(1, 40, 40));
+	TEST(test_cubemap(1, 256, 256));
+	TEST(test_cubemap(1, 512, 512));
+	TEST(test_cubemap(1, 1024, 1024));
 	TEST_END();
 	return 0;
 }

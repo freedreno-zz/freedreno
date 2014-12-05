@@ -113,7 +113,8 @@ void test_quad_textured(GLenum type, GLenum format, int w, int h, int d)
 
 	EGLSurface surface;
 
-	RD_START("quad-textured-3d", "type=%x, format=%x, %dx%dx%d", type, format, w, h, d);
+	RD_START("quad-textured-3d", "type=%x, format=%s, %dx%dx%d",
+			textypename(type), formatname(format), w, h, d);
 
 	pixel_data = malloc(w * h * d * 4);
 
@@ -219,6 +220,23 @@ int main(int argc, char *argv[])
 	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_ALPHA, 4, 33, 4));
 	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 33, 4, 4));
 	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 4, 33, 4));
+	/* test larger sizes: */
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 256, 256, 1));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 256, 256, 128));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 256, 256, 256));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 256, 256, 512));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 256, 256, 1024));
+	TEST(test_quad_textured(GL_TEXTURE_3D, GL_RGBA, 512, 512, 512));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 256, 256, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 512, 512, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 2048, 2048, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 4096, 4096, 4));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 32, 32, 32));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 32, 32, 256));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 32, 32, 512));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 32, 32, 1024));
+	TEST(test_quad_textured(GL_TEXTURE_2D_ARRAY, GL_RGBA, 32, 32, 2048));
+
 	TEST_END();
 
 	return 0;
