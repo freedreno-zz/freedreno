@@ -58,6 +58,15 @@ static bool allregs = false;
 static int vertices;
 static unsigned gpu_id = 220;
 
+/* note: not sure if CP_SET_DRAW_STATE counts as a complete extra level
+ * of IB or if it is restricted to just have register writes:
+ */
+static int draws[3];
+static int ib;
+
+static int draw_filter;
+static int draw_count;
+
 /* query mode.. to handle symbolic register name queries, we need to
  * defer parsing query string until after gpu_id is know and rnn db
  * loaded:
@@ -70,6 +79,8 @@ static char *script;
 
 static bool quiet(int lvl)
 {
+	if ((draw_filter != -1) && (draw_filter != draw_count))
+		return true;
 	if ((lvl >= 3) && (summary || querystrs || script))
 		return true;
 	if ((lvl >= 2) && (querystrs || script))
@@ -202,6 +213,17 @@ static uint32_t gpuaddr(void *hostptr)
 	for (i = 0; i < nbuffers; i++)
 		if (buffer_contains_hostptr(&buffers[i], hostptr))
 			return buffers[i].gpuaddr + (hostptr - buffers[i].hostptr);
+	return 0;
+}
+
+static uint32_t gpubaseaddr(uint32_t gpuaddr)
+{
+	int i;
+	if (!gpuaddr)
+		return 0;
+	for (i = 0; i < nbuffers; i++)
+		if (buffer_contains_gpuaddr(&buffers[i], gpuaddr, 0))
+			return buffers[i].gpuaddr;
 	return 0;
 }
 
@@ -794,8 +816,8 @@ static void do_query(const char *mode, uint32_t num_indices)
 		uint32_t regbase = queryvals[i];
 		if (reg_written(regbase)) {
 			uint32_t lastval = reg_val(regbase);
-			printf("%s(%u,%u-%u,%u)", mode,
-					bin_x1, bin_y1, bin_x2, bin_y2);
+			printf("%s(%u,%u-%u,%u):%u", mode,
+					bin_x1, bin_y1, bin_x2, bin_y2, num_indices);
 			dump_register_val(regbase, lastval, 0);
 		}
 	}
@@ -1160,6 +1182,7 @@ static uint32_t draw_indx_common(uint32_t *dwords, int level)
 
 	do_query(primtype, num_indices);
 
+	printl(2, "%sdraw:          %d\n", levels[level], draws[ib]);
 	printl(2, "%sprim_type:     %s (%d)\n", levels[level], primtype,
 			prim_type);
 	printl(2, "%ssource_select: %s (%d)\n", levels[level],
@@ -1168,6 +1191,8 @@ static uint32_t draw_indx_common(uint32_t *dwords, int level)
 	printl(2, "%snum_indices:   %d\n", levels[level], num_indices);
 
 	vertices += num_indices;
+
+	draws[ib]++;
 
 	return num_indices;
 }
@@ -1212,6 +1237,7 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 	if (num_indices > 0)
 		dump_register_summary(level);
 
+	draw_count++;
 	summary = saved_summary;
 
 	needs_wfi = true;
@@ -1256,6 +1282,7 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	if (num_indices > 0)
 		dump_register_summary(level);
 
+	draw_count++;
 	summary = saved_summary;
 }
 
@@ -1273,6 +1300,7 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 	if (num_indices > 0)
 		dump_register_summary(level);
 
+	draw_count++;
 	summary = saved_summary;
 }
 
@@ -1286,6 +1314,7 @@ static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	dump_register_summary(level);
 
+	draw_count++;
 	summary = saved_summary;
 }
 
@@ -1313,7 +1342,9 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 
 	if (ptr) {
+		ib++;
 		dump_commands(ptr, ibsize, level);
+		ib--;
 	} else {
 		fprintf(stderr, "could not find: %08x (%d)\n", ibaddr, ibsize);
 	}
@@ -1430,6 +1461,8 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t count = 0; /* dword count including packet header */
 	uint32_t val;
 
+	draws[ib] = 0;
+
 	while (dwords_left > 0) {
 		int type = dwords[0] >> 30;
 
@@ -1500,12 +1533,12 @@ skip:
 		printf("**** this ain't right!! dwords_left=%d\n", dwords_left);
 }
 
-static int handle_file(const char *filename, int start, int end);
+static int handle_file(const char *filename, int start, int end, int draw);
 
 int main(int argc, char **argv)
 {
 	int ret, n = 1;
-	int start = 0, end = 0x7ffffff;
+	int start = 0, end = 0x7ffffff, draw = -1;
 
 	while (n < argc) {
 		if (!strcmp(argv[n], "--verbose")) {
@@ -1559,6 +1592,13 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[n], "--draw")) {
+			n++;
+			draw = atoi(argv[n]);
+			n++;
+			continue;
+		}
+
 		if (!strcmp(argv[n], "--script")) {
 			n++;
 			script = argv[n];
@@ -1586,7 +1626,7 @@ int main(int argc, char **argv)
 	rnn = rnn_new(no_color);
 
 	while (n < argc) {
-		ret = handle_file(argv[n], start, end);
+		ret = handle_file(argv[n], start, end, draw);
 		if (ret) {
 			fprintf(stderr, "error reading: %s\n", argv[n]);
 			fprintf(stderr, "continuing..\n");
@@ -1606,13 +1646,16 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-static int handle_file(const char *filename, int start, int end)
+static int handle_file(const char *filename, int start, int end, int draw)
 {
 	enum rd_sect_type type = RD_NONE;
 	void *buf = NULL;
 	struct io *io;
-	int draw = 0, got_gpu_id = 0;
+	int submit = 0, got_gpu_id = 0;
 	int sz, i;
+
+	draw_filter = draw;
+	draw_count = 0;
 
 	printf("Reading %s...\n", filename);
 
@@ -1695,7 +1738,7 @@ static int handle_file(const char *filename, int start, int end)
 
 		switch(type) {
 		case RD_TEST:
-			printl(2, "test: %s\n", (char *)buf);
+			printl(1, "test: %s\n", (char *)buf);
 			break;
 		case RD_CMD:
 			printl(2, "cmd: %s\n", (char *)buf);
@@ -1717,7 +1760,7 @@ static int handle_file(const char *filename, int start, int end)
 			buf = NULL;
 			break;
 		case RD_CMDSTREAM_ADDR:
-			if ((start <= draw) && (draw <= end)) {
+			if ((start <= submit) && (submit <= end)) {
 				printl(2, "############################################################\n");
 				printl(2, "cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
 				dump_commands(hostptr(((uint32_t *)buf)[0]),
@@ -1725,7 +1768,7 @@ static int handle_file(const char *filename, int start, int end)
 				printl(2, "############################################################\n");
 				printl(2, "vertices: %d\n", vertices);
 			}
-			draw++;
+			submit++;
 			for (i = 0; i < nbuffers; i++) {
 				free(buffers[i].hostptr);
 				buffers[i].hostptr = NULL;
