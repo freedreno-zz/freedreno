@@ -42,7 +42,9 @@ TESTS_3D = \
 	test-tex \
 	test-vertex \
 	test-triangle-smoothed \
-	test-triangle-quad
+	test-triangle-quad \
+	test-instanced \
+	test-tf
 
 TESTS_CL = \
 	test-simple \

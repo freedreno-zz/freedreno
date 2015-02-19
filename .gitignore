@@ -37,6 +37,8 @@ test-cubemap
 test-es2gears
 test-piglit-bad
 test-piglit-good
+test-instanced
+test-tf
 
 # cl tests:
 test-image
