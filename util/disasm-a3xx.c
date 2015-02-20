@@ -337,7 +337,7 @@ static void print_instr_cat1(instr_t *instr)
 	if (cat1->src_type == cat1->dst_type) {
 		if ((cat1->src_type == TYPE_S16) && (((reg_t)cat1->dst).num == REG_A0)) {
 			/* special case (nmemonic?): */
-			printf("mova");
+			printf("mova.%s%s", type[cat1->src_type], type[cat1->dst_type]);
 		} else {
 			printf("mov.%s%s", type[cat1->src_type], type[cat1->dst_type]);
 		}
@@ -1021,7 +1021,7 @@ int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
 	bool end = false;
 	int i;
 
-	assert((sizedwords % 2) == 0);
+//	assert((sizedwords % 2) == 0);
 
 	memset(&regs, 0, sizeof(regs));
 

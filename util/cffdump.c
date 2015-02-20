@@ -182,6 +182,9 @@ static const char *fmt_name[] = {
 		NAME(FMT_DXT3A_AS_1_1_1_1),
 };
 
+#define GET_PM4_TYPE3_OPCODE(x) ((*(x) >> 8) & 0xFF)
+#define GET_PM4_TYPE0_REGIDX(x) ((*(x)) & 0x7FFF)
+
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
 static void dump_register_val(uint32_t regbase, uint32_t dword, int level);
 static const char *regname(uint32_t regbase, int color);
@@ -204,8 +207,6 @@ static int buffer_contains_hostptr(struct buffer *buf, void *hostptr)
 	return (buf->hostptr <= hostptr) && (hostptr < (buf->hostptr + buf->len));
 }
 
-#define GET_PM4_TYPE3_OPCODE(x) ((*(x) >> 8) & 0xFF)
-#define GET_PM4_TYPE0_REGIDX(x) ((*(x)) & 0x7FFF)
 
 static uint32_t gpuaddr(void *hostptr)
 {
@@ -1164,7 +1165,7 @@ static void dump_register_summary(int level)
 			lastvals[regbase] = lastval;
 		}
 		if (!quiet(2))
-			dump_register(regbase, lastval, level+1);
+			dump_register(regbase, lastval, level);
 	}
 
 // XXX we probably want to separate "written ever" from "written since last draw"
@@ -1461,6 +1462,11 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t count = 0; /* dword count including packet header */
 	uint32_t val;
 
+	if (!dwords) {
+		printf("NULL cmd buffer!\n");
+		return;
+	}
+
 	draws[ib] = 0;
 
 	while (dwords_left > 0) {
@@ -1653,6 +1659,7 @@ static int handle_file(const char *filename, int start, int end, int draw)
 	struct io *io;
 	int submit = 0, got_gpu_id = 0;
 	int sz, i;
+	bool needs_reset;
 
 	draw_filter = draw;
 	draw_count = 0;
@@ -1721,7 +1728,23 @@ static int handle_file(const char *filename, int start, int end, int draw)
 		return 0;
 	}
 
-	while ((io_readn(io, &type, sizeof(type)) > 0) && (io_readn(io, &sz, 4) > 0)) {
+	while (true) {
+		uint32_t arr[2];
+
+		if (io_readn(io, arr, 8) < 0) {
+			printf("corrupt file\n");
+			break;
+		}
+
+		while ((arr[0] == 0xffffffff) && (arr[1] == 0xffffffff)) {
+			if (io_readn(io, arr, 8) < 0) {
+				printf("corrupt file\n");
+				break;
+			}
+		}
+
+		type = arr[0];
+		sz = arr[1];
 
 		if (sz < 0) {
 			printf("corrupt file\n");
@@ -1750,6 +1773,14 @@ static int handle_file(const char *filename, int start, int end, int draw)
 			printl(2, "fragment shader:\n%s\n", (char *)buf);
 			break;
 		case RD_GPUADDR:
+			if (needs_reset) {
+				for (i = 0; i < nbuffers; i++) {
+					free(buffers[i].hostptr);
+					buffers[i].hostptr = NULL;
+				}
+				nbuffers = 0;
+				needs_reset = false;
+			}
 			buffers[nbuffers].gpuaddr = ((uint32_t *)buf)[0];
 			buffers[nbuffers].len = ((uint32_t *)buf)[1];
 			break;
@@ -1768,12 +1799,8 @@ static int handle_file(const char *filename, int start, int end, int draw)
 				printl(2, "############################################################\n");
 				printl(2, "vertices: %d\n", vertices);
 			}
+			needs_reset = true;
 			submit++;
-			for (i = 0; i < nbuffers; i++) {
-				free(buffers[i].hostptr);
-				buffers[i].hostptr = NULL;
-			}
-			nbuffers = 0;
 			break;
 		case RD_GPU_ID:
 			if (!got_gpu_id) {

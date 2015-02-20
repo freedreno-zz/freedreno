@@ -38,7 +38,7 @@ struct io;
 struct io * io_open(const char *filename);
 struct io * io_openfd(int fd);
 void io_close(struct io *io);
-
+unsigned io_offset(struct io *io);
 int io_readn(struct io *io, void *buf, int nbytes);
 
 

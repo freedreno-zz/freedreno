@@ -39,7 +39,7 @@
 struct io {
 	struct archive *a;
 	struct archive_entry *entry;
-
+	unsigned offset;
 };
 
 static void io_error(struct io *io)
@@ -136,6 +136,12 @@ void io_close(struct io *io)
 	free(io);
 }
 
+unsigned io_offset(struct io *io)
+{
+	return io->offset;
+}
+
+#include <assert.h>
 int io_readn(struct io *io, void *buf, int nbytes)
 {
 	char *ptr = buf;
@@ -151,6 +157,7 @@ int io_readn(struct io *io, void *buf, int nbytes)
 		ptr += n;
 		nbytes -= n;
 		ret += n;
+		io->offset += n;
 	}
 	return ret;
 }
