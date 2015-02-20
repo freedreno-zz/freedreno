@@ -97,20 +97,23 @@ all: tests-3d tests-2d tests-cl
 
 utils: libwrap.so $(UTILS) redump cffdump pgmdump zdump
 
-tests-2d: $(TESTS_2D) utils
+tests-2d: $(TESTS_2D)
 
-tests-3d: $(TESTS_3D) utils
+tests-3d: $(TESTS_3D)
 
-tests-cl: $(TESTS_CL) utils
+tests-cl: $(TESTS_CL)
 
 clean:
 	rm -f *.bmp *.dat *.so *.o *.rd *.html *-cffdump.txt *-pgmdump.txt *.log redump cffdump pgmdump $(TESTS)
+
+wrap%.o: wrap%.c
+	$(CC) -fPIC -g -c -ldl -llog -c -Iincludes -Iutil $< -o $@
 
 %.o: %.c
 	$(CC) -fPIC -g -c $(CFLAGS) $(LFLAGS) $< -o $@
 
 libwrap.so: wrap-util.o wrap-syscall.o $(WRAP_C2D2)
-	$(LD) -shared -ldl -lc $^ -o $@
+	$(LD) -shared -ldl -lc -llog $^ -o $@
 
 test-%: test-%.o $(UTILS)
 	$(LD) $^ $(LFLAGS) -o $@

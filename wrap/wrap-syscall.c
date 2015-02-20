@@ -25,13 +25,12 @@
  * various syscalls and log what happens
  */
 
-#ifdef BIONIC
-#  define assert(X)
-#else
-#  include <assert.h>
-#endif
 
 #include "wrap.h"
+
+#ifdef USE_PTHREADS
+static pthread_mutex_t l = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
+#endif
 
 struct device_info {
 	const char *name;
@@ -138,7 +137,7 @@ static struct device_info drm_info = {
 
 static struct {
 	int is_3d, is_2d, is_drm;
-} file_table[256];
+} file_table[1024];
 
 static int is_drm(int fd)
 {
@@ -266,6 +265,7 @@ struct buffer {
 	off_t offset;
 	struct list node;
 	int munmap;
+	int dumped;
 };
 
 LIST_HEAD(buffers_of_interest);
@@ -407,6 +407,16 @@ static void log_gpuaddr(uint32_t gpuaddr, uint32_t len)
 	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 }
 
+
+static void dump_ib_prep(void)
+{
+	struct buffer *other_buf;
+
+	list_for_each_entry(other_buf, &buffers_of_interest, node) {
+		other_buf->dumped = 0;
+	}
+}
+
 static void dump_ib(struct kgsl_ibdesc *ibdesc)
 {
 	struct buffer *buf = find_buffer(NULL, ibdesc->gpuaddr, 0, 0, 0);
@@ -415,15 +425,17 @@ static void dump_ib(struct kgsl_ibdesc *ibdesc)
 		uint32_t off = ibdesc->gpuaddr - buf->gpuaddr;
 		uint32_t *ptr = buf->hostptr + off;
 
-		printf("\t\tcmd:\n");
+		printf("\t\tcmd: (%u dwords)\n", ibdesc->sizedwords);
 
 		hexdump_dwords(ptr, ibdesc->sizedwords);
 
 		list_for_each_entry(other_buf, &buffers_of_interest, node) {
-			if (other_buf && other_buf->hostptr) {
-				log_gpuaddr(other_buf->gpuaddr, other_buf->len);
+			if (other_buf && other_buf->hostptr && !other_buf->dumped) {
+				uint32_t len = other_buf->len;
+				log_gpuaddr(other_buf->gpuaddr, len);
 				rd_write_section(RD_BUFFER_CONTENTS,
-						other_buf->hostptr, other_buf->len);
+						other_buf->hostptr, len);
+				other_buf->dumped = 1;
 			}
 		}
 
@@ -434,7 +446,6 @@ static void dump_ib(struct kgsl_ibdesc *ibdesc)
 			ibdesc->gpuaddr, ibdesc->sizedwords,
 		}, 8);
 	}
-
 }
 
 static void kgsl_ioctl_ringbuffer_issueibcmds_pre(int fd,
@@ -443,6 +454,7 @@ static void kgsl_ioctl_ringbuffer_issueibcmds_pre(int fd,
 	int is2d = get_kgsl_info(fd) == &kgsl_2d_info;
 	int i;
 	struct kgsl_ibdesc *ibdesc;
+	dump_ib_prep();
 	printf("\t\tdrawctxt_id:\t%08x\n", param->drawctxt_id);
 	/*
 For z180_cmdstream_issueibcmds():
@@ -544,6 +556,8 @@ static void kgsl_ioctl_submit_commands_pre(int fd,
 {
 	int i;
 	struct kgsl_ibdesc *ibdesc;
+
+	dump_ib_prep();
 
 	ibdesc = (struct kgsl_ibdesc *)param->cmdlist;
 
@@ -1002,6 +1016,10 @@ int ioctl(int fd, unsigned long int request, ...)
 		ptr = NULL;
 	}
 
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_pre(fd, request, ptr);
 	else if (is_drm(fd))
@@ -1015,7 +1033,12 @@ int ioctl(int fd, unsigned long int request, ...)
 		sleep(1);
 	}
 
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
+
 	if (((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) ||
+			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_SUBMIT_COMMANDS)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID))) &&
 			get_kgsl_info(fd) && (wrap_gpu_id() || wrap_gmem_size())) {
@@ -1027,12 +1050,20 @@ int ioctl(int fd, unsigned long int request, ...)
 		ret = orig_ioctl(fd, request, ptr);
 	}
 
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_post(fd, request, ptr, ret);
 	else if (is_drm(fd))
 		drm_ioctl_post(fd, request, ptr, ret);
 	else
 		printf("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, request, ret);
+
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
 
 	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
 			get_kgsl_info(fd) && wrap_safe()) {
@@ -1047,6 +1078,10 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 {
 	void *ret = NULL;
 	PROLOG(mmap);
+
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
 
 	if (get_kgsl_info(fd) || is_drm(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
@@ -1079,6 +1114,10 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		}
 		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
 	}
+
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
 
 	return ret;
 }

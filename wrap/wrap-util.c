@@ -69,16 +69,23 @@ volatile int*  __errno( void );
 
 static void rd_write(const void *buf, int sz)
 {
-	int ret = write(fd, buf, sz);
-	if (ret < 0) {
-		printf("error: %d (%s)\n", ret, strerror(errno));
-		printf("fd=%d, buf=%p, sz=%d\n", fd, buf, sz);
-		exit(-1);
+	uint8_t *cbuf = buf;
+	while (sz > 0) {
+		int ret = write(fd, cbuf, sz);
+		if (ret < 0) {
+			printf("error: %d (%s)\n", ret, strerror(errno));
+			printf("fd=%d, buf=%p, sz=%d\n", fd, buf, sz);
+			exit(-1);
+		}
+		cbuf += ret;
+		sz -= ret;
 	}
 }
 
 void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
 {
+	uint32_t val = ~0;
+
 	if (fd == -1) {
 		rd_start("unknown", "unknown");
 		printf("opened rd, %d\n", fd);
@@ -88,9 +95,17 @@ void rd_write_section(enum rd_sect_type type, const void *buf, int sz)
 		gpu_id = *(unsigned int *)buf;
 	}
 
-	rd_write(&type, sizeof(type));
-	rd_write(&sz, 4);
+	rd_write(&val, 4);
+	rd_write(&val, 4);
+
+	rd_write(&type, 4);
+	val = ALIGN(sz, 4);
+	rd_write(&val, 4);
 	rd_write(buf, sz);
+
+	val = 0;
+	rd_write(&val, ALIGN(sz, 4) - sz);
+
 	if (wrap_safe())
 		fsync(fd);
 }
@@ -174,7 +189,7 @@ void * _dlsym_helper(const char *name)
 		exit(-1);
 	}
 
-#ifdef BIONIC
+#if 0
 	if (!libc2d2_dl)
 		libc2d2_dl = dlopen("libC2D2.so", RTLD_LAZY);
 
