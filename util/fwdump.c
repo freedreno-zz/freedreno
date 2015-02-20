@@ -444,20 +444,22 @@ for (n = 31; n >= 0; n--) {
  * prefetch-parser disassembler:
  */
 
+/* 64 for a4xx, or 32 otherwise: */
+static int num_pfp_table_entries;
+
 static void disasm_pfp(uint32_t *buf, int sizedwords)
 {
 	struct {
 		uint16_t offset;
 		uint16_t label;
-	} *table_entries = (void *)&buf[0x100];
-	int num_table_entries = sizedwords - 0x100;
+	} *table_entries = (void *)&buf[sizedwords - num_pfp_table_entries];
 	int i, j;
 
-	assert(sizedwords >= 0x100);
+	assert(sizedwords >= num_pfp_table_entries);
 
-	for (i = 0; i < 0x100; i++) {
+	for (i = 0; i < sizedwords - num_pfp_table_entries; i++) {
 		int haslabel = 0;
-		for (j = 0; j < num_table_entries; j++) {
+		for (j = 0; j < num_pfp_table_entries; j++) {
 			if ((table_entries[j].offset == i) && table_entries[j].label) {
 				int n = table_entries[j].label;
 				char *name = getpm4(n);
@@ -477,7 +479,7 @@ static void disasm_pfp(uint32_t *buf, int sizedwords)
 
 	printf(";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;\n");
 	printf("; JUMP TABLE\n");
-	for (i = 0; i < num_table_entries; i++) {
+	for (i = 0; i < num_pfp_table_entries; i++) {
 		int n = table_entries[i].label;
 		printf("%04x: %04x %04x", 0x100 + i, n, table_entries[i].offset);
 		if (n) {
@@ -562,7 +564,7 @@ static int edit_pm4(uint32_t *buf, int sizedwords)
 int main(int argc, char **argv)
 {
 	uint32_t *buf;
-	char *file;
+	char *file, *name;
 	int sz, edit = 0;
 
 	if (!strcmp(argv[1], "-e")) {
@@ -578,12 +580,21 @@ int main(int argc, char **argv)
 
 	file = argv[1];
 
-	if (strstr(file, "a300")) {
+	if (strstr(file, "a4")) {
+		printf("; matching a4xx\n");
+		gpuver = 400;
+		name = "A4XX";
+		num_pfp_table_entries = 64;
+	} else if (strstr(file, "a3")) {
 		printf("; matching a3xx\n");
 		gpuver = 300;
+		name = "A3XX";
+		num_pfp_table_entries = 32;
 	} else {
 		printf("; matching a2xx\n");
 		gpuver = 200;
+		name = "A2XX";
+		num_pfp_table_entries = 32;
 	}
 
 	rnn_init();
@@ -598,7 +609,7 @@ int main(int argc, char **argv)
 		dom[1] = dom[0];
 	} else {
 		rnn_parsefile(db, "adreno.xml");
-		dom[0] = rnn_finddomain(db, (gpuver >= 300) ? "A3XX" : "A2XX");
+		dom[0] = rnn_finddomain(db, name);
 		dom[1] = rnn_finddomain(db, "AXXX");
 	}
 
