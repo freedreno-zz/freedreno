@@ -55,6 +55,7 @@ static bool dump_shaders = false;
 static bool no_color = false;
 static bool summary = false;
 static bool allregs = false;
+static bool dump_textures = false;
 static int vertices;
 static unsigned gpu_id = 220;
 
@@ -945,8 +946,10 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			for (i = 0; i < num_unit; i++) {
 				void *ptr = hostptr(addrs[i]);
 				printf("%s%2d: %08x\n", levels[level+1], i, addrs[i]);
-				if (ptr)
-					dump_hex(ptr, 16, level+1);
+				if (dump_textures) {
+					printf("base=%08x\n", gpubaseaddr(addrs[i]));
+					dump_hex(ptr, hostlen(addrs[i])/4, level+1);
+				}
 			}
 		} else {
 			goto unknown;
@@ -988,6 +991,11 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 					texconst += 4;
 				} else if ((400 <= gpu_id) && (gpu_id < 500)) {
 					dump_domain(texconst, 8, level+2, "A4XX_TEX_CONST");
+					if (dump_textures) {
+						uint32_t addr = texconst[4] & ~0x1f;
+						printf("base=%08x\n", gpubaseaddr(addr));
+						dump_hex(hostptr(addr), hostlen(addr)/4, level-2);
+					}
 					dump_hex(texconst, 8, level+1);
 					texconst += 8;
 				}
@@ -1391,7 +1399,9 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 		if (!quiet(2))
 			dump_hex(ptr, count, level+1);
 
+		ib++;
 		dump_commands(ptr, count, level+1);
+		ib--;
 	}
 }
 
@@ -1602,6 +1612,12 @@ int main(int argc, char **argv)
 			n++;
 			draw = atoi(argv[n]);
 			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--textures")) {
+			n++;
+			dump_textures = true;
 			continue;
 		}
 
