@@ -65,7 +65,8 @@ struct _IO_FILE;
 typedef struct _IO_FILE FILE;
 FILE *fopen(const char *path, const char *mode);
 int fscanf(FILE *stream, const char *format, ...);
-int printf(const char *format, ...);
+int wrap_printf(const char *format, ...);
+#define printf wrap_printf
 int sprintf(char *str, const char *format, ...);
 
 void * _dlsym_helper(const char *name);

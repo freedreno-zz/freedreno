@@ -26,6 +26,40 @@
 static int fd = -1;
 static unsigned int gpu_id;
 
+void __assert_fail (const char *__assertion, const char *__file,
+			   unsigned int __line, const char *__function)
+{
+	printf("OH CRAP!!!\n");
+}
+
+char *getcwd(char *buf, size_t size);
+
+int __android_log_print(int prio, const char *tag,  const char *fmt, ...);
+int vsprintf(char *str, const char *format, va_list ap);
+
+static char tracebuf[1024], *tracebufp = tracebuf;
+
+int wrap_printf(const char *format, ...)
+{
+	int n;
+	va_list args;
+
+	va_start(args, format);
+	n = vsprintf(tracebufp, format, args);
+	va_end(args);
+
+	if ((tracebufp[n] == '\n') || ((tracebufp - tracebuf) > 512)) {
+		__android_log_print(5, "WRAP", "%s (%u)", tracebuf, (tracebufp - tracebuf));
+		tracebufp = tracebuf;
+	} else {
+		tracebufp += n;
+	}
+
+	return n;
+}
+
+unsigned getpid(void);
+
 void rd_start(const char *name, const char *fmt, ...)
 {
 	char buf[256];
@@ -38,7 +72,7 @@ void rd_start(const char *name, const char *fmt, ...)
 	if (testnum)
 		n = strtol(testnum, NULL, 0);
 
-	sprintf(buf, "%s-%04d.rd", name, n);
+	sprintf(buf, "trace-%04u.rd", name, getpid());
 
 	fd = open(buf, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 
