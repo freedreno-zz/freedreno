@@ -215,8 +215,23 @@ void test_quad_textured(int shadow, int cfunc)
 		case 4:
 			GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR));
 			break;
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
 		case 5:
-			GCHK(glTexParameterf(GL_TEXTURE_2D, 0x84FE/*GL_TEXTURE_MAX_ANISOTROPY_EXT*/, 320));
+			GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 4));
+			break;
+		case 6:
+			GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8));
+			break;
+		case 7:
+			GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 16));
+			break;
+		case 8:
+			GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 32));
+			break;
+		case 9:
+			GCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 320));
 			break;
 		}
 	}
@@ -267,6 +282,10 @@ int main(int argc, char *argv[])
 	TEST(test_quad_textured(0, 3));
 	TEST(test_quad_textured(0, 4));
 	TEST(test_quad_textured(0, 5));
+	TEST(test_quad_textured(0, 6));
+	TEST(test_quad_textured(0, 7));
+	TEST(test_quad_textured(0, 8));
+	TEST(test_quad_textured(0, 9));
 	TEST(test_quad_textured(1, GL_NEVER));
 	TEST(test_quad_textured(1, GL_LESS));
 	TEST(test_quad_textured(1, GL_EQUAL));
