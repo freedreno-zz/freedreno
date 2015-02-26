@@ -454,58 +454,40 @@ static int emit_cat5(struct ir3_instruction *instr, void *ptr,
 static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		struct ir3_shader_info *info)
 {
-	struct ir3_register *dst = instr->regs[0];
-	struct ir3_register *src = instr->regs[1];
+	struct ir3_register *dst  = instr->regs[0];
+	struct ir3_register *src1 = instr->regs[1];
+	struct ir3_register *src2 = (instr->regs_count >= 3) ? instr->regs[2] : NULL;
 	instr_cat6_t *cat6 = ptr;
 
 	iassert(instr->regs_count == 2);
 
-	switch (instr->opc) {
-	/* load instructions: */
-	case OPC_LDG:
-	case OPC_LDP:
-	case OPC_LDL:
-	case OPC_LDLW:
-	case OPC_LDLV:
-	case OPC_PREFETCH: {
+	if (instr->cat6.offset) {
 		instr_cat6a_t *cat6a = ptr;
 
-		iassert(!((dst->flags ^ type_flags(instr->cat6.type)) & IR3_REG_HALF));
+		cat6->has_off = true;
 
-		cat6a->must_be_one1  = 1;
-		cat6a->must_be_one2  = 1;
-		cat6a->off = instr->cat6.offset;
-		cat6a->src = reg(src, info, instr->repeat, 0);
 		cat6a->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
-		break;
-	}
-	/* store instructions: */
-	case OPC_STG:
-	case OPC_STP:
-	case OPC_STL:
-	case OPC_STLW:
-	case OPC_STI: {
+		cat6a->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+		cat6a->src1_im = !!(src1->flags & IR3_REG_IMMED);
+		if (src2) {
+			cat6a->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
+			cat6a->src2_im = !!(src2->flags & IR3_REG_IMMED);
+		}
+		cat6a->off = instr->cat6.offset;
+	} else {
 		instr_cat6b_t *cat6b = ptr;
-		uint32_t src_flags = type_flags(instr->cat6.type);
-		uint32_t dst_flags = (instr->opc == OPC_STI) ? IR3_REG_HALF : 0;
 
-		iassert(!((src->flags ^ src_flags) & IR3_REG_HALF));
+		cat6->has_off = false;
 
-		cat6b->must_be_one1  = 1;
-		cat6b->must_be_one2  = 1;
-		cat6b->src    = reg(src, info, instr->repeat, src_flags);
-		cat6b->off_hi = instr->cat6.offset >> 8;
-		cat6b->off    = instr->cat6.offset;
-		cat6b->dst    = reg(dst, info, instr->repeat, IR3_REG_R | dst_flags);
-
-		break;
-	}
-	default:
-		// TODO
-		break;
+		cat6b->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+		cat6b->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+		cat6b->src1_im = !!(src1->flags & IR3_REG_IMMED);
+		if (src2) {
+			cat6b->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
+			cat6b->src2_im = !!(src2->flags & IR3_REG_IMMED);
+		}
 	}
 
-	cat6->iim_val  = instr->cat6.iim_val;
 	cat6->type     = instr->cat6.type;
 	cat6->opc      = instr->opc;
 	cat6->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
