@@ -143,6 +143,7 @@ struct ir3_shader * fd_asm_parse(const char *src)
 %union {
 	int tok;
 	int num;
+	uint32_t unum;
 	double flt;
 	const char *str;
 	struct ir3_register *reg;
@@ -392,6 +393,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %type <tok> cat5_opc cat5_samp cat5_tex cat5_type
 %type <range> reg_range const_range
 %type <type> type
+%type <unum> const_val
 
 %error-verbose
 
@@ -416,7 +418,11 @@ attribute_header:  T_A_ATTRIBUTE '(' reg_range ')' T_IDENTIFIER {
                        ir3_attribute_create(shader, $3.start, $3.num, $5);
 }
 
-const_header:      T_A_CONST '(' T_CONSTANT ')' T_FLOAT ',' T_FLOAT ',' T_FLOAT ',' T_FLOAT {
+const_val:         T_FLOAT { $$ = fui($1); }
+|                  T_INT   { $$ = $1; }
+|                  T_HEX   { $$ = $1; }
+
+const_header:      T_A_CONST '(' T_CONSTANT ')' const_val ',' const_val ',' const_val ',' const_val {
                        ir3_const_create(shader, $3, $5, $7, $9, $11);
 }
 

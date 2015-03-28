@@ -151,6 +151,7 @@ static int color2cpp[] = {
 		[RB_A8_UNORM]           = 1,
 		[RB_R16G16B16A16_FLOAT] = 8,
 		[RB_R32G32B32A32_FLOAT] = 16,
+		[RB_R32G32B32A32_UINT]  = 16,
 };
 
 static enum a3xx_tex_fmt color2fmt[] = {
@@ -1983,7 +1984,7 @@ int fd_query_read(struct fd_state *state, struct fd_perfctrs *ctrs)
 {
 	struct fd_perfctrs last_ctrs;
 	struct fd_bo *bo = state->query.bo;
-	uint32_t offset;
+	uint32_t offset = 0;
 	uint8_t *ptr;
 
 	if (state->query.active)
