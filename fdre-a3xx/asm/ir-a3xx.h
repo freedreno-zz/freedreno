@@ -140,7 +140,7 @@ struct ir3_attribute {
 };
 
 struct ir3_const {
-	float val[4];
+	uint32_t val[4];
 	struct ir3_register *cstart;  /* first const register */
 };
 
@@ -216,7 +216,7 @@ int ir3_shader_assemble(struct ir3_shader *shader,
 struct ir3_attribute * ir3_attribute_create(struct ir3_shader *shader,
 		int rstart, int num, const char *name);
 struct ir3_const * ir3_const_create(struct ir3_shader *shader,
-		int cstart, float v0, float v1, float v2, float v3);
+		int cstart, uint32_t v0, uint32_t v1, uint32_t v2, uint32_t v3);
 struct ir3_sampler * ir3_sampler_create(struct ir3_shader *shader,
 		int idx, const char *name);
 struct ir3_uniform * ir3_uniform_create(struct ir3_shader *shader,

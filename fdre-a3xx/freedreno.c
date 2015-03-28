@@ -1983,7 +1983,7 @@ int fd_query_read(struct fd_state *state, struct fd_perfctrs *ctrs)
 {
 	struct fd_perfctrs last_ctrs;
 	struct fd_bo *bo = state->query.bo;
-	uint32_t offset;
+	uint32_t offset = 0;
 	uint8_t *ptr;
 
 	if (state->query.active)
