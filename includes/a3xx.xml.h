@@ -151,6 +151,7 @@ enum a3xx_color_fmt {
 	RB_A8_UNORM = 20,
 	RB_R16G16B16A16_FLOAT = 27,
 	RB_R32G32B32A32_FLOAT = 51,
+	RB_R32G32B32A32_UINT = 59,
 };
 
 enum a3xx_color_swap {

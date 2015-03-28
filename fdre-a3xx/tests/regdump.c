@@ -107,7 +107,7 @@ int main(int argc, char **argv)
 	if (!state)
 		return -1;
 
-	surface = fd_surface_new_fmt(state, 4, 4, RB_R32G32B32A32_FLOAT);
+	surface = fd_surface_new_fmt(state, 4, 4, RB_R32G32B32A32_UINT);
 	if (!surface)
 		return -1;
 
