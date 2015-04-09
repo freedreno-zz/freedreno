@@ -262,7 +262,7 @@ static void dumpfile(const char *file)
 struct buffer {
 	void *hostptr;
 	unsigned int gpuaddr, flags, len, handle, id;
-	off_t offset;
+	uint64_t offset;
 	struct list node;
 	int munmap;
 	int dumped;
@@ -283,9 +283,9 @@ static struct buffer * register_buffer(void *hostptr, unsigned int flags,
 }
 
 static struct buffer * find_buffer(void *hostptr, unsigned int gpuaddr,
-		off_t offset, unsigned int handle, unsigned id)
+		uint64_t offset, unsigned int handle, unsigned id)
 {
-	struct buffer *buf;
+	struct buffer *buf = NULL;
 	list_for_each_entry(buf, &buffers_of_interest, node) {
 		if (hostptr)
 			if ((buf->hostptr <= hostptr) && (hostptr < (buf->hostptr + buf->len)))
@@ -1097,6 +1097,54 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 
 	if (!ret)
 		ret = orig_mmap(addr, length, prot, flags, fd, offset);
+
+	if (get_kgsl_info(fd) || is_drm(fd)) {
+		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+		if (buf)
+			buf->hostptr = ret;
+		else {
+			/*
+			 * when a buffer is allocated using IOCTL_KGSL_GPUMEM_ALLOC_ID
+			 * it's mmapped by id, not by gpuaddr, so try to find that
+			 * buffer via id now.
+			 */
+			buf = find_buffer(NULL, 0, 0, 0, offset >> 12);
+			if (buf)
+				buf->hostptr = ret;
+		}
+		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
+	}
+
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
+
+	return ret;
+}
+
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t offset)
+{
+	void *ret = NULL;
+	PROLOG(mmap64);
+
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+
+	if (get_kgsl_info(fd) || is_drm(fd)) {
+		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+
+		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
+				fd, addr, length, prot, flags, offset);
+
+		if (buf && buf->hostptr) {
+			buf->munmap = 0;
+			ret = buf->hostptr;
+		}
+	}
+
+	if (!ret)
+		ret = orig_mmap64(addr, length, prot, flags, fd, offset);
 
 	if (get_kgsl_info(fd) || is_drm(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
