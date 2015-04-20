@@ -1674,7 +1674,7 @@ static int handle_file(const char *filename, int start, int end, int draw)
 	void *buf = NULL;
 	struct io *io;
 	int submit = 0, got_gpu_id = 0;
-	int sz, i;
+	int sz, i, ret = 0;
 	bool needs_reset;
 
 	draw_filter = draw;
@@ -1747,24 +1747,22 @@ static int handle_file(const char *filename, int start, int end, int draw)
 	while (true) {
 		uint32_t arr[2];
 
-		if (io_readn(io, arr, 8) < 0) {
-			printf("corrupt file\n");
-			break;
-		}
+		ret = io_readn(io, arr, 8);
+		if (ret <= 0)
+			goto end;
 
 		while ((arr[0] == 0xffffffff) && (arr[1] == 0xffffffff)) {
-			if (io_readn(io, arr, 8) < 0) {
-				printf("corrupt file\n");
-				break;
-			}
+			ret = io_readn(io, arr, 8);
+			if (ret <= 0)
+				goto end;
 		}
 
 		type = arr[0];
 		sz = arr[1];
 
 		if (sz < 0) {
-			printf("corrupt file\n");
-			break;
+			ret = -1;
+			goto end;
 		}
 
 		free(buf);
@@ -1773,7 +1771,9 @@ static int handle_file(const char *filename, int start, int end, int draw)
 
 		buf = malloc(sz + 1);
 		((char *)buf)[sz] = '\0';
-		io_readn(io, buf, sz);
+		ret = io_readn(io, buf, sz);
+		if (ret < 0)
+			goto end;
 
 		switch(type) {
 		case RD_TEST:
@@ -1840,5 +1840,11 @@ static int handle_file(const char *filename, int start, int end, int draw)
 
 	io_close(io);
 
+	return 0;
+
+end:
+	if (ret < 0) {
+		printf("corrupt file\n");
+	}
 	return 0;
 }
