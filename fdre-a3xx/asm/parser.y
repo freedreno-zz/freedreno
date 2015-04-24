@@ -164,7 +164,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %}
 
 %token <num> T_INT
-%token <num> T_HEX
+%token <unum> T_HEX
 %token <flt> T_FLOAT
 %token <str> T_IDENTIFIER
 %token <num> T_REGISTER
@@ -337,17 +337,17 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_OP_STLW
 %token <tok> T_OP_RESFMT
 %token <tok> T_OP_RESINF
-%token <tok> T_OP_ATOMIC_ADD_L
-%token <tok> T_OP_ATOMIC_SUB_L
-%token <tok> T_OP_ATOMIC_XCHG_L
-%token <tok> T_OP_ATOMIC_INC_L
-%token <tok> T_OP_ATOMIC_DEC_L
-%token <tok> T_OP_ATOMIC_CMPXCHG_L
-%token <tok> T_OP_ATOMIC_MIN_L
-%token <tok> T_OP_ATOMIC_MAX_L
-%token <tok> T_OP_ATOMIC_AND_L
-%token <tok> T_OP_ATOMIC_OR_L
-%token <tok> T_OP_ATOMIC_XOR_L
+%token <tok> T_OP_ATOMIC_ADD
+%token <tok> T_OP_ATOMIC_SUB
+%token <tok> T_OP_ATOMIC_XCHG
+%token <tok> T_OP_ATOMIC_INC
+%token <tok> T_OP_ATOMIC_DEC
+%token <tok> T_OP_ATOMIC_CMPXCHG
+%token <tok> T_OP_ATOMIC_MIN
+%token <tok> T_OP_ATOMIC_MAX
+%token <tok> T_OP_ATOMIC_AND
+%token <tok> T_OP_ATOMIC_OR
+%token <tok> T_OP_ATOMIC_XOR
 %token <tok> T_OP_LDGB_TYPED_4D
 %token <tok> T_OP_STGB_4D_4
 %token <tok> T_OP_STIB
@@ -418,9 +418,10 @@ attribute_header:  T_A_ATTRIBUTE '(' reg_range ')' T_IDENTIFIER {
                        ir3_attribute_create(shader, $3.start, $3.num, $5);
 }
 
-const_val:         T_FLOAT { $$ = fui($1); }
-|                  T_INT   { $$ = $1; }
-|                  T_HEX   { $$ = $1; }
+const_val:         T_FLOAT   { $$ = fui($1); printf("%08x\n", $$); }
+|                  T_INT     { $$ = $1;      printf("%08x\n", $$); }
+|                  '-' T_INT { $$ = -$2;     printf("%08x\n", $$); }
+|                  T_HEX     { $$ = $1;      printf("%08x\n", $$); }
 
 const_header:      T_A_CONST '(' T_CONSTANT ')' const_val ',' const_val ',' const_val ',' const_val {
                        ir3_const_create(shader, $3, $5, $7, $9, $11);
@@ -652,7 +653,7 @@ cat5_instr:        cat5_opc_dsxypp cat5_flags dst_reg ',' src_reg
 |                  cat5_opc cat5_flags cat5_type dst_reg
 
 cat6_type:         '.' type  { instr->cat6.type = $2; }
-cat6_offset:       offset    { instr->cat6.offset = $1; }
+cat6_offset:       offset    { instr->cat6.src_offset = $1; }
 cat6_immed:        integer   { instr->cat6.iim_val = $1; }
 
 cat6_load:         T_OP_LDG  { new_instr(6, OPC_LDG); }  cat6_type dst_reg ',' 'g' '[' reg cat6_offset ']' ',' cat6_immed
@@ -672,17 +673,20 @@ cat6_storeib:      T_OP_STIB { new_instr(6, OPC_STIB); } cat6_type 'g' '[' dst_r
 
 cat6_prefetch:     T_OP_PREFETCH { new_instr(6, OPC_PREFETCH); new_reg(0,0); /* dummy dst */ } 'g' '[' reg cat6_offset ']' ',' cat6_immed
 
-cat6_atomic:       T_OP_ATOMIC_ADD_L        { new_instr(6, OPC_ATOMIC_ADD_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_SUB_L        { new_instr(6, OPC_ATOMIC_SUB_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_XCHG_L       { new_instr(6, OPC_ATOMIC_XCHG_L); }   cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_INC_L        { new_instr(6, OPC_ATOMIC_INC_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_DEC_L        { new_instr(6, OPC_ATOMIC_DEC_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_CMPXCHG_L    { new_instr(6, OPC_ATOMIC_CMPXCHG_L); }cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_MIN_L        { new_instr(6, OPC_ATOMIC_MIN_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_MAX_L        { new_instr(6, OPC_ATOMIC_MAX_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_AND_L        { new_instr(6, OPC_ATOMIC_AND_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_OR_L         { new_instr(6, OPC_ATOMIC_OR_L); }     cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
-|                  T_OP_ATOMIC_XOR_L        { new_instr(6, OPC_ATOMIC_XOR_L); }    cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+cat6_atomic_l_g:   '.' 'g'  { instr->flags |= IR3_INSTR_G; }
+|                  '.' 'l'  {  }
+
+cat6_atomic:       T_OP_ATOMIC_ADD     { new_instr(6, OPC_ATOMIC_ADD); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_SUB     { new_instr(6, OPC_ATOMIC_SUB); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_XCHG    { new_instr(6, OPC_ATOMIC_XCHG); }   cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_INC     { new_instr(6, OPC_ATOMIC_INC); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_DEC     { new_instr(6, OPC_ATOMIC_DEC); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_CMPXCHG { new_instr(6, OPC_ATOMIC_CMPXCHG); }cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_MIN     { new_instr(6, OPC_ATOMIC_MIN); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_MAX     { new_instr(6, OPC_ATOMIC_MAX); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_AND     { new_instr(6, OPC_ATOMIC_AND); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_OR      { new_instr(6, OPC_ATOMIC_OR); }     cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
+|                  T_OP_ATOMIC_XOR     { new_instr(6, OPC_ATOMIC_XOR); }    cat6_atomic_l_g cat6_type dst_reg ',' 'l' '[' reg cat6_offset ']' ',' cat6_immed
 
 cat6_todo:         T_OP_G2L                 { new_instr(6, OPC_G2L); }
 |                  T_OP_L2G                 { new_instr(6, OPC_L2G); }

@@ -459,27 +459,30 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 	struct ir3_register *src2 = (instr->regs_count >= 3) ? instr->regs[2] : NULL;
 	instr_cat6_t *cat6 = ptr;
 
-	iassert(instr->regs_count == 2);
+	iassert(instr->regs_count >= 2);
 
-	if (instr->cat6.offset) {
+	/* TODO we need a more comprehensive list about which instructions
+	 * can be encoded which way.  Or possibly use IR3_INSTR_0 flag to
+	 * indicate to use the src_off encoding even if offset is zero
+	 * (but then what to do about dst_off?)
+	 */
+	if (instr->cat6.src_offset || instr->opc == OPC_LDG) {
 		instr_cat6a_t *cat6a = ptr;
 
-		cat6->has_off = true;
+		cat6->src_off = true;
 
-		cat6a->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
 		cat6a->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
 		cat6a->src1_im = !!(src1->flags & IR3_REG_IMMED);
 		if (src2) {
 			cat6a->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
 			cat6a->src2_im = !!(src2->flags & IR3_REG_IMMED);
 		}
-		cat6a->off = instr->cat6.offset;
+		cat6a->off = instr->cat6.src_offset;
 	} else {
 		instr_cat6b_t *cat6b = ptr;
 
-		cat6->has_off = false;
+		cat6->src_off = false;
 
-		cat6b->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
 		cat6b->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
 		cat6b->src1_im = !!(src1->flags & IR3_REG_IMMED);
 		if (src2) {
@@ -488,10 +491,22 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		}
 	}
 
+	if (instr->cat6.dst_offset) {
+		instr_cat6c_t *cat6c = ptr;
+		cat6->dst_off = true;
+		cat6c->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+		cat6c->off = instr->cat6.dst_offset;
+	} else {
+		instr_cat6d_t *cat6d = ptr;
+		cat6->dst_off = false;
+		cat6d->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+	}
+
 	cat6->type     = instr->cat6.type;
 	cat6->opc      = instr->opc;
 	cat6->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
 	cat6->sync     = !!(instr->flags & IR3_INSTR_SY);
+	cat6->g        = !!(instr->flags & IR3_INSTR_G);
 	cat6->opc_cat  = 6;
 
 	return 0;

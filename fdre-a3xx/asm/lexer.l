@@ -70,8 +70,8 @@ static int parse_reg(const char *str)
 [ \t]                             ; /* ignore whitespace */
 ";"[^\n]*"\n"                     yylineno++; /* ignore comments */
 [0-9]+"."[0-9]+                   asm_yylval.flt = strtod(yytext, NULL);       return T_FLOAT;
-[0-9]*                            asm_yylval.num = strtol(yytext, NULL, 0);    return T_INT;
-"0x"[0-9a-fA-F]*                  asm_yylval.num = strtol(yytext, NULL, 0);    return T_HEX;
+[0-9]*                            asm_yylval.num = strtoul(yytext, NULL, 0);    return T_INT;
+"0x"[0-9a-fA-F]*                  asm_yylval.num = strtoul(yytext, NULL, 0);    return T_HEX;
 "@attribute"                      return TOKEN(T_A_ATTRIBUTE);
 "@const"                          return TOKEN(T_A_CONST);
 "@sampler"                        return TOKEN(T_A_SAMPLER);
@@ -241,17 +241,17 @@ static int parse_reg(const char *str)
 "stlw"                            return TOKEN(T_OP_STLW);
 "resfmt"                          return TOKEN(T_OP_RESFMT);
 "resinf"                          return TOKEN(T_OP_RESINF);
-"atomic.add.l"                    return TOKEN(T_OP_ATOMIC_ADD_L);
-"atomic.sub.l"                    return TOKEN(T_OP_ATOMIC_SUB_L);
-"atomic.xchg.l"                   return TOKEN(T_OP_ATOMIC_XCHG_L);
-"atomic.inc.l"                    return TOKEN(T_OP_ATOMIC_INC_L);
-"atomic.dec.l"                    return TOKEN(T_OP_ATOMIC_DEC_L);
-"atomic.cmpxchg.l"                return TOKEN(T_OP_ATOMIC_CMPXCHG_L);
-"atomic.min.l"                    return TOKEN(T_OP_ATOMIC_MIN_L);
-"atomic.max.l"                    return TOKEN(T_OP_ATOMIC_MAX_L);
-"atomic.and.l"                    return TOKEN(T_OP_ATOMIC_AND_L);
-"atomic.or.l"                     return TOKEN(T_OP_ATOMIC_OR_L);
-"atomic.xor.l"                    return TOKEN(T_OP_ATOMIC_XOR_L);
+"atomic.add"                      return TOKEN(T_OP_ATOMIC_ADD);
+"atomic.sub"                      return TOKEN(T_OP_ATOMIC_SUB);
+"atomic.xchg"                     return TOKEN(T_OP_ATOMIC_XCHG);
+"atomic.inc"                      return TOKEN(T_OP_ATOMIC_INC);
+"atomic.dec"                      return TOKEN(T_OP_ATOMIC_DEC);
+"atomic.cmpxchg"                  return TOKEN(T_OP_ATOMIC_CMPXCHG);
+"atomic.min"                      return TOKEN(T_OP_ATOMIC_MIN);
+"atomic.max"                      return TOKEN(T_OP_ATOMIC_MAX);
+"atomic.and"                      return TOKEN(T_OP_ATOMIC_AND);
+"atomic.or"                       return TOKEN(T_OP_ATOMIC_OR);
+"atomic.xor"                      return TOKEN(T_OP_ATOMIC_XOR);
 "ldgb.typed.4d"                   return TOKEN(T_OP_LDGB_TYPED_4D);
 "stgb.4d.4"                       return TOKEN(T_OP_STGB_4D_4);
 "stib"                            return TOKEN(T_OP_STIB);
