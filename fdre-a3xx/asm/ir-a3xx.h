@@ -88,6 +88,7 @@ struct ir3_instruction {
 		IR3_INSTR_P     = 0x080,
 		IR3_INSTR_S     = 0x100,
 		IR3_INSTR_S2EN  = 0x200,
+		IR3_INSTR_G     = 0x400,
 	} flags;
 	int repeat;
 	unsigned regs_count;
@@ -117,7 +118,8 @@ struct ir3_instruction {
 		} cat5;
 		struct {
 			type_t type;
-			int offset;
+			int src_offset;
+			int dst_offset;
 			int iim_val;
 		} cat6;
 	};
