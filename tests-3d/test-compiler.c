@@ -41,16 +41,52 @@ static const char *attrnames[] = {
 static EGLDisplay display;
 static EGLSurface surface;
 
+void compile_shader(GLint program, int fd, GLenum type)
+{
+	GLuint shader;
+	static char text[64 * 1024];
+	const GLchar *const t = text;
+	int ret = read(fd, text, sizeof(text));
+	if (ret < 0) {
+		ERROR_MSG("error reading shader: %d", ret);
+		return;
+	}
+	text[ret] = '\0';
+
+	GCHK(shader = glCreateShader(type));
+	GCHK(glShaderSource(shader, 1, &t, NULL));
+	GCHK(glCompileShader(shader));
+	GCHK(glGetShaderiv(shader, GL_COMPILE_STATUS, &ret));
+	if (!ret) {
+		char *log;
+
+		ERROR_MSG("%d shader compilation failed!:", type);
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &ret);
+
+		if (ret > 1) {
+			log = malloc(ret);
+			glGetShaderInfoLog(shader, ret, NULL, log);
+			printf("%s", log);
+		}
+		exit(-1);
+	}
+
+	GCHK(glAttachShader(program, shader));
+}
+
 int test_compiler(int n)
 {
 	static char vert_shader[64 * 1024], frag_shader[64 * 1024];
 	static GLfloat v[ARRAY_SIZE(attrnames)][NVERT * 4];
 	static int nattr = 0;
 	GLuint program;
-	int vert_fd, frag_fd;
+	int vert_fd, frag_fd, gs_fd, tcs_fd, tes_fd;
 	int i, ret;
 
 	vert_fd = openfile("shaders/%04d.vs", n);
+	tcs_fd = openfile("shaders/%04d.tcs", n);
+	tes_fd = openfile("shaders/%04d.tes", n);
+	gs_fd = openfile("shaders/%04d.gs", n);
 	frag_fd = openfile("shaders/%04d.fs", n);
 	if ((vert_fd < 0) || (frag_fd < 0))
 		return -1;
@@ -69,6 +105,13 @@ int test_compiler(int n)
 
 	program = get_program(vert_shader, frag_shader);
 
+	if (tcs_fd >= 0)
+		compile_shader(program, tcs_fd, 0x8E88/*GL_TESS_CONTROL_SHADER*/);
+	if (tes_fd >= 0)
+		compile_shader(program, tes_fd, 0x8E87/*GL_TESS_EVALUATION_SHADER*/);
+	if (gs_fd >= 0)
+		compile_shader(program, gs_fd, 0x8DD9/*GL_GEOMETRY_SHADER*/);
+
 	for (i = 0; i < ARRAY_SIZE(attrnames); i++) {
 		glBindAttribLocation(program, i, attrnames[i]);
 		if (glGetError() == GL_NO_ERROR) {
@@ -80,6 +123,7 @@ int test_compiler(int n)
 	}
 
 	link_program(program);
+
 	GCHK(glFlush());
 
 	for (i = 0; i < nattr; i++) {
@@ -87,7 +131,10 @@ int test_compiler(int n)
 		GCHK(glEnableVertexAttribArray(i));
 	}
 
-	GCHK(glDrawArrays(GL_TRIANGLES, 0, NVERT));
+	if (tes_fd >= 0)
+		GCHK(glDrawArrays(0x000E/*GL_PATCHES*/, 0, NVERT));
+	else
+		GCHK(glDrawArrays(GL_TRIANGLES, 0, NVERT));
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
@@ -116,7 +163,7 @@ int main(int argc, char *argv[])
 		EGL_NONE
 	};
 	const EGLint context_attribute_list[] = {
-		EGL_CONTEXT_CLIENT_VERSION, 2,
+		EGL_CONTEXT_CLIENT_VERSION, 3,
 		EGL_NONE
 	};
 	EGLConfig config;
