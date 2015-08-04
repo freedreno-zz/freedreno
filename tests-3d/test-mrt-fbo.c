@@ -111,7 +111,7 @@ static const GLenum bufs[16] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
 
 /* Run through multiple variants to detect mrt settings
  */
-void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
+void test_mrt_fbo(unsigned w, unsigned h, unsigned type, int mrt, unsigned mask, int zs)
 {
 	int i;
 	GLint width, height;
@@ -119,6 +119,7 @@ void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
 	GLenum mrt_bufs[16];
 
 	GLfloat quad_color[] =  {1.0, 0.0, 0.0, 1.0};
+	GLfloat quad_color2[] =  {1.0, 0.0, 1.0, 1.0};
 	GLfloat vertices[] = {
 			-0.45, -0.75, 0.0,
 			 0.45, -0.75, 0.0,
@@ -126,7 +127,7 @@ void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
 			 0.45,  0.75, 0.0 };
 	EGLSurface surface;
 
-	RD_START("mrt-fbo", "mrt=%04x, mask=%04x, zs=%d", mrt, mask, zs);
+	RD_START("mrt-fbo", "%dx%d, mrt=%04x, mask=%04x, zs=%d", w, h, mrt, mask, zs);
 
 	display = get_display();
 
@@ -137,7 +138,7 @@ void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	surface = make_window(display, config, 64, 64);
+	surface = make_window(display, config, w, h);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
@@ -174,21 +175,27 @@ void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
 			intfmt = GL_DEPTH24_STENCIL8;
 			fmt = GL_DEPTH_STENCIL;
 			type = GL_UNSIGNED_INT_24_8;
+			GCHK(glEnable(GL_DEPTH_TEST));
+			GCHK(glEnable(GL_STENCIL_TEST));
 			break;
 		case 2:
 			intfmt = GL_DEPTH32F_STENCIL8;
 			fmt = GL_DEPTH_STENCIL;
 			type = GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
+			GCHK(glEnable(GL_DEPTH_TEST));
+			GCHK(glEnable(GL_STENCIL_TEST));
 			break;
 		case 3:
 			intfmt = GL_DEPTH_COMPONENT32F;
 			fmt = GL_DEPTH_COMPONENT;
 			type = GL_FLOAT;
+			GCHK(glEnable(GL_DEPTH_TEST));
 			break;
 		case 4:
 			intfmt = GL_DEPTH_COMPONENT24;
 			fmt = GL_DEPTH_COMPONENT;
 			type = GL_UNSIGNED_INT;
+			GCHK(glEnable(GL_DEPTH_TEST));
 			break;
 		}
 		GCHK(glBindTexture(GL_TEXTURE_2D, fbotex[mrt]));
@@ -233,7 +240,7 @@ void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
 #endif
 
 	for (i = 0; i < mrt; i++) {
-		if (mask & (1 << 1)) {
+		if (mask & (1 << i)) {
 			mrt_bufs[i] = GL_NONE;
 		} else {
 			mrt_bufs[i] = bufs[i];
@@ -243,7 +250,19 @@ void test_mrt_fbo(unsigned type, int mrt, unsigned mask, int zs)
 	if (mrt > 0)
 		GCHK(glDrawBuffers(mrt, mrt_bufs));
 
+	for (i = 0; i < mrt; i++) {
+		float f = (float)i / (float)MAX_MRT;
+		float clear[] = { f, f, f, 1.0 };
+		if (!(mask & (1 << i)))
+			GCHK(glClearBufferfv(GL_COLOR, i, clear));
+	}
+
 	GCHK(glUniform4fv(uniform_location, 1, quad_color));
+	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
+	GCHK(glFlush());
+	readback();
+
+	GCHK(glUniform4fv(uniform_location, 1, quad_color2));
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
 //	ECHK(eglSwapBuffers(display, surface));
@@ -260,16 +279,28 @@ int main(int argc, char *argv[])
 {
 	int i;
 	TEST_START();
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, 0, 0, 0));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, 0, 0, 1));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, 0, 0, 2));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, 0, 0, 3));
+	TEST(test_mrt_fbo(128, 128, GL_UNSIGNED_BYTE, 0, 0, 0));
+	TEST(test_mrt_fbo(128, 128, GL_UNSIGNED_BYTE, 0, 0, 1));
+	TEST(test_mrt_fbo(128, 128, GL_UNSIGNED_BYTE, 0, 0, 2));
+	TEST(test_mrt_fbo(128, 128, GL_UNSIGNED_BYTE, 0, 0, 3));
+	TEST(test_mrt_fbo(256, 128, GL_UNSIGNED_BYTE, 0, 0, 0));
+	TEST(test_mrt_fbo(256, 128, GL_UNSIGNED_BYTE, 0, 0, 1));
+	TEST(test_mrt_fbo(256, 128, GL_UNSIGNED_BYTE, 0, 0, 2));
+	TEST(test_mrt_fbo(256, 128, GL_UNSIGNED_BYTE, 0, 0, 3));
 	for (i = 0; i <= MAX_MRT; i++)
-		TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, i, 0, 1));
+		TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, i, 0, 1));
 	for (i = 0; i <= MAX_MRT; i++)
-		TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, i, 0, 2));
-	TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, MAX_MRT, 0x01, 1));
-	TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, MAX_MRT, 0x02, 1));
-	TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, MAX_MRT, 0x06, 1));
-	TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, MAX_MRT, 0, 0));
-	TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, MAX_MRT, 0, 3));
-	TEST(test_mrt_fbo(GL_UNSIGNED_BYTE, MAX_MRT, 0, 4));
+		TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, i, 0, 2));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, MAX_MRT, 0x01, 1));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, MAX_MRT, 0x02, 1));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, MAX_MRT, 0x06, 1));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, MAX_MRT, 0, 0));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, MAX_MRT, 0, 3));
+	TEST(test_mrt_fbo(64, 64, GL_UNSIGNED_BYTE, MAX_MRT, 0, 4));
 	TEST_END();
 
 	return 0;
