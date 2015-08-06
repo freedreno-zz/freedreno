@@ -818,8 +818,9 @@ static void do_query(const char *mode, uint32_t num_indices)
 		uint32_t regbase = queryvals[i];
 		if (reg_written(regbase)) {
 			uint32_t lastval = reg_val(regbase);
-			printf("%s(%u,%u-%u,%u):%u", mode,
+			printf("%4d: %s(%u,%u-%u,%u):%u", draw_count, mode,
 					bin_x1, bin_y1, bin_x2, bin_y2, num_indices);
+			printf("\t%08x\t", lastval);
 			dump_register_val(regbase, lastval, 0);
 		}
 	}
@@ -1159,7 +1160,7 @@ static void dump_register_summary(int level)
 	uint32_t i;
 
 	/* dump current state of registers: */
-	printl(2, "%scurrent register values\n", levels[level]);
+	printl(2, "%sdraw[%i] register values\n", levels[level], draw_count);
 	for (i = 0; i < 0x7fff; i++) {
 		uint32_t regbase = i;
 		uint32_t lastval = reg_val(regbase);
