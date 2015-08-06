@@ -1135,9 +1135,16 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 		if (dwords[0] & 0x80000000) {
 			uint32_t srcreg = dwords[1];
 			uint32_t dstval = dwords[2];
+
 			/* TODO: not sure what happens w/ payload != 2.. */
 			assert(sizedwords == 3);
 			assert(srcreg < ARRAY_SIZE(type0_reg_vals));
+
+			/* note: rnn_regname uses a static buf so we can't do
+			 * two regname() calls for one printf..
+			 */
+			printf("%s%s = %08x + ", levels[level], regname(val, 1), dstval);
+			printf("%s (%08x)\n", regname(srcreg, 1), type0_reg_vals[srcreg]);
 
 			dstval += type0_reg_vals[srcreg];
 
