@@ -1560,6 +1560,31 @@ skip:
 
 static int handle_file(const char *filename, int start, int end, int draw);
 
+static void print_usage(const char *name)
+{
+	printf("Usage: %s [OPTIONS]... FILE...\n", name);
+	printf("    --verbose         - more verbose disassembly\n");
+	printf("    --dump-shaders    - dump each shader to raw file\n");
+	printf("    --no-color        - disable colorized output (default for non-console\n");
+	printf("                        output)\n");
+	printf("    --color           - enable colorized output (default for tty output)\n");
+	printf("    --summary         - don't show individual register writes, but just show\n");
+	printf("                        register values on draws\n");
+	printf("    --allregs         - show all registers (including ones not written since\n");
+	printf("                        previous draw) at each draw\n");
+	printf("    --start N         - decode start frame number\n");
+	printf("    --end N           - decode end frame number\n");
+	printf("    --frame N         - decode specified frame number\n");
+	printf("    --draw N          - decode specified draw number\n");
+	printf("    --textures        - dump texture contents (if possible)\n");
+	printf("    --script FILE     - run specified lua script to analyze state at draws\n");
+	printf("    --query/-q REG    - query mode, dump only specified query registers on\n");
+	printf("                        each draw; multiple --query/-q args can be given to\n");
+	printf("                        dump multiple registers; register can be specified\n");
+	printf("                        either by name or numeric offset\n");
+	printf("    --help            - show this message\n");
+}
+
 
 static pid_t pager_pid;
 
@@ -1706,6 +1731,12 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[n], "--help")) {
+			n++;
+			print_usage(argv[0]);
+			return 0;
+		}
+
 		break;
 	}
 
@@ -1725,9 +1756,7 @@ int main(int argc, char **argv)
 	}
 
 	if (ret) {
-		// XXX tragically out of date usage msg.. maybe it is time
-		// for real cmdline arg parsing..
-		fprintf(stderr, "usage: %s [--dump-shaders] testlog.rd\n", argv[0]);
+		print_usage(argv[0]);
 		return ret;
 	}
 
