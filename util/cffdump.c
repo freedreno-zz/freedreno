@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <assert.h>
+#include <signal.h>
 
 #include "redump.h"
 #include "disasm.h"
@@ -1559,10 +1560,59 @@ skip:
 
 static int handle_file(const char *filename, int start, int end, int draw);
 
+
+static pid_t pager_pid;
+
+static void pager_death(int n)
+{
+	exit(0);
+}
+
+static void pager_open(void)
+{
+	int fd[2];
+	pid_t parent_pid;
+
+	if (pipe(fd) < 0) {
+		fprintf(stderr, "Failed to create pager pipe: %m\n");
+		exit(-1);
+	}
+
+	parent_pid = getpid();
+	pager_pid = fork();
+	if (pager_pid < 0) {
+		fprintf(stderr, "Failed to fork pager: %m\n");
+		exit(-1);
+	}
+
+	if (pager_pid == 0) {
+		const char* less_opts;
+
+		dup2(fd[0], STDIN_FILENO);
+		close(fd[0]);
+		close(fd[1]);
+
+		less_opts = "FRSMKX";
+		setenv("LESS", less_opts, 1);
+
+		execlp("less", "less", NULL);
+
+	} else {
+		/* we want to kill the parent process when pager exits: */
+		signal(SIGCHLD, pager_death);
+		dup2(fd[1], STDOUT_FILENO);
+		close(fd[0]);
+		close(fd[1]);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	int ret, n = 1;
 	int start = 0, end = 0x7ffffff, draw = -1;
+	int interactive = isatty(STDOUT_FILENO);
+
+	no_color = !interactive;
 
 	while (n < argc) {
 		if (!strcmp(argv[n], "--verbose")) {
@@ -1579,6 +1629,12 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[n], "--no-color")) {
 			no_color = true;
+			n++;
+			continue;
+		}
+
+		if (!strcmp(argv[n], "--color")) {
+			no_color = false;
 			n++;
 			continue;
 		}
@@ -1651,6 +1707,10 @@ int main(int argc, char **argv)
 		}
 
 		break;
+	}
+
+	if (interactive) {
+		pager_open();
 	}
 
 	rnn = rnn_new(no_color);
