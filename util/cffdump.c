@@ -28,10 +28,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <string.h>
 #include <assert.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "redump.h"
 #include "disasm.h"
@@ -1631,6 +1633,24 @@ static void pager_open(void)
 	}
 }
 
+static int pager_close(void)
+{
+	siginfo_t status;
+
+	close(STDOUT_FILENO);
+
+	while (true) {
+		memset(&status, 0, sizeof(status));
+		if (waitid(P_PID, pager_pid, &status, WEXITED) < 0) {
+			if (errno == EINTR)
+				continue;
+			return -errno;
+		}
+
+		return 0;
+	}
+}
+
 int main(int argc, char **argv)
 {
 	int ret, n = 1;
@@ -1761,6 +1781,10 @@ int main(int argc, char **argv)
 	}
 
 	script_finish();
+
+	if (interactive) {
+		pager_close();
+	}
 
 	return 0;
 }
