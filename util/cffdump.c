@@ -1338,6 +1338,22 @@ static void cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
 	summary = saved_summary;
 }
 
+static void cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	const char *buf = (void *)dwords;
+	int i;
+
+	/* attempt to decode as string: */
+	printf("%08x:%s", gpuaddr(dwords), levels[level]);
+	for (i = 0; i < 4 * sizedwords; i++) {
+		if (buf[i] == '\0')
+			break;
+		if (isascii(buf[i]))
+			printf("%c", buf[i]);
+	}
+	printf("\n");
+}
+
 static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	/* traverse indirect buffers */
@@ -1422,7 +1438,7 @@ static const struct {
 	void (*fxn)(uint32_t *dwords, uint32_t sizedwords, int level);
 } type3_op[0xff] = {
 		CP(ME_INIT, NULL),
-		CP(NOP, NULL),
+		CP(NOP, cp_nop),
 		CP(INDIRECT_BUFFER, cp_indirect),
 		CP(INDIRECT_BUFFER_PFD, cp_indirect),
 		CP(WAIT_FOR_IDLE, cp_wfi),
