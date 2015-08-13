@@ -92,6 +92,12 @@ typename(GLenum type)
 #ifdef GL_UNSIGNED_INT_2_10_10_10_REV_EXT
 	ENUM(GL_UNSIGNED_INT_2_10_10_10_REV_EXT);
 #endif
+#ifdef GL_UNSIGNED_INT_2_10_10_10_REV
+	ENUM(GL_UNSIGNED_INT_2_10_10_10_REV);
+#endif
+#ifdef GL_HALF_FLOAT
+	ENUM(GL_HALF_FLOAT);
+#endif
 	}
 	ERROR_MSG("invalid type: %04x", type);
 	exit(1);
@@ -108,6 +114,21 @@ formatname(GLenum format)
 	ENUM(GL_LUMINANCE);
 	ENUM(GL_LUMINANCE_ALPHA);
 	ENUM(GL_DEPTH_COMPONENT);
+#ifdef GL_R8
+	ENUM(GL_R8);
+#endif
+#ifdef GL_RGB8
+	ENUM(GL_RGB8);
+#endif
+#ifdef GL_RED
+	ENUM(GL_RED);
+#endif
+#ifdef GL_RGBA_INTEGER
+	ENUM(GL_RGBA_INTEGER);
+#endif
+#ifdef GL_RGB16F
+	ENUM(GL_RGB16F);
+#endif
 #ifdef GL_SRGB_EXT
 	ENUM(GL_SRGB_EXT);
 #endif
@@ -116,6 +137,27 @@ formatname(GLenum format)
 #endif
 #ifdef GL_SRGB8_ALPHA8_EXT
 	ENUM(GL_SRGB8_ALPHA8_EXT);
+#endif
+#ifdef GL_SRGB
+	ENUM(GL_SRGB);
+#endif
+#ifdef GL_SRGB8
+	ENUM(GL_SRGB8);
+#endif
+#ifdef GL_SRGB8_ALPHA8
+	ENUM(GL_SRGB8_ALPHA8);
+#endif
+#ifdef GL_RGB10_A2UI
+	ENUM(GL_RGB10_A2UI);
+#endif
+#ifdef GL_RGBA8UI
+	ENUM(GL_RGBA8UI);
+#endif
+#ifdef GL_RGB5_A1
+	ENUM(GL_RGB5_A1);
+#endif
+#ifdef GL_RGBA8
+	ENUM(GL_RGBA8);
 #endif
 	}
 	ERROR_MSG("invalid format: %04x", format);
@@ -145,20 +187,13 @@ static char *
 eglStrError(EGLint error)
 {
 	switch (error) {
-	case EGL_SUCCESS:
-		return "EGL_SUCCESS";
-	case EGL_NOT_INITIALIZED:
-		return "EGL_NOT_INITIALIZED";
-	case EGL_BAD_ALLOC:
-		return "EGL_BAD_ALLOC";
-	case EGL_BAD_CONFIG:
-		return "EGL_BAD_CONFIG";
-	case EGL_BAD_PARAMETER:
-		return "EGL_BAD_PARAMETER";
-	case EGL_BAD_MATCH:
-		return "EGL_BAD_MATCH";
-	case EGL_BAD_ATTRIBUTE:
-		return "EGL_BAD_ATTRIBUTE";
+	ENUM(EGL_SUCCESS);
+	ENUM(EGL_NOT_INITIALIZED);
+	ENUM(EGL_BAD_ALLOC);
+	ENUM(EGL_BAD_CONFIG);
+	ENUM(EGL_BAD_PARAMETER);
+	ENUM(EGL_BAD_MATCH);
+	ENUM(EGL_BAD_ATTRIBUTE);
 	default:
 		return "UNKNOWN";
 	}
@@ -169,10 +204,9 @@ glStrError(GLenum error)
 {
 	switch (error) {
 	// TODO
-	case GL_INVALID_ENUM:
-		return "GL_INVALID_ENUM";
-	case GL_INVALID_OPERATION:
-		return "GL_INVALID_OPERATION";
+	ENUM(GL_INVALID_ENUM);
+	ENUM(GL_INVALID_OPERATION);
+	ENUM(GL_INVALID_FRAMEBUFFER_OPERATION);
 	default:
 		return "UNKNOWN";
 	}
