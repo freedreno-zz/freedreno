@@ -69,14 +69,37 @@ const char *fragment_shader_source =
 	"    gl_FragColor = uColor;   \n"
 	"}                            \n";
 
+#ifndef GL_TIME_ELAPSED_EXT
+#define GL_TIME_ELAPSED_EXT               0x88BF
+#endif
 
 /* Run through multiple variants to detect clear color, quad color (frag
  * shader param), and vertices
  */
-void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices, GLfloat *quad2_color, GLfloat *vertices2)
+void test_query(int querytype, int w, int h)
 {
-#define doquery 1
-	RD_START(doquery ? "big-occquery" : "noccquery", "");
+	static const GLfloat clear_color[] = {0.0, 0.0, 0.0, 0.0};
+	static const GLfloat quad_color[]  = {1.0, 0.0, 0.0, 1.0};
+	static const GLfloat quad2_color[]  = {0.0, 1.0, 0.0, 1.0};
+	static const GLfloat vertices[] = {
+			-0.45, -0.75, 0.0,
+			 0.45, -0.75, 0.0,
+			-0.45,  0.75, 0.0,
+			 0.45,  0.75, 0.0,
+	};
+	static const GLfloat vertices2[] = {
+			-0.15, -0.23, 1.0,
+			 0.25, -0.33, 1.0,
+			-0.35,  0.43, 1.0,
+			 0.45,  0.53, 1.0,
+	};
+	static const char *queryname[] = {
+			"none",
+			"samples-passed",
+			"time-elapsed",
+	};
+
+	RD_START("query", "query=%s", queryname[querytype]);
 	display = get_display();
 
 	/* get an appropriate EGL frame buffer configuration */
@@ -86,7 +109,7 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 	/* create an EGL rendering context */
 	ECHK(context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribute_list));
 
-	surface = make_window(display, config, 800, 600);
+	surface = make_window(display, config, w, h);
 
 	ECHK(eglQuerySurface(display, surface, EGL_WIDTH, &width));
 	ECHK(eglQuerySurface(display, surface, EGL_HEIGHT, &height));
@@ -124,9 +147,15 @@ void test_quad_flat(GLfloat *clear_color, GLfloat *quad_color, GLfloat *vertices
 	GCHK(glUniform4fv(uniform_location, 1, quad_color));
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
-if (doquery) {
-	GCHK(glBeginQuery(GL_ANY_SAMPLES_PASSED, query));
-}
+	switch (querytype) {
+	case 1:
+		GCHK(glBeginQuery(GL_ANY_SAMPLES_PASSED, query));
+		break;
+	case 2:
+		GCHK(glBeginQuery(GL_TIME_ELAPSED_EXT, query));
+		break;
+	}
+
 	/* Quad 2 render */
 	GCHK(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices2));
 
@@ -136,18 +165,26 @@ if (doquery) {
 	GCHK(glUniform4fv(uniform_location, 1, quad2_color));
 	GCHK(glDrawArrays(GL_TRIANGLE_STRIP, 0, 4));
 
-if (doquery) {
-	GCHK(glEndQuery(GL_ANY_SAMPLES_PASSED));
-	
-	GLuint result;
-	do
-	{
-		GCHK(glGetQueryObjectuiv(query, GL_QUERY_RESULT_AVAILABLE, &result)); 
-	} while (!result);
-	GCHK(glGetQueryObjectuiv(query, GL_QUERY_RESULT, &result));
+	switch (querytype) {
+	case 1:
+		GCHK(glEndQuery(GL_ANY_SAMPLES_PASSED));
+		break;
+	case 2:
+		GCHK(glEndQuery(GL_TIME_ELAPSED_EXT));
+		break;
+	}
 
-	DEBUG_MSG("Query ended with %d", result);
-}
+	if (querytype > 0) {
+		GLuint result;
+		do
+		{
+			GCHK(glGetQueryObjectuiv(query, GL_QUERY_RESULT_AVAILABLE, &result));
+		} while (!result);
+		GCHK(glGetQueryObjectuiv(query, GL_QUERY_RESULT, &result));
+
+		DEBUG_MSG("Query ended with %d", result);
+
+	}
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
@@ -164,33 +201,15 @@ if (doquery) {
 int main(int argc, char *argv[])
 {
 	TEST_START();
-	TEST(test_quad_flat((GLfloat[]){0.0, 0.0, 0.0, 0.0},
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.0,
-				 0.45, -0.75, 0.0,
-				-0.45,  0.75, 0.0,
-				 0.45,  0.75, 0.0},
-			(GLfloat[]) {0.0, 0.0, 1.0, 1.0},
-			(GLfloat[]) {
-				-0.15, -0.23, 1.0,
-				 0.25, -0.33, 1.0,
-				-0.35,  0.43, 1.0,
-				 0.45,  0.53, 1.0}));
-
-	TEST(test_quad_flat((GLfloat[]){0.0, 0.0, 0.0, 0.0},
-			(GLfloat[]) {1.0, 0.0, 0.0, 1.0},
-			(GLfloat[]) {
-				-0.45, -0.75, 0.5,
-				 0.45, -0.75, 0.5,
-				-0.45,  0.75, 0.5,
-				 0.45,  0.75, 0.5},
-			(GLfloat[]) {0.0, 0.0, 1.0, 1.0},
-			(GLfloat[]) {
-				-0.15, -0.23, 0.0,
-				 0.25, -0.33, 0.0,
-				-0.35,  0.43, 0.0,
-				 0.45,  0.53, 0.0}));
+	TEST(test_query(0,  400,  240));
+	TEST(test_query(1,  400,  240));
+	TEST(test_query(2,  400,  240));
+	TEST(test_query(0,  800,  600));
+	TEST(test_query(1,  800,  600));
+	TEST(test_query(2,  800,  600));
+	TEST(test_query(0, 1920, 1080));
+	TEST(test_query(1, 1920, 1080));
+	TEST(test_query(2, 1920, 1080));
 	TEST_END();
 
 	return 0;

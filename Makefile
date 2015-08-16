@@ -18,7 +18,7 @@ TESTS_3D = \
 	test-varyings \
 	test-quad-attributeless \
 	test-float-int \
-	test-occquery \
+	test-query \
 	test-draw \
 	test-clear \
 	test-es2gears \
