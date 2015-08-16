@@ -64,6 +64,8 @@ static struct device_info kgsl_3d_info = {
 				IOCTL_INFO(IOCTL_KGSL_TIMESTAMP_EVENT),
 				IOCTL_INFO(IOCTL_KGSL_GPUMEM_ALLOC_ID),
 				IOCTL_INFO(IOCTL_KGSL_GPUMEM_FREE_ID),
+				IOCTL_INFO(IOCTL_KGSL_PERFCOUNTER_GET),
+				IOCTL_INFO(IOCTL_KGSL_PERFCOUNTER_PUT),
 				/* kgsl-3d specific ioctls: */
 				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET),
 				IOCTL_INFO(IOCTL_KGSL_SUBMIT_COMMANDS),
@@ -871,6 +873,33 @@ static void kgsl_ioctl_gpumem_free_id_post(int fd,
 	unregister_buffer(buf);
 }
 
+static void kgls_ioctl_perfcounter_get_post(int fd,
+		struct kgsl_perfcounter_get *param)
+{
+	char buf[128];
+	printf("\t\tgroupid:\t%u\n", param->groupid);
+	printf("\t\tcountable:\t%u\n", param->countable);
+	printf("\t\toffset_lo:\t0x%x\n", param->offset);
+	printf("\t\toffset_hi:\t0x%x\n", param->offset_hi);
+
+	rd_write_section(RD_CMD, buf, snprintf(buf, sizeof(buf),
+			"perfcounter_get: groupid=%u, countable=%u, off_lo=0x%x, off_hi=0x%x",
+			param->groupid, param->countable, param->offset, param->offset_hi));
+}
+
+static void kgls_ioctl_perfcounter_put_pre(int fd,
+		struct kgsl_perfcounter_put *param)
+{
+	char buf[128];
+
+	printf("\t\tgroupid:\t%u\n", param->groupid);
+	printf("\t\tcountable:\t%u\n", param->countable);
+
+	rd_write_section(RD_CMD, buf, snprintf(buf, sizeof(buf),
+			"perfcounter_put: groupid=%u, countable=%u",
+			param->groupid, param->countable));
+}
+
 static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
 	dump_ioctl(get_kgsl_info(fd), _IOC_WRITE, fd, request, ptr, 0);
@@ -898,6 +927,9 @@ static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 		break;
 	case _IOC_NR(IOCTL_KGSL_GPUMEM_FREE_ID):
 		kgsl_ioctl_gpumem_free_id_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_PERFCOUNTER_PUT):
+		kgls_ioctl_perfcounter_put_pre(fd, ptr);
 		break;
 	}
 }
@@ -929,6 +961,9 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 		break;
 	case _IOC_NR(IOCTL_KGSL_GPUMEM_FREE_ID):
 		kgsl_ioctl_gpumem_free_id_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_PERFCOUNTER_GET):
+		kgls_ioctl_perfcounter_get_post(fd, ptr);
 		break;
 	}
 }
