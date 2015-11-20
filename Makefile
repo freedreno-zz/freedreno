@@ -115,6 +115,9 @@ wrap%.o: wrap%.c
 libwrap.so: wrap-util.o wrap-syscall.o $(WRAP_C2D2)
 	$(LD) -shared -ldl -lc -llog $^ -o $@
 
+libwrapfake.so: wrap-util.o wrap-syscall-fake.o
+	$(LD) -shared -ldl -lc -llog $^ -o $@
+
 test-%: test-%.o $(UTILS)
 	$(LD) $^ $(LFLAGS) -o $@
 
