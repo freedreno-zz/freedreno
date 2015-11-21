@@ -185,6 +185,7 @@ enum adreno_state_block {
 	SB_FRAG_TEX = 2,
 	SB_FRAG_MIPADDR = 3,
 	SB_VERT_SHADER = 4,
+	SB_GEOM_SHADER = 5,
 	SB_FRAG_SHADER = 6,
 };
 

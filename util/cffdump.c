@@ -609,8 +609,14 @@ static const const struct {
 #define REG(x, fxn) [REG_A4XX_ ## x] = { fxn }
 		REG(SP_VS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_FS_PVT_MEM_ADDR, reg_dump_gpuaddr),
+		REG(SP_GS_PVT_MEM_ADDR, reg_dump_gpuaddr),
+		REG(SP_HS_PVT_MEM_ADDR, reg_dump_gpuaddr),
+		REG(SP_DS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_VS_OBJ_START, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START, reg_disasm_gpuaddr),
+		REG(SP_GS_OBJ_START, reg_disasm_gpuaddr),
+		REG(SP_HS_OBJ_START, reg_disasm_gpuaddr),
+		REG(SP_DS_OBJ_START, reg_disasm_gpuaddr),
 		REG(VFD_FETCH_INSTR_0(0), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(0), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(1), reg_vfd_fetch_instr_0_x),
@@ -643,6 +649,11 @@ static const const struct {
 		REG(VFD_FETCH_INSTR_1(14), reg_vfd_fetch_instr_1_x),
 		REG(VFD_FETCH_INSTR_0(15), reg_vfd_fetch_instr_0_x),
 		REG(VFD_FETCH_INSTR_1(15), reg_vfd_fetch_instr_1_x),
+		REG(TPL1_TP_VS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
+		REG(TPL1_TP_HS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
+		REG(TPL1_TP_DS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
+		REG(TPL1_TP_GS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
+		REG(TPL1_TP_FS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
 #undef REG
 }, *type0_reg;
 
@@ -893,6 +904,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	switch (state_block_id) {
 	case SB_FRAG_SHADER:
+	case SB_GEOM_SHADER:
 	case SB_VERT_SHADER:
 		if (state_type == ST_SHADER) {
 			enum shader_t disasm_type;
