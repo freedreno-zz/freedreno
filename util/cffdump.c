@@ -466,6 +466,19 @@ static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 	}
 }
 
+static void dump_shader(const char *ext, char *buf, int bufsz)
+{
+	if (dump_shaders) {
+		static int n = 0;
+		char filename[8];
+		int fd;
+		sprintf(filename, "%04d.%s", n++, ext);
+		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
+		write(fd, buf, bufsz);
+		close(fd);
+	}
+}
+
 static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 {
 	void *buf;
@@ -478,8 +491,24 @@ static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 	buf = hostptr(dword);
 	if (buf) {
 		uint32_t sizedwords = hostlen(dword) / 4;
+		const char *ext;
+
 		dump_hex(buf, 64, level+1);
 		disasm_a3xx(buf, sizedwords, level+2, SHADER_FRAGMENT);
+
+		/* this is a bit ugly way, but oh well.. */
+		if (strstr(name, "SP_VS_OBJ")) {
+			ext = "vo3";
+		} else if (strstr(name, "SP_FS_OBJ")) {
+			ext = "fo3";
+		} else if (strstr(name, "SP_GS_OBJ")) {
+			ext = "go3";
+		} else {
+			ext = NULL;
+		}
+
+		if (ext)
+			dump_shader(ext, buf, sizedwords * 4);
 	}
 }
 
@@ -869,14 +898,8 @@ static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 	disasm_a2xx(dwords + 2, sizedwords - 2, level+2, disasm_type);
 
 	/* dump raw shader: */
-	if (ext && dump_shaders) {
-		static int n = 0;
-		char filename[8];
-		int fd;
-		sprintf(filename, "%04d.%s", n++, ext);
-		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
-		write(fd, dwords + 2, (sizedwords - 2) * 4);
-	}
+	if (ext)
+		dump_shader(ext, dwords + 2, (sizedwords - 2) * 4);
 }
 
 static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -907,7 +930,6 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	case SB_GEOM_SHADER:
 	case SB_VERT_SHADER:
 		if (state_type == ST_SHADER) {
-			enum shader_t disasm_type;
 			const char *ext = NULL;
 
 			if (gpu_id >= 400)
@@ -922,24 +944,18 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 			 */
 			if (state_block_id == SB_VERT_SHADER) {
 				ext = "vo3";
-				disasm_type = SHADER_VERTEX;
+			} else if (state_block_id == SB_GEOM_SHADER) {
+				ext = "go3";
 			} else {
 				ext = "fo3";
-				disasm_type = SHADER_FRAGMENT;
 			}
 
 			if (contents)
-				disasm_a3xx(contents, num_unit * 2, level+2, disasm_type);
+				disasm_a3xx(contents, num_unit * 2, level+2, 0);
 
 			/* dump raw shader: */
-			if (ext && dump_shaders) {
-				static int n = 0;
-				char filename[8];
-				int fd;
-				sprintf(filename, "%04d.%s", n++, ext);
-				fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
-				write(fd, dwords + 2, (sizedwords - 2) * 4);
-			}
+			if (ext)
+				dump_shader(ext, contents, num_unit * 2 * 4);
 		} else {
 			/* uniforms/consts:
 			 *
