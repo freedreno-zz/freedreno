@@ -399,7 +399,7 @@ static void print_instr_cat1(instr_t *instr)
 		else if (cat1->off > 0)
 			printf("%c<a0.x + %d>", type, cat1->off);
 		else
-			printf("c<a0.x>");
+			printf("%c<a0.x>", type);
 	} else {
 		print_reg_src((reg_t)(cat1->src), type_size(cat1->src_type) == 32,
 				cat1->src_r, cat1->src_c, cat1->src_im, false, false, false);
