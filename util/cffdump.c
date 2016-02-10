@@ -1442,6 +1442,17 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 	type0_reg_written[val/8] |= (1 << (val % 8));
 }
 
+static void cp_reg_to_mem(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t val = dwords[0] & 0xffff;
+	uint32_t cnt = 1 + ((dwords[0] >> 19) & 0x7ff);   /* not quite sure bitfield size */
+	uint32_t mem = dwords[0];
+	/* no real idea about the top too bits.. */
+	printl(3, "%sread: %s\n", levels[level], regname(val, 1));
+	printl(3, "%scount: %d\n", levels[level], cnt);
+	printl(3, "%sdest: %08x\n", levels[level], mem);
+}
+
 static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t count = dwords[0] & 0xffff;
@@ -1476,7 +1487,7 @@ static const struct {
 		CP(WAIT_UNTIL_READ, NULL),
 		CP(WAIT_IB_PFD_COMPLETE, NULL),
 		CP(REG_RMW, cp_rmw),
-		CP(REG_TO_MEM, NULL),
+		CP(REG_TO_MEM, cp_reg_to_mem),
 		CP(MEM_WRITE, cp_mem_write),
 		CP(MEM_WRITE_CNTR, NULL),
 		CP(COND_EXEC, NULL),
@@ -1792,6 +1803,7 @@ int main(int argc, char **argv)
 			querystrs[nquery] = argv[n];
 			nquery++;
 			n++;
+			interactive = 0;
 			continue;
 		}
 
