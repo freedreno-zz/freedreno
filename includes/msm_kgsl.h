@@ -208,19 +208,21 @@ enum kgsl_timestamp_type {
 };
 
 /* property types - used with kgsl_device_getproperty */
-enum kgsl_property_type {
-	KGSL_PROP_DEVICE_INFO     = 0x00000001,
-	KGSL_PROP_DEVICE_SHADOW   = 0x00000002,
-	KGSL_PROP_DEVICE_POWER    = 0x00000003,
-	KGSL_PROP_SHMEM           = 0x00000004,
-	KGSL_PROP_SHMEM_APERTURES = 0x00000005,
-	KGSL_PROP_MMU_ENABLE 	  = 0x00000006,
-	KGSL_PROP_INTERRUPT_WAITS = 0x00000007,
-	KGSL_PROP_VERSION         = 0x00000008,
-	KGSL_PROP_GPU_RESET_STAT  = 0x00000009,
-	KGSL_PROP_PWRCTRL         = 0x0000000E,
-	KGSL_PROP_PWR_CONSTRAINT  = 0x00000012,
-};
+#define KGSL_PROP_DEVICE_INFO           0x1
+#define KGSL_PROP_DEVICE_SHADOW         0x2
+#define KGSL_PROP_DEVICE_POWER          0x3
+#define KGSL_PROP_SHMEM                 0x4
+#define KGSL_PROP_SHMEM_APERTURES       0x5
+#define KGSL_PROP_MMU_ENABLE            0x6
+#define KGSL_PROP_INTERRUPT_WAITS       0x7
+#define KGSL_PROP_VERSION               0x8
+#define KGSL_PROP_GPU_RESET_STAT        0x9
+#define KGSL_PROP_PWRCTRL               0xE
+#define KGSL_PROP_PWR_CONSTRAINT        0x12
+#define KGSL_PROP_UCHE_GMEM_VADDR       0x13
+#define KGSL_PROP_SP_GENERIC_MEM        0x14
+#define KGSL_PROP_UCODE_VERSION         0x15
+#define KGSL_PROP_GPMU_VERSION          0x16
 
 struct kgsl_shadowprop {
 	unsigned long gpuaddr;
