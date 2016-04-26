@@ -811,7 +811,17 @@ static void kgsl_ioctl_gpumem_free_id_post(int fd,
 static void kgls_ioctl_perfcounter_get_post(int fd,
 		struct kgsl_perfcounter_get *param)
 {
+	static struct {
+		uint32_t hi, lo;
+	} cache[10][10];
 	char buf[128];
+	if (cache[param->groupid][param->countable].lo == 0) {
+		static int off = 0x9c; // REG_A4XX_RBBM_PERFCTR_CP_0_LO
+		cache[param->groupid][param->countable].lo = off++;
+		cache[param->groupid][param->countable].hi = off++;
+	}
+	param->offset = cache[param->groupid][param->countable].lo;
+	param->offset_hi = cache[param->groupid][param->countable].hi;
 	printf("\t\tgroupid:\t\t%u\n", param->groupid);
 	printf("\t\tcountable:\t\t%u\n", param->countable);
 	printf("\t\toffset_lo: 0x%x\n", param->offset);
