@@ -159,7 +159,7 @@ static struct device_info * get_kgsl_info(int fd)
 	return NULL;
 }
 
-void
+static void
 hexdump(const void *data, int size)
 {
 	unsigned char *buf = (void *) data;
@@ -204,7 +204,7 @@ hexdump(const void *data, int size)
 }
 
 
-void
+static void
 hexdump_dwords(const void *data, int sizedwords)
 {
 	uint32_t *buf = (void *) data;
@@ -270,7 +270,7 @@ struct buffer {
 	int dumped;
 };
 
-LIST_HEAD(buffers_of_interest);
+static LIST_HEAD(buffers_of_interest);
 
 static struct buffer * register_buffer(void *hostptr, unsigned int flags,
 		unsigned int len, unsigned int handle)
@@ -334,12 +334,6 @@ static void dump_buffer(unsigned int gpuaddr)
 	}
 }
 
-void dump_all_buffers(void)
-{
-	struct buffer *buf;
-	list_for_each_entry(buf, &buffers_of_interest, node)
-		dump_buffer(buf->gpuaddr);
-}
 /*****************************************************************************/
 
 int open(const char* path, int flags, ...)
@@ -360,6 +354,10 @@ int open(const char* path, int flags, ...)
 		ret = orig_open(path, flags);
 	}
 
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+
 	if (ret != -1) {
 		assert(ret < ARRAY_SIZE(file_table));
 		if (!strcmp(path, "/dev/kgsl-3d0")) {
@@ -379,6 +377,10 @@ int open(const char* path, int flags, ...)
 		}
 	}
 
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
+
 	return ret;
 }
 
@@ -386,19 +388,25 @@ int close(int fd)
 {
 	PROLOG(close);
 
-	if (fd < ARRAY_SIZE(file_table)) {
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+
+	if ((fd >= 0) && (fd < ARRAY_SIZE(file_table))) {
+		if (file_table[fd].is_3d) {
+			// XXX unregister buffers
+			printf("closing 3d\n");
+		}
 		file_table[fd].is_3d = 0;
 		file_table[fd].is_2d = 0;
 		file_table[fd].is_drm = 0;
 	}
 
-	return orig_close(fd);
-}
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
 
-int drmOpen(const char *name, const char *busid)
-{
-	/* quick hack to deal w/ opening drm device via libdrm */
-	return open("/dev/dri/card0", O_RDWR, 0);
+	return orig_close(fd);
 }
 
 static void log_gpuaddr(uint32_t gpuaddr, uint32_t len)
@@ -604,6 +612,12 @@ static const char *propnames[] = {
 		PROP_INFO(KGSL_PROP_INTERRUPT_WAITS),
 		PROP_INFO(KGSL_PROP_VERSION),
 		PROP_INFO(KGSL_PROP_GPU_RESET_STAT),
+		PROP_INFO(KGSL_PROP_PWRCTRL),
+		PROP_INFO(KGSL_PROP_PWR_CONSTRAINT),
+		PROP_INFO(KGSL_PROP_UCHE_GMEM_VADDR),
+		PROP_INFO(KGSL_PROP_SP_GENERIC_MEM),
+		PROP_INFO(KGSL_PROP_UCODE_VERSION),
+		PROP_INFO(KGSL_PROP_GPMU_VERSION),
 };
 
 static void kgsl_ioctl_device_getproperty_post(int fd,
@@ -612,6 +626,7 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 	printf("\t\ttype:\t\t%08x (%s)\n", param->type, propnames[param->type]);
 	if (param->type == KGSL_PROP_DEVICE_INFO) {
 		struct kgsl_devinfo *devinfo = param->value;
+		uint32_t gpu_id;
 		if (wrap_gpu_id()) {
 			uint32_t gpu_id = wrap_gpu_id();
 			/* convert gpu-id into chip-id, and add optional patch level: */
@@ -631,8 +646,14 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 			devinfo->gmem_sizebytes = wrap_gmem_size();
 			printf("\t\tEMULATING gmem_sizebytes: %d !!!\n", devinfo->gmem_sizebytes);
 		}
-		rd_write_section(RD_GPU_ID, &devinfo->gpu_id, sizeof(devinfo->gpu_id));
-		printf("\t\tgpu_id: %d\n", devinfo->gpu_id);
+		gpu_id = devinfo->gpu_id;
+		if (!gpu_id) {
+			gpu_id = ((devinfo->chip_id >> 24) & 0xff) * 100 +
+				((devinfo->chip_id >> 16) & 0xff) * 10 +
+				((devinfo->chip_id >> 8) & 0xff) * 1;
+		}
+		rd_write_section(RD_GPU_ID, &gpu_id, sizeof(gpu_id));
+		printf("\t\tgpu_id: %d\n", gpu_id);
 		printf("\t\tgmem_sizebytes: 0x%x\n", devinfo->gmem_sizebytes);
 	}
 	hexdump(param->value, param->sizebytes);
@@ -1118,8 +1139,9 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	pthread_mutex_lock(&l);
 #endif
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
-		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+	if ((fd >= 0) && (get_kgsl_info(fd) || is_drm(fd))) {
+		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+		struct buffer *buf = find_buffer(NULL, 0, 0, 0, offset >> 12); // XXX only id's are used now
 
 		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
 				fd, addr, length, prot, flags, offset);
@@ -1133,8 +1155,9 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	if (!ret)
 		ret = orig_mmap(addr, length, prot, flags, fd, offset);
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
-		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+	if ((fd >= 0) && (get_kgsl_info(fd) || is_drm(fd))) {
+		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+		struct buffer *buf = find_buffer(NULL, 0, 0, 0, offset >> 12); // XXX only id's are used now
 		if (buf)
 			buf->hostptr = ret;
 		else {
@@ -1157,7 +1180,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	return ret;
 }
 
-void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t offset)
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, int64_t offset)
 {
 	void *ret = NULL;
 	PROLOG(mmap64);
@@ -1166,13 +1189,15 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t o
 	pthread_mutex_lock(&l);
 #endif
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
-		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+	if ((fd >= 0) && (get_kgsl_info(fd) || is_drm(fd))) {
+		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+		struct buffer *buf = find_buffer(NULL, 0, 0, 0, offset >> 12); // XXX only id's are used now
 
-		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
+		printf("< [%4d]         : mmap64: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
 				fd, addr, length, prot, flags, offset);
 
 		if (buf && buf->hostptr) {
+			printf("  [%4d]	    : (recycled from buf=%p)\n", fd, buf);
 			buf->munmap = 0;
 			ret = buf->hostptr;
 		}
@@ -1181,8 +1206,9 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t o
 	if (!ret)
 		ret = orig_mmap64(addr, length, prot, flags, fd, offset);
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
-		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+	if ((fd >= 0) && (get_kgsl_info(fd) || is_drm(fd))) {
+		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
+		struct buffer *buf = find_buffer(NULL, 0, 0, 0, offset >> 12); // XXX only id's are used now
 		if (buf)
 			buf->hostptr = ret;
 		else {
@@ -1195,7 +1221,7 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t o
 			if (buf)
 				buf->hostptr = ret;
 		}
-		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
+		printf("< [%4d]         : mmap64: -> (%p), buf=%p\n", fd, ret, buf);
 	}
 
 #ifdef USE_PTHREADS
@@ -1207,13 +1233,26 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t o
 
 int munmap(void *addr, size_t length)
 {
-	struct buffer *buf = find_buffer(addr, 0, 0, 0, 0);
+	struct buffer *buf;
+	int ret;
 	PROLOG(munmap);
 
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+	buf = find_buffer(addr, 0, 0, 0, 0);
 	if (buf) {
+		/* we need the contents at submit ioctl: */
+printf("fake munmap: buf=%p\n", buf);
 		buf->munmap = 1;
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
-	return orig_munmap(addr, length);
+	ret = orig_munmap(addr, length);
+out:
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
+	return ret;
 }

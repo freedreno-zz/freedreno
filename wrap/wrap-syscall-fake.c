@@ -276,7 +276,7 @@ struct buffer {
 	int dumped;
 };
 
-LIST_HEAD(buffers_of_interest);
+static LIST_HEAD(buffers_of_interest);
 
 static struct buffer * register_buffer(void *hostptr, unsigned int flags,
 		unsigned int len, unsigned int handle)
@@ -340,11 +340,13 @@ static void dump_buffer(unsigned int gpuaddr)
 	}
 }
 
-void dump_all_buffers(void)
+uint32_t alloc_gpuaddr(uint32_t size)
 {
-	struct buffer *buf;
-	list_for_each_entry(buf, &buffers_of_interest, node)
-		dump_buffer(buf->gpuaddr);
+	// TODO need better scheme to deal w/ deallocation..
+	static uint32_t gpuaddr = 0xc0000000;
+	uint32_t addr = gpuaddr;
+	gpuaddr += size;
+	return addr;
 }
 
 uint32_t alloc_gpuaddr(uint32_t size)

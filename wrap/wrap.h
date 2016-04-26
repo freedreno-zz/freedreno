@@ -45,6 +45,8 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <stdio.h>
+#include <assert.h>
 
 #define __user
 #include "kgsl_drm.h"
@@ -54,27 +56,17 @@
 #include "list.h"
 #include "redump.h"
 
-#ifdef BIONIC
-#  define assert(X)
-#else
-#  include <assert.h>
-#endif
-
-// don't use <stdio.h> from glibc..
-struct _IO_FILE;
-typedef struct _IO_FILE FILE;
-FILE *fopen(const char *path, const char *mode);
-int fscanf(FILE *stream, const char *format, ...);
+#if 0 /* uncomment for printf in logcat */
 int wrap_printf(const char *format, ...);
 #define printf wrap_printf
-int sprintf(char *str, const char *format, ...);
+#endif
 
-void * _dlsym_helper(const char *name);
+void * __rd_dlsym_helper(const char *name);
 
 #define PROLOG(func) 					\
 	static typeof(func) *orig_##func = NULL;	\
 	if (!orig_##func)				\
-		orig_##func = _dlsym_helper(#func);	\
+		orig_##func = __rd_dlsym_helper(#func);	\
 
 
 unsigned int wrap_safe(void);
@@ -82,6 +74,7 @@ unsigned int wrap_gpu_id(void);
 unsigned int wrap_gpu_id_patchid(void);
 unsigned int wrap_gmem_size(void);
 
+#if 0
 #ifdef USE_PTHREADS
 typedef struct
 {
@@ -116,5 +109,8 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, struct timespec*  ts);
 #endif /* MISSING */
 
 #endif /* USE_PTHREADS */
+#else
+#include <pthread.h>
+#endif
 
 #endif /* WRAP_H_ */

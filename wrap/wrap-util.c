@@ -26,39 +26,48 @@
 static int fd = -1;
 static unsigned int gpu_id;
 
-void __assert_fail (const char *__assertion, const char *__file,
-			   unsigned int __line, const char *__function)
-{
-	printf("OH CRAP!!!\n");
-}
+#ifdef USE_PTHREADS
+static pthread_mutex_t l = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
+#endif
 
 char *getcwd(char *buf, size_t size);
 
 int __android_log_print(int prio, const char *tag,  const char *fmt, ...);
-int vsprintf(char *str, const char *format, va_list ap);
 
-static char tracebuf[1024], *tracebufp = tracebuf;
+static char tracebuf[4096], *tracebufp = tracebuf;
 
 int wrap_printf(const char *format, ...)
 {
 	int n;
 	va_list args;
 
+#ifdef USE_PTHREADS
+	pthread_mutex_lock(&l);
+#endif
+
 	va_start(args, format);
 	n = vsprintf(tracebufp, format, args);
+	tracebufp += n;
 	va_end(args);
 
-	if ((tracebufp[n] == '\n') || ((tracebufp - tracebuf) > 512)) {
-		__android_log_print(5, "WRAP", "%s (%u)", tracebuf, (tracebufp - tracebuf));
-		tracebufp = tracebuf;
-	} else {
-		tracebufp += n;
+	if (strstr(tracebuf, "\n") || ((tracebufp - tracebuf) > (sizeof(tracebuf)/2))) {
+		char *p2, *p = tracebuf;
+		while ((p < tracebufp) && (p2 = strstr(p, "\n"))) {
+			*p2 = '\0';
+			__android_log_print(5, "WRAP", "%s\n", p);
+			p = p2 + 1;
+		}
+		memcpy(tracebuf, p, tracebufp - p);
+		tracebufp = tracebuf + (tracebufp - p);
 	}
+
+#ifdef USE_PTHREADS
+	pthread_mutex_unlock(&l);
+#endif
 
 	return n;
 }
 
-unsigned getpid(void);
 
 void rd_start(const char *name, const char *fmt, ...)
 {
@@ -69,10 +78,12 @@ void rd_start(const char *name, const char *fmt, ...)
 	va_list  args;
 
 	testnum = getenv("TESTNUM");
-	if (testnum)
+	if (testnum) {
 		n = strtol(testnum, NULL, 0);
-
-	sprintf(buf, "trace-%04u.rd", name, getpid());
+		sprintf(buf, "trace-%04u.rd", n);
+	} else {
+		sprintf(buf, "/sdcard/trace.rd");
+	}
 
 	fd = open(buf, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 
@@ -97,13 +108,15 @@ void rd_end(void)
 	fd = -1;
 }
 
+#if 0
 volatile int*  __errno( void );
 #undef errno
 #define errno (*__errno())
+#endif
 
 static void rd_write(const void *buf, int sz)
 {
-	uint8_t *cbuf = buf;
+	const uint8_t *cbuf = buf;
 	while (sz > 0) {
 		int ret = write(fd, cbuf, sz);
 		if (ret < 0) {
@@ -201,7 +214,7 @@ unsigned int wrap_gmem_size(void)
 	return val;
 }
 
-void * _dlsym_helper(const char *name)
+void * __rd_dlsym_helper(const char *name)
 {
 	static void *libc_dl;
 #ifdef BIONIC
