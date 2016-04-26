@@ -420,6 +420,50 @@ void glProgramBinaryOES(GLuint program, GLenum binaryFormat,
 		const GLvoid *binary, GLint length);
 /* ************************************************************************* */
 
+static inline void
+hexdump(const void *data, int size)
+{
+	unsigned char *buf = (void *) data;
+	char alpha[17];
+	int i;
+
+	for (i = 0; i < size; i++) {
+		if (!(i % 16))
+			printf("\t\t\t%08X", (unsigned int) i);
+		if (!(i % 4))
+			printf(" ");
+
+		if (((void *) (buf + i)) < ((void *) data)) {
+			printf("   ");
+			alpha[i % 16] = '.';
+		} else {
+			printf(" %02x", buf[i]);
+
+			if (isprint(buf[i]) && (buf[i] < 0xA0))
+				alpha[i % 16] = buf[i];
+			else
+				alpha[i % 16] = '.';
+		}
+
+		if ((i % 16) == 15) {
+			alpha[16] = 0;
+			printf("\t|%s|\n", alpha);
+		}
+	}
+
+	if (i % 16) {
+		for (i %= 16; i < 16; i++) {
+			printf("   ");
+			alpha[i] = '.';
+
+			if (i == 15) {
+				alpha[16] = 0;
+				printf("\t|%s|\n", alpha);
+			}
+		}
+	}
+}
+
 static void
 link_program(GLuint program)
 {
@@ -456,7 +500,7 @@ link_program(GLuint program)
 	binary = calloc(1, len);
 	GCHK(glGetProgramBinaryOES(program, len, &ret, &binary_format, binary));
 	DEBUG_MSG("program dump: len=%d, actual len=%d", len, ret);
-	HEXDUMP(binary, len);
+	hexdump(binary, len);
 	RD_WRITE_SECTION(RD_PROGRAM, binary, len);
 	free(binary);
 #endif

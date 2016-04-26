@@ -160,7 +160,7 @@ void test_quad_instanced(int instances, int div0, int div1)
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R_OES, GL_CLAMP_TO_EDGE));
+	GCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE));
 
 
 	GCHK(texture_handle = glGetUniformLocation(program, "uTexture"));
@@ -169,7 +169,7 @@ void test_quad_instanced(int instances, int div0, int div1)
 
 	GCHK(glEnable(GL_CULL_FACE));
 
-	if (instaces > 0) {
+	if (instances > 0) {
 		GCHK(glVertexAttribDivisor(0, div0));
 		GCHK(glVertexAttribDivisor(1, div1));
 		GCHK(glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, instances));
@@ -204,9 +204,3 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-#ifdef BIONIC
-void _start(int argc, char **argv)
-{
-	exit(main(argc, argv));
-}
-#endif

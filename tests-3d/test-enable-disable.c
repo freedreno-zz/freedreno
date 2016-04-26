@@ -183,8 +183,8 @@ int main(int argc, char *argv[])
 	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA)));
 	TEST(test_enable_disable(GL_BLEND, glBlendFunc(GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR)));
 	TEST(test_enable_disable(GL_SAMPLE_ALPHA_TO_COVERAGE, 0));
-	TEST(test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_ALWAYS, 0.5)));
-	TEST(test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_LEQUAL, 0.5)));
+//	TEST(test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_ALWAYS, 0.5)));
+//	TEST(test_enable_disable(GL_ALPHA_TEST_QCOM, glAlphaFuncQCOM(GL_LEQUAL, 0.5)));
 	TEST(test_enable_disable(GL_SAMPLE_COVERAGE, 0));
 	TEST(test_enable_disable(GL_STENCIL_TEST, 0));
 	TEST(test_enable_disable(GL_DEPTH_TEST, glDepthFunc(GL_NEVER)));
@@ -203,9 +203,3 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-#ifdef BIONIC
-void _start(int argc, char **argv)
-{
-	exit(main(argc, argv));
-}
-#endif

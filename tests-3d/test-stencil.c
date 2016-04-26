@@ -266,7 +266,7 @@ void test_stencil(void)
 
 	usleep(1000000);
 
-	dump_bmp(display, surface, "stencil.bmp");
+//	dump_bmp(display, surface, "stencil.bmp");
 
 	ECHK(eglTerminate(display));
 
@@ -282,9 +282,3 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-#ifdef BIONIC
-void _start(int argc, char **argv)
-{
-	exit(main(argc, argv));
-}
-#endif
