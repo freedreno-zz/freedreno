@@ -48,6 +48,7 @@
 #include "a2xx.xml.h"
 #include "a3xx.xml.h"
 #include "a4xx.xml.h"
+#include "a5xx.xml.h"
 
 typedef enum {
 	true = 1, false = 0,
@@ -691,6 +692,8 @@ static const const struct {
 #undef REG
 }, reg_a5xx[0xffff + 1] = {
 #define REG(x, fxn) [REG_A5XX_ ## x] = { fxn }
+		REG(SP_VS_OBJ_START, reg_disasm_gpuaddr),
+		REG(SP_FS_OBJ_START, reg_disasm_gpuaddr),
 #undef REG
 }, *type0_reg;
 
