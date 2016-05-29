@@ -62,6 +62,14 @@ static bool dump_textures = false;
 static int vertices;
 static unsigned gpu_id = 220;
 
+static inline unsigned regcnt(void)
+{
+	if (gpu_id >= 500)
+		return 0xffff;
+	else
+		return 0x7fff;
+}
+
 /* note: not sure if CP_SET_DRAW_STATE counts as a complete extra level
  * of IB or if it is restricted to just have register writes:
  */
@@ -186,9 +194,6 @@ static const char *fmt_name[] = {
 		NAME(FMT_DXT3A_AS_1_1_1_1),
 };
 
-#define GET_PM4_TYPE3_OPCODE(x) ((*(x) >> 8) & 0xFF)
-#define GET_PM4_TYPE0_REGIDX(x) ((*(x)) & 0x7FFF)
-
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level);
 static void dump_register_val(uint32_t regbase, uint32_t dword, int level);
 static const char *regname(uint32_t regbase, int color);
@@ -305,7 +310,7 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 #define	REG_CP_TIMESTAMP		 REG_SCRATCH_REG0
 
 
-static uint32_t type0_reg_vals[0x7fff + 1];
+static uint32_t type0_reg_vals[0xffff + 1];
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
 static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
 
@@ -684,6 +689,9 @@ static const const struct {
 		REG(TPL1_TP_GS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
 		REG(TPL1_TP_FS_BORDER_COLOR_BASE_ADDR, reg_dump_gpuaddr),
 #undef REG
+}, reg_a5xx[0xffff + 1] = {
+#define REG(x, fxn) [REG_A5XX_ ## x] = { fxn }
+#undef REG
 }, *type0_reg;
 
 static bool initialized = false;
@@ -707,7 +715,7 @@ static void init_rnn(const char *gpuname)
 			if (val == 0) {
 				unsigned regbase;
 				/* really need a better way to do this this!! */
-				for (regbase = 0; regbase < 0x7fff; regbase++) {
+				for (regbase = 0; regbase < regcnt(); regbase++) {
 					const char *name = regname(regbase, 0);
 					if (!name)
 						continue;
@@ -746,6 +754,14 @@ static void init_a4xx(void)
 		return;
 	type0_reg = reg_a4xx;
 	init_rnn("a4xx");
+}
+
+static void init_a5xx(void)
+{
+	if (type0_reg == reg_a5xx)
+		return;
+	type0_reg = reg_a5xx;
+	init_rnn("a5xx");
 }
 
 static void init(void)
@@ -907,20 +923,27 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	enum adreno_state_block state_block_id = (dwords[0] >> 19) & 0x7;
 	enum adreno_state_type state_type = dwords[1] & 0x3;
 	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
-	uint32_t ext_src_addr = dwords[1] & 0xfffffffc;
+	uint32_t ext_src_addr;
 	void *contents = NULL;
 	int i;
 
 	if (quiet(2))
 		return;
 
+	if (gpu_id >= 500) {
+		ext_src_addr = dwords[1] & 0xfffffffc;
+		// TODO 64b: high bits in dwords[2] ??
+		contents = dwords + 3;
+	} else {
+		ext_src_addr = dwords[1] & 0xfffffffc;
+		contents = dwords + 2;
+	}
+
 	/* we could either have a ptr to other gpu buffer, or directly have
 	 * contents inline:
 	 */
 	if (ext_src_addr)
 		contents = hostptr(ext_src_addr);
-	else
-		contents = dwords + 2;
 
 	if (!contents)
 		return;
@@ -998,13 +1021,19 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 				if ((num_unit == 16) && (texsamp[0] == 0) && (texsamp[1] == 0))
 					break;
 
-				if ((300 <= gpu_id) && (gpu_id < 400))
+				if ((300 <= gpu_id) && (gpu_id < 400)) {
 					dump_domain(texsamp, 2, level+2, "A3XX_TEX_SAMP");
-				else if ((400 <= gpu_id) && (gpu_id < 500))
+					dump_hex(texsamp, 2, level+1);
+					texsamp += 2;
+				} else if ((400 <= gpu_id) && (gpu_id < 500)) {
 					dump_domain(texsamp, 2, level+2, "A4XX_TEX_SAMP");
-				dump_hex(texsamp, 2, level+1);
-
-				texsamp += 2;
+					dump_hex(texsamp, 2, level+1);
+					texsamp += 2;
+				} else if ((500 <= gpu_id) && (gpu_id < 600)) {
+					dump_domain(texsamp, 4, level+2, "A5XX_TEX_SAMP");
+					dump_hex(texsamp, 4, level+1);
+					texsamp += 4;
+				}
 			}
 		} else {
 			uint32_t *texconst = (uint32_t *)contents;
@@ -1030,6 +1059,10 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 					}
 					dump_hex(texconst, 8, level+1);
 					texconst += 8;
+				} else if ((500 <= gpu_id) && (gpu_id < 600)) {
+					dump_domain(texconst, 12, level+2, "A5XX_TEX_CONST");
+					dump_hex(texconst, 12, level+1);
+					texconst += 12;
 				}
 			}
 		}
@@ -1199,7 +1232,7 @@ static void dump_register_summary(int level)
 
 	/* dump current state of registers: */
 	printl(2, "%sdraw[%i] register values\n", levels[level], draw_count);
-	for (i = 0; i < 0x7fff; i++) {
+	for (i = 0; i < regcnt(); i++) {
 		uint32_t regbase = i;
 		uint32_t lastval = reg_val(regbase);
 		/* skip registers that have zero: */
@@ -1386,9 +1419,18 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	/* traverse indirect buffers */
 	int i;
-	uint32_t ibaddr = dwords[0];
-	uint32_t ibsize = dwords[1];
+	uint32_t ibaddr, ibsize;
 	uint32_t *ptr = NULL;
+
+	if (gpu_id >= 500) {
+		/* a5xx+.. high 32b of gpu addr, then size: */
+		// TODO 64b: high bits in dwords[1] ??
+		ibaddr = dwords[0];
+		ibsize = dwords[2];
+	} else {
+		ibaddr = dwords[0];
+		ibsize = dwords[1];
+	}
 
 	if (!quiet(3)) {
 		printf("%sibaddr:%08x\n", levels[level], ibaddr);
@@ -1455,19 +1497,31 @@ static void cp_reg_to_mem(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	uint32_t count = dwords[0] & 0xffff;
-	uint32_t addr = dwords[1];
-	uint32_t *ptr = hostptr(addr);
+	uint32_t i, cnt;
 
-	if (ptr) {
-		uint32_t i;
+	for (i = 0; i < sizedwords; ) {
+		uint32_t count = dwords[i] & 0xffff;
+		uint32_t addr, *ptr;
 
-		if (!quiet(2))
-			dump_hex(ptr, count, level+1);
+		if (gpu_id >= 500) {
+			addr = dwords[i + 1];
+			// TODO 64b: high bits in dwords[i + 2]
+			i += 3;
+		} else {
+			addr = dwords[i + 1];
+			i += 2;
+		}
 
-		ib++;
-		dump_commands(ptr, count, level+1);
-		ib--;
+		ptr = hostptr(addr);
+
+		if (ptr) {
+			if (!quiet(2))
+				dump_hex(ptr, count, level+1);
+
+			ib++;
+			dump_commands(ptr, count, level+1);
+			ib--;
+		}
 	}
 }
 
@@ -1532,6 +1586,53 @@ static const struct {
 		CP(DRAW_INDX_OFFSET, cp_draw_indx_offset),
 };
 
+
+static inline uint pm4_calc_odd_parity_bit(uint val)
+{
+	return (0x9669 >> (0xf & ((val) ^
+			((val) >> 4) ^ ((val) >> 8) ^ ((val) >> 12) ^
+			((val) >> 16) ^ ((val) >> 20) ^ ((val) >> 24) ^
+			((val) >> 28)))) & 1;
+}
+
+#define pkt_is_type0(pkt) (((pkt) & 0XC0000000) == CP_TYPE0_PKT)
+#define type0_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
+#define type0_pkt_offset(pkt) ((pkt) & 0x7FFF)
+
+/*
+ * Check both for the type3 opcode and make sure that the reserved bits [1:7]
+ * and 15 are 0
+ */
+
+#define pkt_is_type3(pkt) \
+        ((((pkt) & 0xC0000000) == CP_TYPE3_PKT) && \
+         (((pkt) & 0x80FE) == 0))
+
+#define cp_type3_opcode(pkt) (((pkt) >> 8) & 0xFF)
+#define type3_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
+
+#define pkt_is_type4(pkt) \
+        ((((pkt) & 0xF0000000) == CP_TYPE4_PKT) && \
+         ((((pkt) >> 27) & 0x1) == \
+         pm4_calc_odd_parity_bit(type4_pkt_offset(pkt))) \
+         && ((((pkt) >> 7) & 0x1) == \
+         pm4_calc_odd_parity_bit(type4_pkt_size(pkt))))
+
+#define type4_pkt_offset(pkt) (((pkt) >> 8) & 0x7FFFF)
+#define type4_pkt_size(pkt) ((pkt) & 0x7F)
+
+#define pkt_is_type7(pkt) \
+        ((((pkt) & 0xF0000000) == CP_TYPE7_PKT) && \
+         (((pkt) & 0x0F000000) == 0) && \
+         ((((pkt) >> 23) & 0x1) == \
+         pm4_calc_odd_parity_bit(cp_type7_opcode(pkt))) \
+         && ((((pkt) >> 15) & 0x1) == \
+         pm4_calc_odd_parity_bit(type7_pkt_size(pkt))))
+
+#define cp_type7_opcode(pkt) (((pkt) >> 16) & 0x7F)
+#define type7_pkt_size(pkt) ((pkt) & 0x3FFF)
+
+
 static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	int dwords_left = sizedwords;
@@ -1546,26 +1647,34 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	draws[ib] = 0;
 
 	while (dwords_left > 0) {
-		int type = dwords[0] >> 30;
 
 		/* hack, this looks like a -1 underflow, in some versions
 		 * when it tries to write zero registers via pkt0
 		 */
-		if ((dwords[0] >> 16) == 0xffff)
-			goto skip;
+//		if ((dwords[0] >> 16) == 0xffff)
+//			goto skip;
 
-		printl(3, "t%d", type);
-		switch (type) {
-		case 0x0: /* type-0 */
-			count = (dwords[0] >> 16)+2;
-			val = GET_PM4_TYPE0_REGIDX(dwords);
+		if (pkt_is_type0(dwords[0])) {
+			printl(3, "t0");
+			count = type0_pkt_size(dwords[0]) + 1;
+			val = type0_pkt_offset(dwords[0]);
 			printl(3, "%swrite %s%s\n", levels[level+1], regname(val, 1),
 					(dwords[0] & 0x8000) ? " (same register)" : "");
 			dump_registers(val, dwords+1, count-1, level+2);
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
-			break;
-		case 0x1: /* type-1 */
+		} else if (pkt_is_type4(dwords[0])) {
+			/* basically the same(ish) as type0 prior to a5xx */
+			printl(3, "t4");
+			count = type4_pkt_size(dwords[0]) + 1;
+			val = type4_pkt_offset(dwords[0]);
+			printl(3, "%swrite %s\n", levels[level+1], regname(val, 1));
+			dump_registers(val, dwords+1, count-1, level+2);
+			if (!quiet(3))
+				dump_hex(dwords, count, level+1);
+#if 0
+		} else if (pkt_is_type1(dwords[0])) {
+			printl(3, "t1");
 			count = 3;
 			val = dwords[0] & 0xfff;
 			printl(3, "%swrite %s\n", levels[level+1], regname(val, 1));
@@ -1575,16 +1684,17 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			dump_registers(val, dwords+2, 1, level+2);
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
-			break;
-		case 0x2: /* type-2 */
+		} else if (pkt_is_type2(dwords[0])) {
+			printl(3, "t2");
 			printf("%sNOP\n", levels[level+1]);
 			count = 1;
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
-			break;
-		case 0x3: /* type-3 */
-			count = ((dwords[0] >> 16) & 0x3fff) + 2;
-			val = GET_PM4_TYPE3_OPCODE(dwords);
+#endif
+		} else if (pkt_is_type3(dwords[0])) {
+			printl(3, "t3");
+			count = type3_pkt_size(dwords[0]) + 1;
+			val = cp_type3_opcode(dwords[0]);
 			init();
 			if (!quiet(2)) {
 				const char *name;
@@ -1599,8 +1709,25 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 				type3_op[val].fxn(dwords+1, count-1, level+1);
 			if (!quiet(2))
 				dump_hex(dwords, count, level+1);
-			break;
-		default:
+		} else if (pkt_is_type7(dwords[0])) {
+			printl(3, "t7");
+			count = type7_pkt_size(dwords[0]) + 1;
+			val = cp_type7_opcode(dwords[0]);
+			init();
+			if (!quiet(2)) {
+				const char *name;
+				name = rnn_enumname(rnn, "adreno_pm4_type3_packets", val);
+				printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
+						rnn->vc->colors->bctarg, name, rnn->vc->colors->reset,
+						val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
+				if (name)
+					dump_domain(dwords+1, count-1, level+2, name);
+			}
+			if (type3_op[val].fxn)
+				type3_op[val].fxn(dwords+1, count-1, level+1);
+			if (!quiet(2))
+				dump_hex(dwords, count, level+1);
+		} else {
 			fprintf(stderr, "bad type!\n");
 			return;
 		}
@@ -1999,7 +2126,9 @@ static int handle_file(const char *filename, int start, int end, int draw)
 			if (!got_gpu_id) {
 				gpu_id = *((unsigned int *)buf);
 				printl(2, "gpu_id: %d\n", gpu_id);
-				if (gpu_id >= 400)
+				if (gpu_id >= 500)
+					init_a5xx();
+				else if (gpu_id >= 400)
 					init_a4xx();
 				else if (gpu_id >= 300)
 					init_a3xx();

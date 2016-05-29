@@ -74,11 +74,10 @@ static void init(struct rnn *rnn, char *file, char *domain)
 	rnn_parsefile(rnn->db, file);
 	rnn_prepdb(rnn->db);
 	rnn->dom[0] = rnn_finddomain(rnn->db, domain);
-	if (!strcmp(domain, "A4XX")) {
-		/* I think even the common registers move around in A4XX.. */
-		rnn->dom[1] = rnn->dom[0];
-	} else {
+	if ((strcmp(domain, "A2XX") == 0) || (strcmp(domain, "A3XX") == 0)) {
 		rnn->dom[1] = rnn_finddomain(rnn->db, "AXXX");
+	} else {
+		rnn->dom[1] = rnn->dom[0];
 	}
 	if (!rnn->dom[0] && rnn->dom[1]) {
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
@@ -93,6 +92,8 @@ void rnn_load(struct rnn *rnn, const char *gpuname)
 		init(rnn, "adreno/a3xx.xml", "A3XX");
 	} else if (strstr(gpuname, "a4")) {
 		init(rnn, "adreno/a4xx.xml", "A4XX");
+	} else if (strstr(gpuname, "a5")) {
+		init(rnn, "adreno/a5xx.xml", "A5XX");
 	}
 }
 
