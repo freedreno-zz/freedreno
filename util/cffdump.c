@@ -1371,6 +1371,8 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	summary = saved_summary;
 }
 
+static unsigned mode;
+
 static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t num_indices = dwords[2];
@@ -1380,6 +1382,11 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 	do_query(rnn_enumname(rnn, "pc_di_primtype", prim_type), num_indices);
 
 	summary = false;
+
+	if (gpu_id >= 500) {
+		printf("%smode: %s\n", levels[level],
+				(mode & CP_SET_RENDER_MODE_3_GMEM_ENABLE) ? "GMEM" : "BYPASS");
+	}
 
 	/* don't bother dumping registers for the dummy draw_indx's.. */
 	if (num_indices > 0)
@@ -1529,6 +1536,77 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 }
 
+static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	uint32_t addr_hi, addr_lo;
+	uint32_t *ptr, len;
+
+	/* TODO seems to have two ptrs, 9 dwords total (incl pkt7 hdr)..
+	 * not sure if this can come in different sizes.
+	 *
+	 * First ptr doesn't seem to be cmdstream, second one does.
+	 *
+	 * Comment from downstream kernel:
+	 *
+	 * SRM -- set render mode (ex binning, direct render etc)
+	 * SRM is set by UMD usually at start of IB to tell CP the type of
+	 * preemption.
+	 * KMD needs to set SRM to NULL to indicate CP that rendering is
+	 * done by IB.
+	 * ------------------------------------------------------------------
+	 *
+	 * Seems to always be one of these two:
+	 * 70ec0008 00000001 001c0000 00000000 00000010 00000003 0000000d 001c2000 00000000
+	 * 70ec0008 00000001 001c0000 00000000 00000000 00000003 0000000d 001c2000 00000000
+	 *
+	 */
+	assert(sizedwords == 8);
+	assert(gpu_id >= 500);
+
+	len = dwords[0];
+	addr_lo = dwords[1];
+	addr_hi = dwords[2];
+
+	// TODO 64b
+	assert(addr_hi == 0);
+
+	printl(3, "%saddr: 0x%08x\n", levels[level], addr_lo);
+	printl(3, "%slen:  0x%x\n", levels[level], len);
+
+	ptr = hostptr(addr_lo);
+
+	// XXX
+	len = 32;
+
+	if (ptr) {
+		if (!quiet(2)) {
+			dump_hex(ptr, len, level+1);
+		}
+	}
+
+	len = dwords[5];
+	addr_lo = dwords[6];
+	addr_hi = dwords[7];
+
+	// TODO 64b
+	assert(addr_hi == 0);
+
+	printl(3, "%saddr: 0x%08x\n", levels[level], addr_lo);
+	printl(3, "%slen:  0x%x\n", levels[level], len);
+
+	ptr = hostptr(addr_lo);
+
+	if (ptr) {
+		if (!quiet(2)) {
+			ib++;
+			dump_commands(ptr, len, level+1);
+			ib--;
+			dump_hex(ptr, len, level+1);
+		}
+	}
+
+	mode = dwords[3];
+}
 
 #define CP(x, fxn)   [CP_ ## x] = { fxn }
 static const struct {
@@ -1588,6 +1666,9 @@ static const struct {
 		/* for a4xx */
 		CP(SET_DRAW_STATE, cp_set_draw_state),
 		CP(DRAW_INDX_OFFSET, cp_draw_indx_offset),
+
+		/* for a5xx */
+		CP(SET_RENDER_MODE, cp_set_render_mode),
 };
 
 
