@@ -21,6 +21,7 @@
  * SOFTWARE.
  */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -1530,7 +1531,7 @@ static void cp_reg_to_mem(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	uint32_t i, cnt;
+	uint32_t i;
 
 	for (i = 0; i < sizedwords; ) {
 		uint32_t count = dwords[i] & 0xffff;
@@ -1765,7 +1766,6 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			return;
 		}
 
-skip:
 		dwords += count;
 		dwords_left -= count;
 
@@ -1813,14 +1813,12 @@ static void pager_death(int n)
 static void pager_open(void)
 {
 	int fd[2];
-	pid_t parent_pid;
 
 	if (pipe(fd) < 0) {
 		fprintf(stderr, "Failed to create pager pipe: %m\n");
 		exit(-1);
 	}
 
-	parent_pid = getpid();
 	pager_pid = fork();
 	if (pager_pid < 0) {
 		fprintf(stderr, "Failed to fork pager: %m\n");
