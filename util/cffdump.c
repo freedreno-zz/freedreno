@@ -508,6 +508,8 @@ static void reg_disasm_gpuaddr(const char *name, uint32_t dword, int level)
 			ext = "fo3";
 		} else if (strstr(name, "SP_GS_OBJ")) {
 			ext = "go3";
+		} else if (strstr(name, "SP_CS_OBJ")) {
+			ext = "co3";
 		} else {
 			ext = NULL;
 		}
@@ -645,6 +647,7 @@ static struct {
 		REG(SP_GS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_HS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_DS_PVT_MEM_ADDR, reg_dump_gpuaddr),
+		REG(SP_CS_PVT_MEM_ADDR, reg_dump_gpuaddr),
 		REG(SP_VS_OBJ_START, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START, reg_disasm_gpuaddr),
 		REG(SP_GS_OBJ_START, reg_disasm_gpuaddr),
@@ -988,6 +991,7 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	case SB_FRAG_SHADER:
 	case SB_GEOM_SHADER:
 	case SB_VERT_SHADER:
+	case SB_COMPUTE_SHADER:
 		if (state_type == ST_SHADER) {
 			const char *ext = NULL;
 
@@ -1005,6 +1009,8 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 				ext = "vo3";
 			} else if (state_block_id == SB_GEOM_SHADER) {
 				ext = "go3";
+			} else if (state_block_id == SB_COMPUTE_SHADER) {
+				ext = "co3";
 			} else {
 				ext = "fo3";
 			}
@@ -1568,6 +1574,11 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 }
 
+static void cp_dispatch_compute(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	dump_register_summary(level);
+}
+
 static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t addr_hi, addr_lo;
@@ -1698,6 +1709,7 @@ static const struct {
 		/* for a4xx */
 		CP(SET_DRAW_STATE, cp_set_draw_state),
 		CP(DRAW_INDX_OFFSET, cp_draw_indx_offset),
+		CP(DISPATCH_COMPUTE, cp_dispatch_compute),
 
 		/* for a5xx */
 		CP(SET_RENDER_MODE, cp_set_render_mode),
