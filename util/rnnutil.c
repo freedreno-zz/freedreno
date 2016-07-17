@@ -97,6 +97,14 @@ void rnn_load(struct rnn *rnn, const char *gpuname)
 	}
 }
 
+uint32_t rnn_regbase(struct rnn *rnn, const char *name)
+{
+	uint32_t regbase = rnndec_decodereg(rnn->vc_nocolor, rnn->dom[0], name);
+	if (!regbase)
+		regbase = rnndec_decodereg(rnn->vc_nocolor, rnn->dom[1], name);
+	return regbase;
+}
+
 const char *rnn_regname(struct rnn *rnn, uint32_t regbase, int color)
 {
 	static char buf[128];
