@@ -1728,6 +1728,8 @@ static inline uint pm4_calc_odd_parity_bit(uint val)
 #define type0_pkt_size(pkt) ((((pkt) >> 16) & 0x3FFF) + 1)
 #define type0_pkt_offset(pkt) ((pkt) & 0x7FFF)
 
+#define pkt_is_type2(pkt) ((pkt) == CP_TYPE2_PKT)
+
 /*
  * Check both for the type3 opcode and make sure that the reserved bits [1:7]
  * and 15 are 0
@@ -1856,8 +1858,11 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 				type3_op[val].fxn(dwords+1, count-1, level+1);
 			if (!quiet(2))
 				dump_hex(dwords, count, level+1);
+		} else if (pkt_is_type2(dwords[0])) {
+			printl(3, "t2");
+			printl(3, "%snop\n", levels[level+1]);
 		} else {
-			fprintf(stderr, "bad type!\n");
+			printf("bad type! %08x\n", dwords[0]);
 			return;
 		}
 
