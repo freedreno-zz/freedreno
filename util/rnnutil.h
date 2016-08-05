@@ -40,6 +40,7 @@ struct rnn {
 	struct rnndb *db;
 	struct rnndeccontext *vc, *vc_nocolor;
 	struct rnndomain *dom[2];
+	const char *variant;
 };
 
 union rnndecval {

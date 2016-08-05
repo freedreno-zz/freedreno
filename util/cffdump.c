@@ -726,6 +726,10 @@ static struct {
 }, reg_a5xx[] = {
 		REG(SP_VS_OBJ_START, reg_disasm_gpuaddr),
 		REG(SP_FS_OBJ_START, reg_disasm_gpuaddr),
+		REG(TPL1_VS_TEX_CONST_LO, reg_dump_gpuaddr),
+		REG(TPL1_VS_TEX_SAMP_LO,  reg_dump_gpuaddr),
+		REG(TPL1_FS_TEX_CONST_LO, reg_dump_gpuaddr),
+		REG(TPL1_FS_TEX_SAMP_LO,  reg_dump_gpuaddr),
 		{NULL},
 }, *type0_reg;
 

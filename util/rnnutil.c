@@ -82,6 +82,7 @@ static void init(struct rnn *rnn, char *file, char *domain)
 	if (!rnn->dom[0] && rnn->dom[1]) {
 		fprintf(stderr, "Could not find domain %s in %s\n", domain, file);
 	}
+	rnn->variant = domain;
 }
 
 void rnn_load(struct rnn *rnn, const char *gpuname)
@@ -128,7 +129,19 @@ struct rnndecaddrinfo *rnn_reginfo(struct rnn *rnn, uint32_t regbase)
 
 const char *rnn_enumname(struct rnn *rnn, const char *name, uint32_t val)
 {
-	return rnndec_decode_enum(rnn->vc, name, val);
+	struct rnndeccontext *ctx = rnn->vc;
+	struct rnnenum *en = rnn_findenum(ctx->db, name);
+	if (en) {
+		int i;
+		for (i = 0; i < en->valsnum; i++)
+			if (en->vals[i]->valvalid && en->vals[i]->value == val) {
+				const char *variant = en->vals[i]->varinfo.variantsstr;
+				if (variant && !strstr(variant, rnn->variant))
+					continue;
+				return en->vals[i]->name;
+			}
+	}
+	return NULL;
 }
 
 static struct rnndelem *regelem(struct rnndomain *domain, const char *name)
