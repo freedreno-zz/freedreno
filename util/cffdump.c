@@ -911,24 +911,27 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 
 
 static uint32_t bin_x1, bin_x2, bin_y1, bin_y2;
+static unsigned mode;
 
 /* well, actually query and script.. */
-static void do_query(const char *mode, uint32_t num_indices)
+static void do_query(const char *primtype, uint32_t num_indices)
 {
 	int i;
 	for (i = 0; i < nquery; i++) {
 		uint32_t regbase = queryvals[i];
 		if (reg_written(regbase)) {
 			uint32_t lastval = reg_val(regbase);
-			printf("%4d: %s(%u,%u-%u,%u):%u", draw_count, mode,
+			printf("%4d: %s(%u,%u-%u,%u):%u:", draw_count, primtype,
 					bin_x1, bin_y1, bin_x2, bin_y2, num_indices);
-			printf("\t%08x\t", lastval);
+			if (gpu_id >= 500)
+				printf("%s:", (mode & CP_SET_RENDER_MODE_3_GMEM_ENABLE) ? "GMEM" : "BYPASS");
+			printf("\t%08x", lastval);
 			dump_register_val(regbase, lastval, 0);
 		}
 	}
 
 	if (num_indices > 0)
-		script_draw(mode, num_indices);
+		script_draw(primtype, num_indices);
 }
 
 static void cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -1413,8 +1416,6 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	summary = saved_summary;
 }
 
-static unsigned mode;
-
 static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	uint32_t num_indices = dwords[2];
@@ -1425,7 +1426,7 @@ static void cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level
 
 	summary = false;
 
-	if (gpu_id >= 500) {
+	if ((gpu_id >= 500) && !quiet(2)) {
 		printf("%smode: %s\n", levels[level],
 				(mode & CP_SET_RENDER_MODE_3_GMEM_ENABLE) ? "GMEM" : "BYPASS");
 	}
@@ -1456,6 +1457,9 @@ static void cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	const char *buf = (void *)dwords;
 	int i;
+
+	if (quiet(3))
+		return;
 
 	/* attempt to decode as string: */
 	printf("%08x:%s", gpuaddr(dwords), levels[level]);
@@ -1852,9 +1856,9 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			if (!quiet(2)) {
 				const char *name;
 				name = rnn_enumname(rnn, "adreno_pm4_type3_packets", val);
-				printf("\t%sopcode: %s%s%s (%02x) (%d dwords)%s\n", levels[level],
+				printf("\t%sopcode: %s%s%s (%02x) (%d dwords)\n", levels[level],
 						rnn->vc->colors->bctarg, name, rnn->vc->colors->reset,
-						val, count, (dwords[0] & 0x1) ? " (predicated)" : "");
+						val, count);
 				if (name)
 					dump_domain(dwords+1, count-1, level+2, name);
 			}
@@ -2277,13 +2281,11 @@ static int handle_file(const char *filename, int start, int end, int draw)
 		}
 	}
 
+end:
 	script_end_cmdstream();
 
 	io_close(io);
 
-	return 0;
-
-end:
 	if (ret < 0) {
 		printf("corrupt file\n");
 	}
