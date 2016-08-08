@@ -77,7 +77,6 @@ const char *fragment_shader_source =
  */
 void test_srgb_fbo(GLint ifmt, GLenum fmt, GLenum type)
 {
-	int i;
 	GLint width, height;
 	GLuint fbo, fbotex;
 	GLenum mrt_bufs[16];
@@ -90,7 +89,7 @@ void test_srgb_fbo(GLint ifmt, GLenum fmt, GLenum type)
 			 0.45,  0.75, 0.1 };
 	EGLSurface surface;
 
-	RD_START("svga-fbo", "mrt[%d]: fmt=%s (%x), ifmt=%s (%x), type=%s (%x)", i,
+	RD_START("srgb-fbo", "fmt=%s (%x), ifmt=%s (%x), type=%s (%x)",
 			formatname(fmt), fmt,
 			formatname(ifmt), ifmt,
 			typename(type), type);
