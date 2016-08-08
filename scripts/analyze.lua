@@ -74,7 +74,7 @@ function draw(primtype, nindx)
   -- populate current regs.  For now just consider ones that have
   -- been written.. maybe we need to make that configurable in
   -- case it filters out too many registers.
-  for regbase=0,0x7fff do
+  for regbase=0,0xffff do
     if regs.written(regbase) ~= 0 then
       local regval = regs.val(regbase)
 
