@@ -121,6 +121,8 @@ void test_quad_attributeless(GLfloat *quad_color)
 
 int main(int argc, char *argv[])
 {
-	test_quad_attributeless((GLfloat[]) {1.0, 0.0, 0.0, 1.0});
+	TEST_START();
+	TEST(test_quad_attributeless((GLfloat[]) {1.0, 0.0, 0.0, 1.0}));
+	TEST_END();
 }
 

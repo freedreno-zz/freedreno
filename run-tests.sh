@@ -8,7 +8,7 @@ for f in test-*; do
 		i=0
 		while `true`; do
 			echo "Running: $f ($i)"
-			TESTNUM=$i LD_PRELOAD=`pwd`/libwrap.so ./$f > $f.$i.log
+			TESTNAME=${f#test-} TESTNUM=$i LD_PRELOAD=`pwd`/libwrap.so ./$f > $f.$i.log
 			if [ "$?" = "42" ]; then
 				break;
 			fi

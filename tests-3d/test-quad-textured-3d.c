@@ -113,7 +113,7 @@ void test_quad_textured(GLenum type, GLenum format, int w, int h, int d)
 
 	EGLSurface surface;
 
-	RD_START("quad-textured-3d", "type=%x, format=%s, %dx%dx%d",
+	RD_START("quad-textured-3d", "type=%s, format=%s, %dx%dx%d",
 			textypename(type), formatname(format), w, h, d);
 
 	pixel_data = malloc(w * h * d * 4);
