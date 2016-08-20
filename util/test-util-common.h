@@ -26,9 +26,11 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+
 #include "bmp.h"
 #include "redump.h"
 
+#if 0 /* hacks for building outside of ndk */
 void exit(int status);
 int printf(const char *,...);
 int sprintf(char *str, const char *format, ...);
@@ -49,7 +51,11 @@ void sincos(double x, double *sin, double *cos);
 void sincosf(float x, float *sin, float *cos);
 void sincosl(long double x, long double *sin, long double *cos);
 void *memcpy(void *dest, const void *src, size_t n);
-
+#else
+#  include <stdio.h>
+#  include <stdlib.h>
+#  include <math.h>
+#endif
 
 /*****************************************************************************/
 
