@@ -30,6 +30,11 @@
 
 #ifdef USE_PTHREADS
 static pthread_mutex_t l = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
+#define LOCK()   pthread_mutex_lock(&l)
+#define UNLOCK() pthread_mutex_unlock(&l)
+#else
+#define LOCK()
+#define UNLOCK()
 #endif
 
 struct device_info {
@@ -337,9 +342,7 @@ int open(const char* path, int flags, ...)
 #endif
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
 
 	if (ret != -1) {
 		assert(ret < ARRAY_SIZE(file_table));
@@ -363,9 +366,7 @@ int open(const char* path, int flags, ...)
 		}
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 
 	return ret;
 }
@@ -374,9 +375,7 @@ int close(int fd)
 {
 	PROLOG(close);
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
 
 	if ((fd >= 0) && (fd < ARRAY_SIZE(file_table))) {
 		if (file_table[fd].is_3d) {
@@ -390,9 +389,7 @@ int close(int fd)
 #endif
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 
 	return orig_close(fd);
 }
@@ -1036,9 +1033,7 @@ int ioctl(int fd, unsigned long int request, ...)
 		ptr = NULL;
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_pre(fd, request, ptr);
@@ -1051,9 +1046,7 @@ int ioctl(int fd, unsigned long int request, ...)
 		sleep(1);
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 
 #ifdef FAKE
 	if (file_table[fd].is_emulated) {
@@ -1072,18 +1065,14 @@ int ioctl(int fd, unsigned long int request, ...)
 		ret = orig_ioctl(fd, request, ptr);
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_post(fd, request, ptr, ret);
 	else
 		printf("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, request, ret);
 
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 
 	if ((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) &&
 			get_kgsl_info(fd) && wrap_safe()) {
@@ -1099,9 +1088,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	void *ret = NULL;
 	PROLOG(mmap);
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
 
 	if ((fd >= 0) && get_kgsl_info(fd)) {
 		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
@@ -1146,9 +1133,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		printf("< [%4d]         : mmap: -> (%p)\n", fd, ret);
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 
 	return ret;
 }
@@ -1158,9 +1143,7 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, int64_t off
 	void *ret = NULL;
 	PROLOG(mmap64);
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
 
 	if ((fd >= 0) && get_kgsl_info(fd)) {
 		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
@@ -1206,9 +1189,7 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, int64_t off
 		printf("< [%4d]         : mmap64: -> (%p), buf=%p\n", fd, ret, buf);
 	}
 
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 
 	return ret;
 }
@@ -1219,9 +1200,8 @@ int munmap(void *addr, size_t length)
 	int ret;
 	PROLOG(munmap);
 
-#ifdef USE_PTHREADS
-	pthread_mutex_lock(&l);
-#endif
+	LOCK();
+
 	buf = find_buffer(addr, 0, 0, 0, 0);
 	if (buf) {
 		/* we need the contents at submit ioctl: */
@@ -1233,8 +1213,6 @@ printf("fake munmap: buf=%p\n", buf);
 
 	ret = orig_munmap(addr, length);
 out:
-#ifdef USE_PTHREADS
-	pthread_mutex_unlock(&l);
-#endif
+	UNLOCK();
 	return ret;
 }
