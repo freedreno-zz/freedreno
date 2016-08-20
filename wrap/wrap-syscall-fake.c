@@ -104,55 +104,10 @@ static struct device_info kgsl_2d_info = {
 		},
 };
 
-static struct device_info drm_info = {
-		.name = "drm",
-		.ioctl_info = {
-				IOCTL_INFO(DRM_IOCTL_VERSION),
-				IOCTL_INFO(DRM_IOCTL_GET_UNIQUE),
-				IOCTL_INFO(DRM_IOCTL_GET_MAGIC),
-				IOCTL_INFO(DRM_IOCTL_IRQ_BUSID),
-				IOCTL_INFO(DRM_IOCTL_GET_MAP),
-				IOCTL_INFO(DRM_IOCTL_GET_CLIENT),
-				IOCTL_INFO(DRM_IOCTL_GET_STATS),
-				IOCTL_INFO(DRM_IOCTL_SET_VERSION),
-				IOCTL_INFO(DRM_IOCTL_MODESET_CTL),
-				IOCTL_INFO(DRM_IOCTL_GEM_CLOSE),
-				IOCTL_INFO(DRM_IOCTL_GEM_FLINK),
-				IOCTL_INFO(DRM_IOCTL_GEM_OPEN),
-				IOCTL_INFO(DRM_IOCTL_GET_CAP),
-				IOCTL_INFO(DRM_IOCTL_SET_UNIQUE),
-				IOCTL_INFO(DRM_IOCTL_AUTH_MAGIC),
-				IOCTL_INFO(DRM_IOCTL_SET_MASTER),
-				IOCTL_INFO(DRM_IOCTL_DROP_MASTER),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_CREATE),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_PREP),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_SETMEMTYPE),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_GETMEMTYPE),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_MMAP),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_ALLOC),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_BIND_GPU),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_UNBIND_GPU),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_GET_BUFINFO),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_SET_BUFCOUNT),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_SET_ACTIVE),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_LOCK_HANDLE),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_UNLOCK_HANDLE),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_UNLOCK_ON_TS),
-				IOCTL_INFO(DRM_IOCTL_KGSL_GEM_CREATE_FD),
-		},
-};
-
 static struct {
-	int is_3d, is_2d, is_drm;
+	int is_3d, is_2d;
 	int is_emulated;
 } file_table[1024];
-
-static int is_drm(int fd)
-{
-	if (fd >= ARRAY_SIZE(file_table))
-		return 0;
-	return file_table[fd].is_drm;
-}
 
 static struct device_info * get_kgsl_info(int fd)
 {
@@ -403,9 +358,6 @@ int open(const char* path, int flags, ...)
 		} else if (!strcmp(path, "/dev/kgsl-2d1")) {
 			file_table[ret].is_2d = 1;
 			printf("found kgsl_2d1: %d\n", ret);
-		} else if (!strcmp(path, "/dev/dri/card0")) {
-			file_table[ret].is_drm = 1;
-			printf("found drm: %d\n", ret);
 		} else if (strstr(path, "/dev/")) {
 			printf("#### missing device, path: %s: %d\n", path, ret);
 		}
@@ -421,16 +373,9 @@ int close(int fd)
 	if (fd < ARRAY_SIZE(file_table)) {
 		file_table[fd].is_3d = 0;
 		file_table[fd].is_2d = 0;
-		file_table[fd].is_drm = 0;
 	}
 
 	return orig_close(fd);
-}
-
-int drmOpen(const char *name, const char *busid)
-{
-	/* quick hack to deal w/ opening drm device via libdrm */
-	return open("/dev/dri/card0", O_RDWR, 0);
 }
 
 static void log_gpuaddr(uint32_t gpuaddr, uint32_t len)
@@ -915,69 +860,6 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 	}
 }
 
-static void drm_ioctl_pre(int fd, unsigned long int request, void *ptr)
-{
-	dump_ioctl(&drm_info, _IOC_WRITE, fd, request, ptr, 0);
-}
-
-static void drm_ioctl_gem_create_post(int fd,
-		struct drm_kgsl_gem_create *param)
-{
-	printf("\t\thandle:\t%d\n", param->handle);
-	printf("\t\tsize:\t\t%08x\n", param->size);
-	register_buffer(NULL, 0, param->size, param->handle);
-}
-
-static void drm_ioctl_gem_alloc_post(int fd,
-		struct drm_kgsl_gem_alloc *param)
-{
-	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle, 0);
-	if (buf) {
-		buf->offset = param->offset;
-		printf("\t\thandle:\t%d\n", buf->handle);
-		printf("\t\toffset:\t%08llx\n", buf->offset);
-	}
-}
-
-static void drm_ioctl_gem_get_bufinfo_post(int fd,
-		struct drm_kgsl_gem_bufinfo *param)
-{
-	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle, 0);
-	if (buf) {
-		buf->gpuaddr = param->gpuaddr[0];
-		log_gpuaddr(buf->gpuaddr, buf->len);
-		printf("\t\thandle:\t%d\n", param->handle);
-		printf("\t\tgpuaddr:\t%08lx\n", param->gpuaddr[0]);
-	}
-}
-
-static void drm_ioctl_gem_close_post(int fd,
-		struct drm_gem_close *param)
-{
-	struct buffer *buf = find_buffer(NULL, 0, 0, param->handle, 0);
-	printf("\t\thandle:\t%d\n", param->handle);
-	unregister_buffer(buf);
-}
-
-static void drm_ioctl_post(int fd, unsigned long int request, void *ptr, int ret)
-{
-	dump_ioctl(&drm_info, _IOC_READ, fd, request, ptr, ret);
-	switch(_IOC_NR(request)) {
-	case _IOC_NR(DRM_IOCTL_KGSL_GEM_CREATE):
-		drm_ioctl_gem_create_post(fd, ptr);
-		break;
-	case _IOC_NR(DRM_IOCTL_KGSL_GEM_ALLOC):
-		drm_ioctl_gem_alloc_post(fd, ptr);
-		break;
-	case _IOC_NR(DRM_IOCTL_KGSL_GEM_GET_BUFINFO):
-		drm_ioctl_gem_get_bufinfo_post(fd, ptr);
-		break;
-	case _IOC_NR(DRM_IOCTL_GEM_CLOSE):
-		drm_ioctl_gem_close_post(fd, ptr);
-		break;
-	}
-}
-
 int ioctl(int fd, unsigned long int request, ...)
 {
 	int ioc_size = _IOC_SIZE(request);
@@ -1004,8 +886,6 @@ int ioctl(int fd, unsigned long int request, ...)
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_pre(fd, request, ptr);
-	else if (is_drm(fd))
-		drm_ioctl_pre(fd, request, ptr);
 	else
 		printf("> [%4d]         : <unknown> (%08lx)\n", fd, request);
 
@@ -1031,8 +911,6 @@ int ioctl(int fd, unsigned long int request, ...)
 
 	if (get_kgsl_info(fd))
 		kgsl_ioctl_post(fd, request, ptr, ret);
-	else if (is_drm(fd))
-		drm_ioctl_post(fd, request, ptr, ret);
 	else
 		printf("< [%4d]         : <unknown> (%08lx) (%d)\n", fd, request, ret);
 
@@ -1058,7 +936,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	pthread_mutex_lock(&l);
 #endif
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
+	if ((fd >= 0) && get_kgsl_info(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 
 		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
@@ -1078,7 +956,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		}
 	}
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
+	if ((fd >= 0) && get_kgsl_info(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 		if (buf)
 			buf->hostptr = ret;
@@ -1111,7 +989,7 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t o
 	pthread_mutex_lock(&l);
 #endif
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
+	if ((fd >= 0) && get_kgsl_info(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 
 		printf("< [%4d]         : mmap64: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
@@ -1131,7 +1009,7 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t o
 		}
 	}
 
-	if (get_kgsl_info(fd) || is_drm(fd)) {
+	if ((fd >= 0) && get_kgsl_info(fd)) {
 		struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 		if (buf)
 			buf->hostptr = ret;
