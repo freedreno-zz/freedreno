@@ -101,6 +101,9 @@ static struct device_info kgsl_2d_info = {
 
 static struct {
 	int is_3d, is_2d;
+#ifdef FAKE
+	int is_emulated;
+#endif
 } file_table[1024];
 
 static struct device_info * get_kgsl_info(int fd)
@@ -289,6 +292,17 @@ static void dump_buffer(unsigned int gpuaddr)
 	}
 }
 
+#ifdef FAKE
+uint32_t alloc_gpuaddr(uint32_t size)
+{
+	// TODO need better scheme to deal w/ deallocation..
+	static uint32_t gpuaddr = 0xc0000000;
+	uint32_t addr = gpuaddr;
+	gpuaddr += size;
+	return addr;
+}
+#endif
+
 /*****************************************************************************/
 
 int open(const char* path, int flags, ...)
@@ -306,7 +320,21 @@ int open(const char* path, int flags, ...)
 
 		ret = orig_open(path, flags, mode);
 	} else {
+#ifdef FAKE
+		const char *actual_path = path;
+		if (access(path, F_OK) && (path == strstr(path, "/dev/"))) {
+			/* fake non-existant device files: */
+			printf("emulating: %s\n", path);
+			actual_path = "/dev/null";
+		}
+		ret = orig_open(actual_path, flags);
+		if ((ret != -1) && (path != actual_path)) {
+			assert(ret < ARRAY_SIZE(file_table));
+			file_table[ret].is_emulated = 1;
+		}
+#else
 		ret = orig_open(path, flags);
+#endif
 	}
 
 #ifdef USE_PTHREADS
@@ -316,6 +344,12 @@ int open(const char* path, int flags, ...)
 	if (ret != -1) {
 		assert(ret < ARRAY_SIZE(file_table));
 		if (!strcmp(path, "/dev/kgsl-3d0")) {
+#ifdef FAKE
+			if (!(wrap_gpu_id() && wrap_gmem_size())) {
+				printf("need WRAP_GPU_ID/WRAP_GMEM_SIZE!\n");
+				return -1;
+			}
+#endif
 			file_table[ret].is_3d = 1;
 			printf("found kgsl_3d0: %d\n", ret);
 		} else if (!strcmp(path, "/dev/kgsl-2d0")) {
@@ -351,6 +385,9 @@ int close(int fd)
 		}
 		file_table[fd].is_3d = 0;
 		file_table[fd].is_2d = 0;
+#ifdef FAKE
+		file_table[fd].is_emulated = 0;
+#endif
 	}
 
 #ifdef USE_PTHREADS
@@ -549,6 +586,10 @@ static void kgsl_ioctl_drawctxt_create_pre(int fd,
 static void kgsl_ioctl_drawctxt_create_post(int fd,
 		struct kgsl_drawctxt_create *param)
 {
+#ifdef FAKE
+	static unsigned ctxid = 0;
+	param->drawctxt_id = ++ctxid;
+#endif
 	printf("\t\tdrawctxt_id:\t%08x\n", param->drawctxt_id);
 }
 
@@ -590,6 +631,11 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 					((minor & 0xff) << 8) |
 					((major & 0xff) << 16) |
 					((core & 0xff) << 24);
+#ifdef FAKE
+			devinfo->device_id = 1;
+			devinfo->mmu_enabled = 1;
+			devinfo->gmem_gpubaseaddr = 0;
+#endif
 			printf("\t\tEMULATING gpu_id: %d (%08x)!!!\n",
 					devinfo->gpu_id, devinfo->chip_id);
 		}
@@ -606,6 +652,13 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 		rd_write_section(RD_GPU_ID, &gpu_id, sizeof(gpu_id));
 		printf("\t\tgpu_id: %d\n", gpu_id);
 		printf("\t\tgmem_sizebytes: 0x%x\n", devinfo->gmem_sizebytes);
+#ifdef FAKE
+	} else if (param->type == KGSL_PROP_DEVICE_SHADOW) {
+		struct kgsl_shadowprop *shadow = param->value;
+		shadow->gpuaddr = 0xc0009000;
+		shadow->size = 0x2000;
+		shadow->flags = 0x00000204;
+#endif
 	}
 	hexdump(param->value, param->sizebytes);
 }
@@ -767,6 +820,9 @@ static void kgsl_ioctl_sharedmem_from_vmalloc_pre(int fd,
 			break;
 		}
 	}
+#ifdef FAKE
+	param->gpuaddr = alloc_gpuaddr(len);
+#endif
 	printf("\t\tlen:\t\t%08x\n", len);
 }
 
@@ -822,6 +878,14 @@ static void kgsl_ioctl_gpumem_alloc_id_post(int fd,
 		struct kgsl_gpumem_alloc_id *param)
 {
 	struct buffer *buf;
+#ifdef FAKE
+	static int id = 0;
+
+	param->id = ++id;
+	param->mmapsize = ALIGN(param->size, 0x1000);
+	param->gpuaddr = alloc_gpuaddr(param->mmapsize);
+#endif
+
 	log_gpuaddr(param->gpuaddr, param->size);
 	printf("\t\tid:\t%u\n", param->id);
 	printf("\t\tgpuaddr:\t%08lx\n", param->gpuaddr);
@@ -849,6 +913,18 @@ static void kgls_ioctl_perfcounter_get_post(int fd,
 		struct kgsl_perfcounter_get *param)
 {
 	char buf[128];
+#ifdef FAKE
+	static struct {
+		uint32_t hi, lo;
+	} cache[10][10];
+	if (cache[param->groupid][param->countable].lo == 0) {
+		static int off = 0x9c; // REG_A4XX_RBBM_PERFCTR_CP_0_LO
+		cache[param->groupid][param->countable].lo = off++;
+		cache[param->groupid][param->countable].hi = off++;
+	}
+	param->offset = cache[param->groupid][param->countable].lo;
+	param->offset_hi = cache[param->groupid][param->countable].hi;
+#endif
 	printf("\t\tgroupid:\t%u\n", param->groupid);
 	printf("\t\tcountable:\t%u\n", param->countable);
 	printf("\t\toffset_lo:\t0x%x\n", param->offset);
@@ -979,11 +1055,15 @@ int ioctl(int fd, unsigned long int request, ...)
 	pthread_mutex_unlock(&l);
 #endif
 
+#ifdef FAKE
+	if (file_table[fd].is_emulated) {
+#else
 	if (((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_SUBMIT_COMMANDS)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID))) &&
 			get_kgsl_info(fd) && (wrap_gpu_id() || wrap_gmem_size())) {
+#endif
 		/* don't actually submit cmds to hw.. because we are pretending to
 		 * be something different from the actual hw
 		 */
@@ -1036,8 +1116,17 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		}
 	}
 
-	if (!ret)
+	if (!ret) {
+#ifdef FAKE
+		if ((fd >= 0) && file_table[fd].is_emulated) {
+			ret = malloc(length);
+		} else {
+			ret = orig_mmap(addr, length, prot, flags, fd, offset);
+		}
+#else
 		ret = orig_mmap(addr, length, prot, flags, fd, offset);
+#endif
+	}
 
 	if ((fd >= 0) && get_kgsl_info(fd)) {
 		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
@@ -1087,8 +1176,17 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, int64_t off
 		}
 	}
 
-	if (!ret)
+	if (!ret) {
+#ifdef FAKE
+		if ((fd >= 0) && file_table[fd].is_emulated) {
+			ret = calloc(1, length);
+		} else {
+			ret = orig_mmap64(addr, length, prot, flags, fd, offset);
+		}
+#else
 		ret = orig_mmap64(addr, length, prot, flags, fd, offset);
+#endif
+	}
 
 	if ((fd >= 0) && get_kgsl_info(fd)) {
 		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
