@@ -420,7 +420,7 @@ static void dump_ib(struct kgsl_ibdesc *ibdesc)
 		uint32_t off = ibdesc->gpuaddr - buf->gpuaddr;
 		uint32_t *ptr = buf->hostptr + off;
 
-		printf("\t\tcmd: (%u dwords)\n", ibdesc->sizedwords);
+		printf("\t\tcmd: (%u dwords)\n", (uint32_t)ibdesc->sizedwords);
 
 		hexdump_dwords(ptr, ibdesc->sizedwords);
 
@@ -499,7 +499,7 @@ so the context, restored on context switch, is the first: 320 (0x140) words
 	for (i = 0; i < param->numibs; i++) {
 		// z180_cmdstream_issueibcmds or adreno_ringbuffer_issueibcmds
 		printf("\t\tibdesc[%d].ctrl:\t\t%08x\n", i, ibdesc[i].ctrl);
-		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, ibdesc[i].sizedwords);
+		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, (uint32_t)ibdesc[i].sizedwords);
 		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
 		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
 		if (is2d) {
@@ -561,7 +561,7 @@ static void kgsl_ioctl_submit_commands_pre(int fd,
 	printf("\t\tnumibs:\t\t%08x\n", param->numcmds);
 	for (i = 0; i < param->numcmds; i++) {
 		printf("\t\tibdesc[%d].ctrl:\t\t%08x\n", i, ibdesc[i].ctrl);
-		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, ibdesc[i].sizedwords);
+		printf("\t\tibdesc[%d].sizedwords:\t%08x\n", i, (uint32_t)ibdesc[i].sizedwords);
 		printf("\t\tibdesc[%d].gpuaddr:\t%08x\n", i, ibdesc[i].gpuaddr);
 		printf("\t\tibdesc[%d].hostptr:\t%p\n", i, ibdesc[i].hostptr);
 		dump_ib(&ibdesc[i]);
@@ -638,7 +638,7 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 		}
 		if (wrap_gmem_size()) {
 			devinfo->gmem_sizebytes = wrap_gmem_size();
-			printf("\t\tEMULATING gmem_sizebytes: %d !!!\n", devinfo->gmem_sizebytes);
+			printf("\t\tEMULATING gmem_sizebytes: %u !!!\n", (uint32_t)devinfo->gmem_sizebytes);
 		}
 		gpu_id = devinfo->gpu_id;
 		if (!gpu_id) {
@@ -648,7 +648,7 @@ static void kgsl_ioctl_device_getproperty_post(int fd,
 		}
 		rd_write_section(RD_GPU_ID, &gpu_id, sizeof(gpu_id));
 		printf("\t\tgpu_id: %d\n", gpu_id);
-		printf("\t\tgmem_sizebytes: 0x%x\n", devinfo->gmem_sizebytes);
+		printf("\t\tgmem_sizebytes: 0x%x\n", (uint32_t)devinfo->gmem_sizebytes);
 #ifdef FAKE
 	} else if (param->type == KGSL_PROP_DEVICE_SHADOW) {
 		struct kgsl_shadowprop *shadow = param->value;
@@ -845,7 +845,7 @@ static void kgsl_ioctl_gpumem_alloc_pre(int fd,
 		struct kgsl_gpumem_alloc *param)
 {
 	printf("\t\tflags:\t\t%08x\n", param->flags);
-	printf("\t\tsize:\t\t%08x\n", param->size);
+	printf("\t\tsize:\t\t%08x\n", (uint32_t)param->size);
 }
 
 static void kgsl_ioctl_gpumem_alloc_post(int fd,
@@ -864,7 +864,7 @@ static void kgsl_ioctl_gpumem_alloc_id_pre(int fd,
 		struct kgsl_gpumem_alloc_id *param)
 {
 	printf("\t\tflags:\t\t%08x\n", param->flags);
-	printf("\t\tsize:\t\t%08x\n", param->size);
+	printf("\t\tsize:\t\t%08x\n", (uint32_t)param->size);
 	/* easier to force it not to USE_CPU_MAP than dealing with
 	 * the mmap dance:
 	 */
@@ -1094,8 +1094,8 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 		struct buffer *buf = find_buffer(NULL, 0, 0, 0, offset >> 12); // XXX only id's are used now
 
-		printf("< [%4d]         : mmap: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
-				fd, addr, length, prot, flags, offset);
+		printf("< [%4d]         : mmap: addr=%p, length=%u, prot=%x, flags=%x, offset=%08lx\n",
+				fd, addr, (uint32_t)length, prot, flags, offset);
 
 		if (buf && buf->hostptr) {
 			buf->munmap = 0;
@@ -1149,8 +1149,8 @@ void *mmap64(void *addr, size_t length, int prot, int flags, int fd, int64_t off
 		//struct buffer *buf = find_buffer(NULL, 0, offset, 0, 0);
 		struct buffer *buf = find_buffer(NULL, 0, 0, 0, offset >> 12); // XXX only id's are used now
 
-		printf("< [%4d]         : mmap64: addr=%p, length=%d, prot=%x, flags=%x, offset=%08lx\n",
-				fd, addr, length, prot, flags, offset);
+		printf("< [%4d]         : mmap64: addr=%p, length=%u, prot=%x, flags=%x, offset=%08lx\n",
+				fd, addr, (uint32_t)length, prot, flags, offset);
 
 		if (buf && buf->hostptr) {
 			printf("  [%4d]	    : (recycled from buf=%p)\n", fd, buf);
