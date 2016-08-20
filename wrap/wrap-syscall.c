@@ -226,7 +226,8 @@ static void dumpfile(const char *file)
 
 struct buffer {
 	void *hostptr;
-	unsigned int gpuaddr, flags, len, handle, id;
+	unsigned int flags, len, handle, id;
+	uint64_t gpuaddr;
 	uint64_t offset;
 	struct list node;
 	int munmap;
@@ -247,7 +248,7 @@ static struct buffer * register_buffer(void *hostptr, unsigned int flags,
 	return buf;
 }
 
-static struct buffer * find_buffer(void *hostptr, unsigned int gpuaddr,
+static struct buffer * find_buffer(void *hostptr, uint64_t gpuaddr,
 		uint64_t offset, unsigned int handle, unsigned id)
 {
 	struct buffer *buf = NULL;
@@ -281,14 +282,14 @@ static void unregister_buffer(struct buffer *buf)
 	}
 }
 
-static void dump_buffer(unsigned int gpuaddr)
+static void dump_buffer(uint64_t gpuaddr)
 {
 	static int cnt = 0;
 	struct buffer *buf = find_buffer((void *)-1, gpuaddr, 0, 0, 0);
 	if (buf) {
 		char filename[32];
 		int fd;
-		sprintf(filename, "%04d-%08x.dat", cnt, buf->gpuaddr);
+		sprintf(filename, "%04d-%016lx.dat", cnt, buf->gpuaddr);
 		printf("\t\tdumping: %s\n", filename);
 		fd = open(filename, O_WRONLY| O_TRUNC | O_CREAT, 0644);
 		write(fd, buf->hostptr, buf->len);
@@ -394,14 +395,23 @@ int close(int fd)
 	return orig_close(fd);
 }
 
-static void log_gpuaddr(uint32_t gpuaddr, uint32_t len)
+static void log_gpuaddr(uint64_t gpuaddr, uint32_t len)
 {
-	uint32_t sect[2] = {
-			gpuaddr, len
+	uint32_t sect[3] = {
+			/* upper 32b of gpuaddr added after len for backwards compat */
+			gpuaddr, len, gpuaddr >> 32,
 	};
 	rd_write_section(RD_GPUADDR, sect, sizeof(sect));
 }
 
+static void log_cmdaddr(uint64_t gpuaddr, uint32_t sizedwords)
+{
+	uint32_t sect[3] = {
+			/* upper 32b of gpuaddr added after len for backwards compat */
+			gpuaddr, sizedwords, gpuaddr >> 32,
+	};
+	rd_write_section(RD_CMDSTREAM_ADDR, sect, sizeof(sect));
+}
 
 static void dump_ib_prep(void)
 {
@@ -437,9 +447,7 @@ static void dump_ib(struct kgsl_ibdesc *ibdesc)
 		/* we already dump all the buffer contents, so just need
 		 * to dump the address/size of the cmdstream:
 		 */
-		rd_write_section(RD_CMDSTREAM_ADDR, (uint32_t[2]) {
-			ibdesc->gpuaddr, ibdesc->sizedwords,
-		}, 8);
+		log_cmdaddr(ibdesc->gpuaddr, ibdesc->sizedwords);
 	}
 }
 
