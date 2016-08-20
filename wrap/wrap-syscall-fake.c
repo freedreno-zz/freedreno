@@ -304,15 +304,6 @@ uint32_t alloc_gpuaddr(uint32_t size)
 	return addr;
 }
 
-uint32_t alloc_gpuaddr(uint32_t size)
-{
-	// TODO need better scheme to deal w/ deallocation..
-	static uint32_t gpuaddr = 0xc0000000;
-	uint32_t addr = gpuaddr;
-	gpuaddr += size;
-	return addr;
-}
-
 /*****************************************************************************/
 
 int open(const char* path, int flags, ...)
@@ -980,7 +971,7 @@ void * mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 	return ret;
 }
 
-void *mmap64(void *addr, size_t length, int prot, int flags, int fd, __off64_t offset)
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, int64_t offset)
 {
 	void *ret = NULL;
 	PROLOG(mmap64);
