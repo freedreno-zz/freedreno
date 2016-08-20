@@ -80,7 +80,7 @@ void rd_start(const char *name, const char *fmt, ...)
 	testnum = getenv("TESTNUM");
 	if (testnum) {
 		n = strtol(testnum, NULL, 0);
-		sprintf(buf, "trace-%04u.rd", n);
+		sprintf(buf, "%s-%04u.rd", name, n);
 	} else {
 		sprintf(buf, "/sdcard/trace.rd");
 	}
