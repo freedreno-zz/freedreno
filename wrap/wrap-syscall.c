@@ -74,6 +74,12 @@ static struct device_info kgsl_3d_info = {
 				/* kgsl-3d specific ioctls: */
 				IOCTL_INFO(IOCTL_KGSL_DRAWCTXT_SET_BIN_BASE_OFFSET),
 				IOCTL_INFO(IOCTL_KGSL_SUBMIT_COMMANDS),
+				IOCTL_INFO(IOCTL_KGSL_SYNCSOURCE_CREATE),
+				IOCTL_INFO(IOCTL_KGSL_SYNCSOURCE_DESTROY),
+				IOCTL_INFO(IOCTL_KGSL_GPUOBJ_ALLOC),
+				IOCTL_INFO(IOCTL_KGSL_GPUOBJ_FREE),
+				IOCTL_INFO(IOCTL_KGSL_GPUOBJ_INFO),
+				IOCTL_INFO(IOCTL_KGSL_GPU_COMMAND),
 		},
 };
 
@@ -226,7 +232,8 @@ static void dumpfile(const char *file)
 
 struct buffer {
 	void *hostptr;
-	unsigned int flags, len, handle, id;
+	unsigned int len, handle, id;
+	uint64_t flags;
 	uint64_t gpuaddr;
 	uint64_t offset;
 	struct list node;
@@ -236,7 +243,7 @@ struct buffer {
 
 static LIST_HEAD(buffers_of_interest);
 
-static struct buffer * register_buffer(void *hostptr, unsigned int flags,
+static struct buffer * register_buffer(void *hostptr, uint64_t flags,
 		unsigned int len, unsigned int handle)
 {
 	struct buffer *buf = calloc(1, sizeof *buf);
@@ -448,6 +455,37 @@ static void dump_ib(struct kgsl_ibdesc *ibdesc)
 		 * to dump the address/size of the cmdstream:
 		 */
 		log_cmdaddr(ibdesc->gpuaddr, ibdesc->sizedwords);
+	}
+}
+
+static void dump_cmd(struct kgsl_command_object *cmd)
+{
+	/* note: kgsl seems to ignore cmd->offset.. which may be a bug.. */
+	struct buffer *buf = find_buffer(NULL, cmd->gpuaddr, 0, 0, 0);
+	if (buf && buf->hostptr) {
+		struct buffer *other_buf;
+		uint32_t sizedwords = cmd->size / 4;
+		uint32_t off = cmd->gpuaddr - buf->gpuaddr;
+		uint32_t *ptr = buf->hostptr + off;
+
+		printf("\t\tcmd: (%u dwords)\n", sizedwords);
+
+		hexdump_dwords(ptr, sizedwords);
+
+		list_for_each_entry(other_buf, &buffers_of_interest, node) {
+			if (other_buf && other_buf->hostptr && !other_buf->dumped) {
+				uint32_t len = other_buf->len;
+				log_gpuaddr(other_buf->gpuaddr, len);
+				rd_write_section(RD_BUFFER_CONTENTS,
+						other_buf->hostptr, len);
+				other_buf->dumped = 1;
+			}
+		}
+
+		/* we already dump all the buffer contents, so just need
+		 * to dump the address/size of the cmdstream:
+		 */
+		log_cmdaddr(cmd->gpuaddr, sizedwords);
 	}
 }
 
@@ -953,6 +991,96 @@ static void kgls_ioctl_perfcounter_put_pre(int fd,
 			param->groupid, param->countable));
 }
 
+static void kgls_ioctl_gpuobj_alloc_pre(int fd,
+		struct kgsl_gpuobj_alloc *param)
+{
+	printf("\t\tflags:\t\t%08x %08x\n", (uint32_t)(param->flags >> 32), (uint32_t)param->flags);
+	printf("\t\tsize:\t\t%08x\n", (uint32_t)param->size);
+	/* easier to force it not to USE_CPU_MAP than dealing with
+	 * the mmap dance:
+	 */
+	param->flags &= ~KGSL_MEMFLAGS_USE_CPU_MAP;
+}
+
+static void kgls_ioctl_gpuobj_alloc_post(int fd,
+		struct kgsl_gpuobj_alloc *param)
+{
+	struct buffer *buf;
+#ifdef FAKE
+	static int id = 0;
+
+	param->id = ++id;
+	param->mmapsize = ALIGN(param->size, 0x1000);
+#endif
+	printf("\t\tid:\t%u\n", param->id);
+	/* NOTE: host addr comes from mmap'ing w/ gpuaddr as offset */
+	buf = register_buffer(NULL, param->flags, param->size, 0);
+	buf->id = param->id;
+}
+
+static void kgls_ioctl_gpuobj_free_pre(int fd,
+		struct kgsl_gpuobj_free *param)
+{
+	printf("\t\tid:\t%u\n", param->id);
+}
+
+static void kgls_ioctl_gpuobj_free_post(int fd,
+		struct kgsl_gpuobj_free *param)
+{
+	struct buffer *buf = find_buffer((void *)-1, 0, 0, 0, param->id);
+	unregister_buffer(buf);
+}
+
+static void kgsl_ioclt_gpuobj_info_pre(int fd,
+		struct kgsl_gpuobj_info *param)
+{
+	printf("\t\tid:\t%u\n", param->id);
+}
+
+static void kgsl_ioclt_gpuobj_info_post(int fd,
+		struct kgsl_gpuobj_info *param)
+{
+	struct buffer *buf = find_buffer((void *)-1, 0, 0, 0, param->id);
+#ifdef FAKE
+	param->size = buf->len;
+	param->gpuaddr = alloc_gpuaddr(ALIGN(buf->len, 0x1000));
+#endif
+
+	log_gpuaddr(param->gpuaddr, param->size);
+	printf("\t\tid:\t%u\n", param->id);
+	printf("\t\tgpuaddr:\t%08lx\n", param->gpuaddr);
+	buf->gpuaddr = param->gpuaddr;
+	buf->offset = param->gpuaddr;
+}
+
+static void kgls_ioctl_gpuobj_gpu_command_pre(int fd,
+		struct kgsl_gpu_command *param)
+{
+	int i;
+	struct kgsl_command_object *cmdobj;
+
+	dump_ib_prep();
+
+	cmdobj = (struct kgsl_command_object *)param->cmdlist;
+
+	printf("\t\tdrawctxt_id:\t%08x\n", param->context_id);
+	printf("\t\tflags:\t\t%08x %08x\n", (uint32_t)(param->flags >> 32), (uint32_t)param->flags);
+	printf("\t\tnumcmds:\t\t%08x\n", param->numcmds);
+
+	for (i = 0; i < param->numcmds; i++) {
+		printf("\t\tcmd[%d].flags:\t\t%08x\n", i, cmdobj[i].flags);
+		printf("\t\tcmd[%d].sizedwords:\t%08x\n", i, (uint32_t)cmdobj[i].size / 4);
+		printf("\t\tcmd[%d].gpuaddr:\t%08x\n", i, cmdobj[i].gpuaddr);
+		dump_cmd(&cmdobj[i]);
+	}
+}
+
+static void kgls_ioctl_gpuobj_gpu_command_post(int fd,
+		struct kgsl_gpu_command *param)
+{
+	printf("\t\ttimestamp:\t%08x\n", param->timestamp);
+}
+
 static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 {
 	dump_ioctl(get_kgsl_info(fd), _IOC_WRITE, fd, request, ptr, 0);
@@ -983,6 +1111,18 @@ static void kgsl_ioctl_pre(int fd, unsigned long int request, void *ptr)
 		break;
 	case _IOC_NR(IOCTL_KGSL_PERFCOUNTER_PUT):
 		kgls_ioctl_perfcounter_put_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUOBJ_ALLOC):
+		kgls_ioctl_gpuobj_alloc_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUOBJ_FREE):
+		kgls_ioctl_gpuobj_free_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUOBJ_INFO):
+		kgsl_ioclt_gpuobj_info_pre(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPU_COMMAND):
+		kgls_ioctl_gpuobj_gpu_command_pre(fd, ptr);
 		break;
 	}
 }
@@ -1017,6 +1157,18 @@ static void kgsl_ioctl_post(int fd, unsigned long int request, void *ptr, int re
 		break;
 	case _IOC_NR(IOCTL_KGSL_PERFCOUNTER_GET):
 		kgls_ioctl_perfcounter_get_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUOBJ_ALLOC):
+		kgls_ioctl_gpuobj_alloc_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUOBJ_FREE):
+		kgls_ioctl_gpuobj_free_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPUOBJ_INFO):
+		kgsl_ioclt_gpuobj_info_post(fd, ptr);
+		break;
+	case _IOC_NR(IOCTL_KGSL_GPU_COMMAND):
+		kgls_ioctl_gpuobj_gpu_command_post(fd, ptr);
 		break;
 	}
 }
@@ -1061,6 +1213,7 @@ int ioctl(int fd, unsigned long int request, ...)
 #else
 	if (((_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_RINGBUFFER_ISSUEIBCMDS)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_SUBMIT_COMMANDS)) ||
+			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_GPU_COMMAND)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP)) ||
 			(_IOC_NR(request) == _IOC_NR(IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID))) &&
 			get_kgsl_info(fd) && (wrap_gpu_id() || wrap_gmem_size())) {
