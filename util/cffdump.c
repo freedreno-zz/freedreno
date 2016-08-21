@@ -471,7 +471,7 @@ static void reg_dump_gpuaddr(const char *name, uint32_t dword, int level)
 	}
 }
 
-static void dump_shader(const char *ext, char *buf, int bufsz)
+static void dump_shader(const char *ext, void *buf, int bufsz)
 {
 	if (dump_shaders) {
 		static int n = 0;
@@ -1797,8 +1797,8 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			printl(3, "t0");
 			count = type0_pkt_size(dwords[0]) + 1;
 			val = type0_pkt_offset(dwords[0]);
-			printl(3, "%swrite %s%s\n", levels[level+1], regname(val, 1),
-					(dwords[0] & 0x8000) ? " (same register)" : "");
+			printl(3, "%swrite %s%s (%04x)\n", levels[level+1], regname(val, 1),
+					(dwords[0] & 0x8000) ? " (same register)" : "", val);
 			dump_registers(val, dwords+1, count-1, level+2);
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);
@@ -1807,7 +1807,7 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 			printl(3, "t4");
 			count = type4_pkt_size(dwords[0]) + 1;
 			val = type4_pkt_offset(dwords[0]);
-			printl(3, "%swrite %s\n", levels[level+1], regname(val, 1));
+			printl(3, "%swrite %s (%04x)\n", levels[level+1], regname(val, 1), val);
 			dump_registers(val, dwords+1, count-1, level+2);
 			if (!quiet(3))
 				dump_hex(dwords, count, level+1);

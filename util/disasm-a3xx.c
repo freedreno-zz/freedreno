@@ -324,10 +324,10 @@ static void print_src(struct reginfo *info)
 			info->neg, info->abs, info->addr_rel);
 }
 
-static void print_dst(struct reginfo *info)
-{
-	print_reg_dst(info->reg, info->full, info->addr_rel);
-}
+//static void print_dst(struct reginfo *info)
+//{
+//	print_reg_dst(info->reg, info->full, info->addr_rel);
+//}
 
 static void print_instr_cat0(instr_t *instr)
 {
@@ -667,11 +667,6 @@ static void print_instr_cat5(instr_t *instr)
 				printf("\t{5: %x,%x}", cat5->norm.dummy1, cat5->dummy2);
 		}
 	}
-}
-
-static int32_t u2i(uint32_t val, int nbits)
-{
-	return ((val >> (nbits-1)) * ~((1 << nbits) - 1)) | val;
 }
 
 static void print_instr_cat6(instr_t *instr)
