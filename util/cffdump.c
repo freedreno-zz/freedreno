@@ -69,6 +69,11 @@ static inline unsigned regcnt(void)
 		return 0x7fff;
 }
 
+static int is_64b(void)
+{
+	return gpu_id >= 500;
+}
+
 /* note: not sure if CP_SET_DRAW_STATE counts as a complete extra level
  * of IB or if it is restricted to just have register writes:
  */
@@ -200,13 +205,14 @@ static uint32_t regbase(const char *name);
 
 struct buffer {
 	void *hostptr;
-	unsigned int gpuaddr, len;
+	unsigned int len;
+	uint64_t gpuaddr;
 };
 
 static struct buffer buffers[512];
 static int nbuffers;
 
-static int buffer_contains_gpuaddr(struct buffer *buf, uint32_t gpuaddr, uint32_t len)
+static int buffer_contains_gpuaddr(struct buffer *buf, uint64_t gpuaddr, uint32_t len)
 {
 	return (buf->gpuaddr <= gpuaddr) && (gpuaddr < (buf->gpuaddr + buf->len));
 }
@@ -217,7 +223,7 @@ static int buffer_contains_hostptr(struct buffer *buf, void *hostptr)
 }
 
 
-static uint32_t gpuaddr(void *hostptr)
+static uint64_t gpuaddr(void *hostptr)
 {
 	int i;
 	for (i = 0; i < nbuffers; i++)
@@ -226,7 +232,7 @@ static uint32_t gpuaddr(void *hostptr)
 	return 0;
 }
 
-static uint32_t gpubaseaddr(uint32_t gpuaddr)
+static uint64_t gpubaseaddr(uint64_t gpuaddr)
 {
 	int i;
 	if (!gpuaddr)
@@ -237,7 +243,7 @@ static uint32_t gpubaseaddr(uint32_t gpuaddr)
 	return 0;
 }
 
-static void *hostptr(uint32_t gpuaddr)
+static void *hostptr(uint64_t gpuaddr)
 {
 	int i;
 	if (!gpuaddr)
@@ -248,7 +254,7 @@ static void *hostptr(uint32_t gpuaddr)
 	return 0;
 }
 
-static unsigned hostlen(uint32_t gpuaddr)
+static unsigned hostlen(uint64_t gpuaddr)
 {
 	int i;
 	if (!gpuaddr)
@@ -263,10 +269,15 @@ static void dump_hex(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	int i;
 	for (i = 0; i < sizedwords; i++) {
-		if ((i % 8) == 0)
-			printf("%08x:%s", gpuaddr(dwords), levels[level]);
-		else
+		if ((i % 8) == 0) {
+			if (is_64b()) {
+				printf("%016lx:%s", gpuaddr(dwords), levels[level]);
+			} else {
+				printf("%08x:%s", (uint32_t)gpuaddr(dwords), levels[level]);
+			}
+		} else {
 			printf(" ");
+		}
 		printf("%08x", *(dwords++));
 		if ((i % 8) == 7)
 			printf("\n");
@@ -279,10 +290,15 @@ static void dump_float(float *dwords, uint32_t sizedwords, int level)
 {
 	int i;
 	for (i = 0; i < sizedwords; i++) {
-		if ((i % 8) == 0)
-			printf("%08x:%s", gpuaddr(dwords), levels[level]);
-		else
+		if ((i % 8) == 0) {
+			if (is_64b()) {
+				printf("%016lx:%s", gpuaddr(dwords), levels[level]);
+			} else {
+				printf("%08x:%s", (uint32_t)gpuaddr(dwords), levels[level]);
+			}
+		} else {
 			printf(" ");
+		}
 		printf("%8f", *(dwords++));
 		if ((i % 8) == 7)
 			printf("\n");
@@ -299,6 +315,7 @@ looks like at least some of the bits above the format have different meaning..
 static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 		uint32_t *flags, uint32_t mask)
 {
+	assert(!is_64b());  /* this is only used on a2xx */
 	*gpuaddr = dword & ~mask;
 	*flags   = dword & mask;
 }
@@ -969,16 +986,16 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	enum adreno_state_block state_block_id = (dwords[0] >> 19) & 0x7;
 	enum adreno_state_type state_type = dwords[1] & 0x3;
 	uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
-	uint32_t ext_src_addr;
+	uint64_t ext_src_addr;
 	void *contents = NULL;
 	int i;
 
 	if (quiet(2))
 		return;
 
-	if (gpu_id >= 500) {
+	if (is_64b()) {
 		ext_src_addr = dwords[1] & 0xfffffffc;
-		// TODO 64b: high bits in dwords[2] ??
+		ext_src_addr |= ((uint64_t)dwords[2]) << 32;
 		contents = dwords + 3;
 	} else {
 		ext_src_addr = dwords[1] & 0xfffffffc;
@@ -1331,6 +1348,8 @@ static void cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 	uint32_t num_indices = draw_indx_common(dwords, level);
 	bool saved_summary = summary;
 
+	assert(!is_64b());
+
 	summary = false;
 
 	/* if we have an index buffer, dump that: */
@@ -1381,6 +1400,8 @@ static void cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 	void *ptr = &dwords[3];
 	int sz = 0;
 	bool saved_summary = summary;
+
+	assert(!is_64b());
 
 	summary = false;
 
@@ -1462,7 +1483,11 @@ static void cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
 		return;
 
 	/* attempt to decode as string: */
-	printf("%08x:%s", gpuaddr(dwords), levels[level]);
+	if (is_64b()) {
+		printf("%016lx:%s", gpuaddr(dwords), levels[level]);
+	} else {
+		printf("%08x:%s", (uint32_t)gpuaddr(dwords), levels[level]);
+	}
 	for (i = 0; i < 4 * sizedwords; i++) {
 		if (buf[i] == '\0')
 			break;
@@ -1476,13 +1501,14 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	/* traverse indirect buffers */
 	int i;
-	uint32_t ibaddr, ibsize;
+	uint64_t ibaddr;
+	uint32_t ibsize;
 	uint32_t *ptr = NULL;
 
-	if (gpu_id >= 500) {
+	if (is_64b()) {
 		/* a5xx+.. high 32b of gpu addr, then size: */
-		// TODO 64b: high bits in dwords[1] ??
 		ibaddr = dwords[0];
+		ibaddr |= ((uint64_t)dwords[1]) << 32;
 		ibsize = dwords[2];
 	} else {
 		ibaddr = dwords[0];
@@ -1490,7 +1516,11 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 
 	if (!quiet(3)) {
-		printf("%sibaddr:%08x\n", levels[level], ibaddr);
+		if (is_64b()) {
+			printf("%sibaddr:%016lx\n", levels[level], ibaddr);
+		} else {
+			printf("%sibaddr:%08x\n", levels[level], (uint32_t)ibaddr);
+		}
 		printf("%sibsize:%08x\n", levels[level], ibsize);
 	} else {
 		level--;
@@ -1509,7 +1539,7 @@ static void cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 		dump_commands(ptr, ibsize, level);
 		ib--;
 	} else {
-		fprintf(stderr, "could not find: %08x (%d)\n", ibaddr, ibsize);
+		fprintf(stderr, "could not find: %016lx (%d)\n", ibaddr, ibsize);
 	}
 }
 
@@ -1520,13 +1550,19 @@ static void cp_wfi(uint32_t *dwords, uint32_t sizedwords, int level)
 
 static void cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	uint32_t gpuaddr = dwords[0];
 
 	if (quiet(2))
 		return;
 
-	printf("%sgpuaddr:%08x\n", levels[level], gpuaddr);
-	dump_float((float *)&dwords[1], sizedwords-1, level+1);
+	if (is_64b()) {
+		uint64_t gpuaddr = dwords[0] | (((uint64_t)dwords[1]) << 32);
+		printf("%sgpuaddr:%016lx\n", levels[level], gpuaddr);
+		dump_float((float *)&dwords[2], sizedwords-2, level+1);
+	} else {
+		uint32_t gpuaddr = dwords[0];
+		printf("%sgpuaddr:%08x\n", levels[level], gpuaddr);
+		dump_float((float *)&dwords[1], sizedwords-1, level+1);
+	}
 }
 
 static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
@@ -1558,11 +1594,12 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 
 	for (i = 0; i < sizedwords; ) {
 		uint32_t count = dwords[i] & 0xffff;
-		uint32_t addr, *ptr;
+		uint64_t addr;
+		uint32_t *ptr;
 
-		if (gpu_id >= 500) {
+		if (is_64b()) {
 			addr = dwords[i + 1];
-			// TODO 64b: high bits in dwords[i + 2]
+			addr |= ((uint64_t)dwords[i + 2]) << 32;
 			i += 3;
 		} else {
 			addr = dwords[i + 1];
@@ -1589,8 +1626,10 @@ static void cp_dispatch_compute(uint32_t *dwords, uint32_t sizedwords, int level
 
 static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	uint32_t addr_hi, addr_lo;
+	uint64_t addr;
 	uint32_t *ptr, len;
+
+	assert(is_64b());
 
 	/* TODO seems to have two ptrs, 9 dwords total (incl pkt7 hdr)..
 	 * not sure if this can come in different sizes.
@@ -1615,16 +1654,13 @@ static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 	assert(gpu_id >= 500);
 
 	len = dwords[0];
-	addr_lo = dwords[1];
-	addr_hi = dwords[2];
+	addr = dwords[1];
+	addr |= ((uint64_t)dwords[2]) << 32;
 
-	// TODO 64b
-	assert(addr_hi == 0);
-
-	printl(3, "%saddr: 0x%08x\n", levels[level], addr_lo);
+	printl(3, "%saddr: 0x%016lx\n", levels[level], addr);
 	printl(3, "%slen:  0x%x\n", levels[level], len);
 
-	ptr = hostptr(addr_lo);
+	ptr = hostptr(addr);
 
 	// XXX
 	len = 32;
@@ -1636,16 +1672,13 @@ static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 
 	len = dwords[5];
-	addr_lo = dwords[6];
-	addr_hi = dwords[7];
+	addr = dwords[6];
+	addr |= ((uint64_t)dwords[7]) << 32;
 
-	// TODO 64b
-	assert(addr_hi == 0);
-
-	printl(3, "%saddr: 0x%08x\n", levels[level], addr_lo);
+	printl(3, "%saddr: 0x%016lx\n", levels[level], addr);
 	printl(3, "%slen:  0x%x\n", levels[level], len);
 
-	ptr = hostptr(addr_lo);
+	ptr = hostptr(addr);
 
 	if (ptr) {
 		if (!quiet(2)) {
@@ -2111,6 +2144,14 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+static void parse_addr(uint32_t *buf, int sz, unsigned int *len, uint64_t *gpuaddr)
+{
+	*gpuaddr = buf[0];
+	*len = buf[1];
+	if (sz > 8)
+		*gpuaddr |= ((uint64_t)(buf[2])) << 32;
+}
+
 static int handle_file(const char *filename, int start, int end, int draw)
 {
 	enum rd_sect_type type = RD_NONE;
@@ -2240,8 +2281,7 @@ static int handle_file(const char *filename, int start, int end, int draw)
 				nbuffers = 0;
 				needs_reset = false;
 			}
-			buffers[nbuffers].gpuaddr = ((uint32_t *)buf)[0];
-			buffers[nbuffers].len = ((uint32_t *)buf)[1];
+			parse_addr(buf, sz, &buffers[nbuffers].len, &buffers[nbuffers].gpuaddr);
 			break;
 		case RD_BUFFER_CONTENTS:
 			buffers[nbuffers].hostptr = buf;
@@ -2251,10 +2291,12 @@ static int handle_file(const char *filename, int start, int end, int draw)
 			break;
 		case RD_CMDSTREAM_ADDR:
 			if ((start <= submit) && (submit <= end)) {
+				unsigned int sizedwords;
+				uint64_t gpuaddr;
+				parse_addr(buf, sz, &sizedwords, &gpuaddr);
 				printl(2, "############################################################\n");
-				printl(2, "cmdstream: %d dwords\n", ((uint32_t *)buf)[1]);
-				dump_commands(hostptr(((uint32_t *)buf)[0]),
-						((uint32_t *)buf)[1], 0);
+				printl(2, "cmdstream: %d dwords\n", sizedwords);
+				dump_commands(hostptr(gpuaddr), sizedwords, 0);
 				printl(2, "############################################################\n");
 				printl(2, "vertices: %d\n", vertices);
 			}
