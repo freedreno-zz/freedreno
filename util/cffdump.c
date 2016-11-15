@@ -1354,10 +1354,25 @@ static void cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 }
 
+static void dump_register_summary(int level);
+
 static void cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
 {
-	printl(2, "%sevent %s\n", levels[level],
-			rnn_enumname(rnn, "vgt_event_type", dwords[0]));
+	const char *name = rnn_enumname(rnn, "vgt_event_type", dwords[0]);
+	printl(2, "%sevent %s\n", levels[level], name);
+
+	if (name && (gpu_id > 500)) {
+		char eventname[64];
+		snprintf(eventname, sizeof(eventname), "EVENT:%s", name);
+		if (!strcmp(name, "BLIT")) {
+			bool saved_summary = summary;
+			summary = false;
+			do_query(eventname, 0);
+			dump_register_summary(level);
+			draw_count++;
+			summary = saved_summary;
+		}
+	}
 }
 
 static void dump_register_summary(int level)
