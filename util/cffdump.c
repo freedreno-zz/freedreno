@@ -328,17 +328,29 @@ static void parse_dword_addr(uint32_t dword, uint32_t *gpuaddr,
 
 
 static uint32_t type0_reg_vals[0xffff + 1];
+static uint8_t type0_reg_rewritten[sizeof(type0_reg_vals)/8];  /* written since last draw */
 static uint8_t type0_reg_written[sizeof(type0_reg_vals)/8];
 static uint32_t lastvals[ARRAY_SIZE(type0_reg_vals)];
+
+static bool reg_rewritten(uint32_t regbase)
+{
+	return !!(type0_reg_rewritten[regbase/8] & (1 << (regbase % 8)));
+}
 
 bool reg_written(uint32_t regbase)
 {
 	return !!(type0_reg_written[regbase/8] & (1 << (regbase % 8)));
 }
 
+static void clear_rewritten(void)
+{
+	memset(type0_reg_rewritten, 0, sizeof(type0_reg_rewritten));
+}
+
 static void clear_written(void)
 {
 	memset(type0_reg_written, 0, sizeof(type0_reg_written));
+	clear_rewritten();
 }
 
 uint32_t reg_lastval(uint32_t regbase)
@@ -931,6 +943,7 @@ static void dump_registers(uint32_t regbase,
 
 		type0_reg_vals[regbase] = *dwords;
 		type0_reg_written[regbase/8] |= (1 << (regbase % 8));
+		type0_reg_rewritten[regbase/8] |= (1 << (regbase % 8));
 		dump_register(regbase, *dwords, level);
 		regbase++;
 		dwords++;
@@ -968,10 +981,13 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 static uint32_t bin_x1, bin_x2, bin_y1, bin_y2;
 static unsigned mode;
 
-/* well, actually query and script.. */
+/* well, actually query and script..
+ * NOTE: call this before dump_register_summary()
+ */
 static void do_query(const char *primtype, uint32_t num_indices)
 {
 	int i;
+	int n = 0;
 	for (i = 0; i < nquery; i++) {
 		uint32_t regbase = queryvals[i];
 		if (reg_written(regbase)) {
@@ -981,9 +997,23 @@ static void do_query(const char *primtype, uint32_t num_indices)
 			if (gpu_id >= 500)
 				printf("%s:", (mode & CP_SET_RENDER_MODE_3_GMEM_ENABLE) ? "GMEM" : "BYPASS");
 			printf("\t%08x", lastval);
+			if (lastval != lastvals[regbase]) {
+				printf("!");
+			} else {
+				printf(" ");
+			}
+			if (reg_rewritten(regbase)) {
+				printf("+");
+			} else {
+				printf(" ");
+			}
 			dump_register_val(regbase, lastval, 0);
+			n++;
 		}
 	}
+
+	if (n > 1)
+		printf("\n");
 
 	if (num_indices > 0)
 		script_draw(primtype, num_indices);
@@ -1347,13 +1377,21 @@ static void dump_register_summary(int level)
 		if (lastval != lastvals[regbase]) {
 			printl(2, "!");
 			lastvals[regbase] = lastval;
+		} else {
+			printl(2, " ");
 		}
-		if (!quiet(2))
+		if (reg_rewritten(regbase)) {
+			printl(2, "+");
+		} else {
+			printl(2, " ");
+		}
+		printl(2, "\t%08x", lastval);
+		if (!quiet(2)) {
 			dump_register(regbase, lastval, level);
+		}
 	}
 
-// XXX we probably want to separate "written ever" from "written since last draw"
-//	clear_written();
+	clear_rewritten();
 }
 
 static uint32_t draw_indx_common(uint32_t *dwords, int level)
@@ -1613,6 +1651,7 @@ static void cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 		printl(2, "NEEDS WFI: rmw (%s & 0x%08x) | 0x%08x)\n", regname(val, 1), and, or);
 	type0_reg_vals[val] = (type0_reg_vals[val] & and) | or;
 	type0_reg_written[val/8] |= (1 << (val % 8));
+	type0_reg_rewritten[val/8] |= (1 << (val % 8));
 }
 
 static void cp_reg_to_mem(uint32_t *dwords, uint32_t sizedwords, int level)
