@@ -887,13 +887,46 @@ static uint32_t regbase(const char *name)
 	return rnn_regbase(rnn, name);
 }
 
+static int endswith(uint32_t regbase, const char *suffix)
+{
+	const char *name = regname(regbase, 0);
+	const char *s = strstr(name, suffix);
+	if (!s)
+		return 0;
+	return (s - strlen(name) + strlen(suffix)) == name;
+}
+
 static void dump_register_val(uint32_t regbase, uint32_t dword, int level)
 {
 	struct rnndecaddrinfo *info = rnn_reginfo(rnn, regbase);
 
 	if (info && info->typeinfo) {
+		uint64_t gpuaddr = 0;
 		char *decoded = rnndec_decodeval(rnn->vc, info->typeinfo, dword, info->width);
-		printf("%s%s: %s\n", levels[level], info->name, decoded);
+		printf("%s%s: %s", levels[level], info->name, decoded);
+
+		/* Try and figure out if we are looking at a gpuaddr.. this
+		 * might be useful for other gen's too, but at least a5xx has
+		 * the _HI/_LO suffix we can look for.  Maybe a better approach
+		 * would be some special annotation in the xml..
+		 */
+		if (gpu_id >= 500) {
+			if (endswith(regbase, "_HI") && endswith(regbase-1, "_LO")) {
+				gpuaddr = (((uint64_t)dword) << 32) | reg_val(regbase-1);
+			} else if (endswith(regbase, "_LO") && endswith(regbase+1, "_HI")) {
+				gpuaddr = (((uint64_t)reg_val(regbase+1)) << 32) | dword;
+			}
+		}
+
+		if (gpuaddr && hostptr(gpuaddr)) {
+			printf("\t\tbase=%lx, offset=%lu, size=%u",
+					gpubaseaddr(gpuaddr),
+					gpuaddr - gpubaseaddr(gpuaddr),
+					hostlen(gpubaseaddr(gpuaddr)));
+		}
+
+		printf("\n");
+
 		free(decoded);
 	} else if (info) {
 		printf("%s%s: %08x\n", levels[level], info->name, dword);
