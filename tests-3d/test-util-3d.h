@@ -120,14 +120,134 @@ formatname(GLenum format)
 #ifdef GL_RGB8
 	ENUM(GL_RGB8);
 #endif
+#ifdef GL_RG
+	ENUM(GL_RG);
+#endif
+#ifdef GL_RG_INTEGER
+	ENUM(GL_RG_INTEGER);
+#endif
 #ifdef GL_RED
 	ENUM(GL_RED);
+#endif
+#ifdef GL_RED_INTEGER
+	ENUM(GL_RED_INTEGER);
+#endif
+#ifdef GL_RGB_INTEGER
+	ENUM(GL_RGB_INTEGER);
 #endif
 #ifdef GL_RGBA_INTEGER
 	ENUM(GL_RGBA_INTEGER);
 #endif
+#ifdef GL_RGB565
+	ENUM(GL_RGB565);
+#endif
+#ifdef GL_RGBA4
+	ENUM(GL_RGBA4);
+#endif
+#ifdef GL_RGB10_A2
+	ENUM(GL_RGB10_A2);
+#endif
+#ifdef GL_UNSIGNED_INT_10F_11F_11F_REV
+	ENUM(GL_UNSIGNED_INT_10F_11F_11F_REV);
+#endif
+#ifdef GL_UNSIGNED_INT_5_9_9_9_REV
+	ENUM(GL_UNSIGNED_INT_5_9_9_9_REV);
+#endif
+#ifdef GL_RGB8_SNORM
+	ENUM(GL_RGB8_SNORM);
+#endif
+#ifdef GL_RGBA8_SNORM
+	ENUM(GL_RGBA8_SNORM);
+#endif
+#ifdef GL_R11F_G11F_B10F
+	ENUM(GL_R11F_G11F_B10F);
+#endif
+#ifdef GL_RGB9_E5
+	ENUM(GL_RGB9_E5);
+#endif
+#ifdef GL_RGB8I
+	ENUM(GL_RGB8I);
+#endif
+#ifdef GL_RGB8UI
+	ENUM(GL_RGB8UI);
+#endif
+#ifdef GL_RGB16I
+	ENUM(GL_RGB16I);
+#endif
+#ifdef GL_RGB16UI
+	ENUM(GL_RGB16UI);
+#endif
 #ifdef GL_RGB16F
 	ENUM(GL_RGB16F);
+#endif
+#ifdef GL_RGBA16F
+	ENUM(GL_RGBA16F);
+#endif
+#ifdef GL_RGB32I
+	ENUM(GL_RGB32I);
+#endif
+#ifdef GL_RGB32UI
+	ENUM(GL_RGB32UI);
+#endif
+#ifdef GL_RGB32F
+	ENUM(GL_RGB32F);
+#endif
+#ifdef GL_RGBA32F
+	ENUM(GL_RGBA32F);
+#endif
+#ifdef GL_R16F
+	ENUM(GL_R16F);
+#endif
+#ifdef GL_R16I
+	ENUM(GL_R16I);
+#endif
+#ifdef GL_R16UI
+	ENUM(GL_R16UI);
+#endif
+#ifdef GL_RG16F
+	ENUM(GL_RG16F);
+#endif
+#ifdef GL_RG16I
+	ENUM(GL_RG16I);
+#endif
+#ifdef GL_RG16UI
+	ENUM(GL_RG16UI);
+#endif
+#ifdef GL_R32F
+	ENUM(GL_R32F);
+#endif
+#ifdef GL_R32I
+	ENUM(GL_R32I);
+#endif
+#ifdef GL_R32UI
+	ENUM(GL_R32UI);
+#endif
+#ifdef GL_RG32F
+	ENUM(GL_RG32F);
+#endif
+#ifdef GL_RG32I
+	ENUM(GL_RG32I);
+#endif
+#ifdef GL_RG32UI
+	ENUM(GL_RG32UI);
+#endif
+#ifdef GL_R8I
+	ENUM(GL_R8I);
+#endif
+#ifdef GL_R8UI
+	ENUM(GL_R8UI);
+#endif
+#ifdef GL_RG8
+	ENUM(GL_RG8);
+#endif
+#ifdef GL_RG8I
+	ENUM(GL_RG8I);
+#endif
+#ifdef GL_RG8UI
+	ENUM(GL_RG8UI);
+#endif
+#ifdef GL_RG8_SNORM
+	ENUM(GL_RG8_SNORM);
 #endif
 #ifdef GL_SRGB_EXT
 	ENUM(GL_SRGB_EXT);
