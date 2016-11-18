@@ -8,16 +8,19 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    364 bytes, from 2013-11-30 14:47:15)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1453 bytes, from 2013-03-31 16:51:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32580 bytes, from 2014-05-09 14:56:06)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  10186 bytes, from 2014-05-09 14:56:06)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  14477 bytes, from 2014-05-09 14:56:06)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  57702 bytes, from 2014-05-09 14:56:06)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          (  26293 bytes, from 2014-05-09 14:56:06)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    431 bytes, from 2016-04-26 17:56:44)
+- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2016-02-10 17:07:21)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32907 bytes, from 2016-11-08 15:54:02)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  12025 bytes, from 2016-08-29 18:54:50)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  21030 bytes, from 2016-11-17 16:40:16)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2016-09-27 16:21:25)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 110748 bytes, from 2016-11-17 22:30:07)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          (  89270 bytes, from 2016-11-18 01:27:50)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
 
-Copyright (C) 2013-2014 by the following authors:
+Copyright (C) 2013-2016 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
+- Ilia Mirkin <imirkin@alum.mit.edu> (imirkin)
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -201,6 +204,15 @@ enum a2xx_rb_copy_sample_select {
 	SAMPLE_01 = 4,
 	SAMPLE_23 = 5,
 	SAMPLE_0123 = 6,
+};
+
+enum a2xx_rb_blend_opcode {
+	BLEND2_DST_PLUS_SRC = 0,
+	BLEND2_SRC_MINUS_DST = 1,
+	BLEND2_MIN_DST_SRC = 2,
+	BLEND2_MAX_DST_SRC = 3,
+	BLEND2_DST_MINUS_SRC = 4,
+	BLEND2_DST_PLUS_SRC_BIAS = 5,
 };
 
 enum adreno_mmu_clnt_beh {
@@ -917,11 +929,11 @@ static inline uint32_t A2XX_VGT_DRAW_INITIATOR_INDEX_SIZE(enum pc_di_index_size 
 #define A2XX_VGT_DRAW_INITIATOR_NOT_EOP				0x00001000
 #define A2XX_VGT_DRAW_INITIATOR_SMALL_INDEX			0x00002000
 #define A2XX_VGT_DRAW_INITIATOR_PRE_DRAW_INITIATOR_ENABLE	0x00004000
-#define A2XX_VGT_DRAW_INITIATOR_NUM_INDICES__MASK		0xffff0000
-#define A2XX_VGT_DRAW_INITIATOR_NUM_INDICES__SHIFT		16
-static inline uint32_t A2XX_VGT_DRAW_INITIATOR_NUM_INDICES(uint32_t val)
+#define A2XX_VGT_DRAW_INITIATOR_NUM_INSTANCES__MASK		0xff000000
+#define A2XX_VGT_DRAW_INITIATOR_NUM_INSTANCES__SHIFT		24
+static inline uint32_t A2XX_VGT_DRAW_INITIATOR_NUM_INSTANCES(uint32_t val)
 {
-	return ((val) << A2XX_VGT_DRAW_INITIATOR_NUM_INDICES__SHIFT) & A2XX_VGT_DRAW_INITIATOR_NUM_INDICES__MASK;
+	return ((val) << A2XX_VGT_DRAW_INITIATOR_NUM_INSTANCES__SHIFT) & A2XX_VGT_DRAW_INITIATOR_NUM_INSTANCES__MASK;
 }
 
 #define REG_A2XX_VGT_IMMED_DATA					0x000021fd
@@ -996,7 +1008,7 @@ static inline uint32_t A2XX_RB_BLEND_CONTROL_COLOR_SRCBLEND(enum adreno_rb_blend
 }
 #define A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN__MASK		0x000000e0
 #define A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN__SHIFT		5
-static inline uint32_t A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN(enum adreno_rb_blend_opcode val)
+static inline uint32_t A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN(enum a2xx_rb_blend_opcode val)
 {
 	return ((val) << A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN__SHIFT) & A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN__MASK;
 }
@@ -1014,7 +1026,7 @@ static inline uint32_t A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(enum adreno_rb_blend
 }
 #define A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN__MASK		0x00e00000
 #define A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN__SHIFT		21
-static inline uint32_t A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN(enum adreno_rb_blend_opcode val)
+static inline uint32_t A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN(enum a2xx_rb_blend_opcode val)
 {
 	return ((val) << A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN__SHIFT) & A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN__MASK;
 }
@@ -1234,13 +1246,13 @@ static inline uint32_t A2XX_CLEAR_COLOR_ALPHA(uint32_t val)
 #define A2XX_PA_SU_POINT_SIZE_HEIGHT__SHIFT			0
 static inline uint32_t A2XX_PA_SU_POINT_SIZE_HEIGHT(float val)
 {
-	return ((((uint32_t)(val * 8.0))) << A2XX_PA_SU_POINT_SIZE_HEIGHT__SHIFT) & A2XX_PA_SU_POINT_SIZE_HEIGHT__MASK;
+	return ((((uint32_t)(val * 16.0))) << A2XX_PA_SU_POINT_SIZE_HEIGHT__SHIFT) & A2XX_PA_SU_POINT_SIZE_HEIGHT__MASK;
 }
 #define A2XX_PA_SU_POINT_SIZE_WIDTH__MASK			0xffff0000
 #define A2XX_PA_SU_POINT_SIZE_WIDTH__SHIFT			16
 static inline uint32_t A2XX_PA_SU_POINT_SIZE_WIDTH(float val)
 {
-	return ((((uint32_t)(val * 8.0))) << A2XX_PA_SU_POINT_SIZE_WIDTH__SHIFT) & A2XX_PA_SU_POINT_SIZE_WIDTH__MASK;
+	return ((((uint32_t)(val * 16.0))) << A2XX_PA_SU_POINT_SIZE_WIDTH__SHIFT) & A2XX_PA_SU_POINT_SIZE_WIDTH__MASK;
 }
 
 #define REG_A2XX_PA_SU_POINT_MINMAX				0x00002281
@@ -1248,13 +1260,13 @@ static inline uint32_t A2XX_PA_SU_POINT_SIZE_WIDTH(float val)
 #define A2XX_PA_SU_POINT_MINMAX_MIN__SHIFT			0
 static inline uint32_t A2XX_PA_SU_POINT_MINMAX_MIN(float val)
 {
-	return ((((uint32_t)(val * 8.0))) << A2XX_PA_SU_POINT_MINMAX_MIN__SHIFT) & A2XX_PA_SU_POINT_MINMAX_MIN__MASK;
+	return ((((uint32_t)(val * 16.0))) << A2XX_PA_SU_POINT_MINMAX_MIN__SHIFT) & A2XX_PA_SU_POINT_MINMAX_MIN__MASK;
 }
 #define A2XX_PA_SU_POINT_MINMAX_MAX__MASK			0xffff0000
 #define A2XX_PA_SU_POINT_MINMAX_MAX__SHIFT			16
 static inline uint32_t A2XX_PA_SU_POINT_MINMAX_MAX(float val)
 {
-	return ((((uint32_t)(val * 8.0))) << A2XX_PA_SU_POINT_MINMAX_MAX__SHIFT) & A2XX_PA_SU_POINT_MINMAX_MAX__MASK;
+	return ((((uint32_t)(val * 16.0))) << A2XX_PA_SU_POINT_MINMAX_MAX__SHIFT) & A2XX_PA_SU_POINT_MINMAX_MAX__MASK;
 }
 
 #define REG_A2XX_PA_SU_LINE_CNTL				0x00002282
@@ -1262,7 +1274,7 @@ static inline uint32_t A2XX_PA_SU_POINT_MINMAX_MAX(float val)
 #define A2XX_PA_SU_LINE_CNTL_WIDTH__SHIFT			0
 static inline uint32_t A2XX_PA_SU_LINE_CNTL_WIDTH(float val)
 {
-	return ((((uint32_t)(val * 8.0))) << A2XX_PA_SU_LINE_CNTL_WIDTH__SHIFT) & A2XX_PA_SU_LINE_CNTL_WIDTH__MASK;
+	return ((((uint32_t)(val * 16.0))) << A2XX_PA_SU_LINE_CNTL_WIDTH__SHIFT) & A2XX_PA_SU_LINE_CNTL_WIDTH__MASK;
 }
 
 #define REG_A2XX_PA_SC_LINE_STIPPLE				0x00002283

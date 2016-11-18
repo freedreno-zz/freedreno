@@ -1748,7 +1748,8 @@ static void cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 	}
 }
 
-static void cp_dispatch_compute(uint32_t *dwords, uint32_t sizedwords, int level)
+/* execute compute shader */
+static void cp_exec_cs(uint32_t *dwords, uint32_t sizedwords, int level)
 {
 	dump_register_summary(level);
 }
@@ -1884,7 +1885,7 @@ static const struct {
 		/* for a4xx */
 		CP(SET_DRAW_STATE, cp_set_draw_state),
 		CP(DRAW_INDX_OFFSET, cp_draw_indx_offset),
-		CP(DISPATCH_COMPUTE, cp_dispatch_compute),
+		CP(EXEC_CS, cp_exec_cs),
 
 		/* for a5xx */
 		CP(SET_RENDER_MODE, cp_set_render_mode),

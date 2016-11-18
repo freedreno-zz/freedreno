@@ -10,12 +10,12 @@ git clone https://github.com/freedreno/envytools.git
 The rules-ng-ng source files this header was generated from are:
 - /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    431 bytes, from 2016-04-26 17:56:44)
 - /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2016-02-10 17:07:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32901 bytes, from 2015-05-20 20:03:14)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  11792 bytes, from 2016-04-28 16:27:05)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  18129 bytes, from 2016-07-15 14:53:21)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83693 bytes, from 2016-04-28 16:26:16)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 110372 bytes, from 2016-06-01 01:08:15)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          (  66892 bytes, from 2016-07-15 15:02:20)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  32907 bytes, from 2016-11-08 15:54:02)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  12025 bytes, from 2016-08-29 18:54:50)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  21030 bytes, from 2016-11-17 16:40:16)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2016-09-27 16:21:25)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 110748 bytes, from 2016-11-17 22:30:07)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          (  89270 bytes, from 2016-11-18 01:27:50)
 - /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2015-09-24 17:30:00)
 
 Copyright (C) 2013-2016 by the following authors:
@@ -67,6 +67,9 @@ enum vgt_event_type {
 	PERFCOUNTER_STOP = 24,
 	VS_FETCH_DONE = 27,
 	FACENESS_FLUSH = 28,
+	UNK_1C = 28,
+	UNK_1D = 29,
+	BLIT = 30,
 };
 
 enum pc_di_primtype {
@@ -84,7 +87,6 @@ enum pc_di_primtype {
 	DI_PT_LINESTRIP_ADJ = 11,
 	DI_PT_TRI_ADJ = 12,
 	DI_PT_TRISTRIP_ADJ = 13,
-	DI_PT_PATCHES = 34,
 };
 
 enum pc_di_src_sel {
@@ -185,13 +187,22 @@ enum adreno_pm4_type3_packets {
 	CP_WAIT_MEM_WRITES = 18,
 	CP_COND_REG_EXEC = 71,
 	CP_MEM_TO_REG = 66,
-	CP_DISPATCH_COMPUTE = 51,
+	CP_EXEC_CS = 51,
+	CP_PERFCOUNTER_ACTION = 80,
 	CP_SMMU_TABLE_UPDATE = 83,
+	CP_CONTEXT_REG_BUNCH = 92,
 	CP_YIELD_ENABLE = 28,
+	CP_SKIP_IB2_ENABLE_GLOBAL = 29,
+	CP_SKIP_IB2_ENABLE_LOCAL = 35,
+	CP_SET_SUBDRAW_SIZE = 53,
+	CP_SET_VISIBILITY_OVERRIDE = 100,
 	CP_PREEMPT_ENABLE_GLOBAL = 105,
 	CP_PREEMPT_ENABLE_LOCAL = 106,
 	CP_CONTEXT_SWITCH_YIELD = 107,
 	CP_SET_RENDER_MODE = 108,
+	CP_COMPUTE_CHECKPOINT = 110,
+	CP_MEM_TO_MEM = 115,
+	CP_BLIT = 44,
 	IN_IB_PREFETCH_END = 23,
 	IN_SUBBLK_PREFETCH = 31,
 	IN_INSTR_PREFETCH = 32,
@@ -271,6 +282,14 @@ static inline uint32_t CP_LOAD_STATE_1_STATE_TYPE(enum adreno_state_type val)
 static inline uint32_t CP_LOAD_STATE_1_EXT_SRC_ADDR(uint32_t val)
 {
 	return ((val >> 2) << CP_LOAD_STATE_1_EXT_SRC_ADDR__SHIFT) & CP_LOAD_STATE_1_EXT_SRC_ADDR__MASK;
+}
+
+#define REG_CP_LOAD_STATE_2					0x00000002
+#define CP_LOAD_STATE_2_EXT_SRC_ADDR_HI__MASK			0xffffffff
+#define CP_LOAD_STATE_2_EXT_SRC_ADDR_HI__SHIFT			0
+static inline uint32_t CP_LOAD_STATE_2_EXT_SRC_ADDR_HI(uint32_t val)
+{
+	return ((val) << CP_LOAD_STATE_2_EXT_SRC_ADDR_HI__SHIFT) & CP_LOAD_STATE_2_EXT_SRC_ADDR_HI__MASK;
 }
 
 #define REG_CP_DRAW_INDX_0					0x00000000
@@ -553,7 +572,39 @@ static inline uint32_t CP_REG_TO_MEM_1_DEST(uint32_t val)
 	return ((val) << CP_REG_TO_MEM_1_DEST__SHIFT) & CP_REG_TO_MEM_1_DEST__MASK;
 }
 
+#define REG_CP_DISPATCH_COMPUTE_0				0x00000000
+
+#define REG_CP_DISPATCH_COMPUTE_1				0x00000001
+#define CP_DISPATCH_COMPUTE_1_X__MASK				0xffffffff
+#define CP_DISPATCH_COMPUTE_1_X__SHIFT				0
+static inline uint32_t CP_DISPATCH_COMPUTE_1_X(uint32_t val)
+{
+	return ((val) << CP_DISPATCH_COMPUTE_1_X__SHIFT) & CP_DISPATCH_COMPUTE_1_X__MASK;
+}
+
+#define REG_CP_DISPATCH_COMPUTE_2				0x00000002
+#define CP_DISPATCH_COMPUTE_2_Y__MASK				0xffffffff
+#define CP_DISPATCH_COMPUTE_2_Y__SHIFT				0
+static inline uint32_t CP_DISPATCH_COMPUTE_2_Y(uint32_t val)
+{
+	return ((val) << CP_DISPATCH_COMPUTE_2_Y__SHIFT) & CP_DISPATCH_COMPUTE_2_Y__MASK;
+}
+
+#define REG_CP_DISPATCH_COMPUTE_3				0x00000003
+#define CP_DISPATCH_COMPUTE_3_Z__MASK				0xffffffff
+#define CP_DISPATCH_COMPUTE_3_Z__SHIFT				0
+static inline uint32_t CP_DISPATCH_COMPUTE_3_Z(uint32_t val)
+{
+	return ((val) << CP_DISPATCH_COMPUTE_3_Z__SHIFT) & CP_DISPATCH_COMPUTE_3_Z__MASK;
+}
+
 #define REG_CP_SET_RENDER_MODE_0				0x00000000
+#define CP_SET_RENDER_MODE_0_MODE__MASK				0x000001ff
+#define CP_SET_RENDER_MODE_0_MODE__SHIFT			0
+static inline uint32_t CP_SET_RENDER_MODE_0_MODE(uint32_t val)
+{
+	return ((val) << CP_SET_RENDER_MODE_0_MODE__SHIFT) & CP_SET_RENDER_MODE_0_MODE__MASK;
+}
 
 #define REG_CP_SET_RENDER_MODE_1				0x00000001
 #define CP_SET_RENDER_MODE_1_ADDR_0_LO__MASK			0xffffffff
@@ -599,6 +650,50 @@ static inline uint32_t CP_SET_RENDER_MODE_7_ADDR_1_HI(uint32_t val)
 {
 	return ((val) << CP_SET_RENDER_MODE_7_ADDR_1_HI__SHIFT) & CP_SET_RENDER_MODE_7_ADDR_1_HI__MASK;
 }
+
+#define REG_CP_PERFCOUNTER_ACTION_0				0x00000000
+
+#define REG_CP_PERFCOUNTER_ACTION_1				0x00000001
+#define CP_PERFCOUNTER_ACTION_1_ADDR_0_LO__MASK			0xffffffff
+#define CP_PERFCOUNTER_ACTION_1_ADDR_0_LO__SHIFT		0
+static inline uint32_t CP_PERFCOUNTER_ACTION_1_ADDR_0_LO(uint32_t val)
+{
+	return ((val) << CP_PERFCOUNTER_ACTION_1_ADDR_0_LO__SHIFT) & CP_PERFCOUNTER_ACTION_1_ADDR_0_LO__MASK;
+}
+
+#define REG_CP_PERFCOUNTER_ACTION_2				0x00000002
+#define CP_PERFCOUNTER_ACTION_2_ADDR_0_HI__MASK			0xffffffff
+#define CP_PERFCOUNTER_ACTION_2_ADDR_0_HI__SHIFT		0
+static inline uint32_t CP_PERFCOUNTER_ACTION_2_ADDR_0_HI(uint32_t val)
+{
+	return ((val) << CP_PERFCOUNTER_ACTION_2_ADDR_0_HI__SHIFT) & CP_PERFCOUNTER_ACTION_2_ADDR_0_HI__MASK;
+}
+
+#define REG_CP_EVENT_WRITE_0					0x00000000
+#define CP_EVENT_WRITE_0_EVENT__MASK				0x000000ff
+#define CP_EVENT_WRITE_0_EVENT__SHIFT				0
+static inline uint32_t CP_EVENT_WRITE_0_EVENT(enum vgt_event_type val)
+{
+	return ((val) << CP_EVENT_WRITE_0_EVENT__SHIFT) & CP_EVENT_WRITE_0_EVENT__MASK;
+}
+
+#define REG_CP_EVENT_WRITE_1					0x00000001
+#define CP_EVENT_WRITE_1_ADDR_0_LO__MASK			0xffffffff
+#define CP_EVENT_WRITE_1_ADDR_0_LO__SHIFT			0
+static inline uint32_t CP_EVENT_WRITE_1_ADDR_0_LO(uint32_t val)
+{
+	return ((val) << CP_EVENT_WRITE_1_ADDR_0_LO__SHIFT) & CP_EVENT_WRITE_1_ADDR_0_LO__MASK;
+}
+
+#define REG_CP_EVENT_WRITE_2					0x00000002
+#define CP_EVENT_WRITE_2_ADDR_0_HI__MASK			0xffffffff
+#define CP_EVENT_WRITE_2_ADDR_0_HI__SHIFT			0
+static inline uint32_t CP_EVENT_WRITE_2_ADDR_0_HI(uint32_t val)
+{
+	return ((val) << CP_EVENT_WRITE_2_ADDR_0_HI__SHIFT) & CP_EVENT_WRITE_2_ADDR_0_HI__MASK;
+}
+
+#define REG_CP_EVENT_WRITE_3					0x00000003
 
 
 #endif /* ADRENO_PM4_XML */
