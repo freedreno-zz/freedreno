@@ -82,6 +82,7 @@ static int ib;
 
 static int draw_filter;
 static int draw_count;
+static int current_draw_count;
 
 /* query mode.. to handle symbolic register name queries, we need to
  * defer parsing query string until after gpu_id is know and rnn db
@@ -95,7 +96,7 @@ static char *script;
 
 static bool quiet(int lvl)
 {
-	if ((draw_filter != -1) && (draw_filter != draw_count))
+	if ((draw_filter != -1) && (draw_filter != current_draw_count))
 		return true;
 	if ((lvl >= 3) && (summary || querystrs || script))
 		return true;
@@ -1954,6 +1955,8 @@ static void dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
 	draws[ib] = 0;
 
 	while (dwords_left > 0) {
+
+		current_draw_count = draw_count;
 
 		/* hack, this looks like a -1 underflow, in some versions
 		 * when it tries to write zero registers via pkt0
