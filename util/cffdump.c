@@ -1222,13 +1222,16 @@ static void cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 					dump_domain(texconst, 8, level+2, "A4XX_TEX_CONST");
 					if (dump_textures) {
 						uint32_t addr = texconst[4] & ~0x1f;
-						printf("base=%08x\n", gpubaseaddr(addr));
-						dump_hex(hostptr(addr), hostlen(addr)/4, level-2);
+						dump_gpuaddr(addr, level-2);
 					}
 					dump_hex(texconst, 8, level+1);
 					texconst += 8;
 				} else if ((500 <= gpu_id) && (gpu_id < 600)) {
 					dump_domain(texconst, 12, level+2, "A5XX_TEX_CONST");
+					if (dump_textures) {
+						uint64_t addr = (((uint64_t)texconst[5] & 0x1ffff) << 32) | texconst[4];
+						dump_gpuaddr(addr, level-2);
+					}
 					dump_hex(texconst, 12, level+1);
 					texconst += 12;
 				}
