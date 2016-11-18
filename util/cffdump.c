@@ -1828,6 +1828,18 @@ static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 	mode = dwords[3];
 }
 
+static void cp_blit(uint32_t *dwords, uint32_t sizedwords, int level)
+{
+	bool saved_summary = summary;
+	summary = false;
+
+	do_query("2DBLIT", 0);
+	dump_register_summary(level);
+
+	draw_count++;
+	summary = saved_summary;
+}
+
 #define CP(x, fxn)   [CP_ ## x] = { fxn }
 static const struct {
 	void (*fxn)(uint32_t *dwords, uint32_t sizedwords, int level);
@@ -1890,6 +1902,7 @@ static const struct {
 
 		/* for a5xx */
 		CP(SET_RENDER_MODE, cp_set_render_mode),
+		CP(BLIT, cp_blit),
 };
 
 
