@@ -105,7 +105,7 @@ static GLubyte *tex(GLubyte *fill)
 ///
 // Create a simple cubemap with a 1x1 face with a different
 // color for each face
-static GLuint CreateSimpleTextureCubemap(int cube, int w, int h)
+static GLuint CreateSimpleTextureCubemap(int cube, GLenum fmt, int w, int h)
 {
    GLuint textureId;
    // Six 1x1 RGB faces
@@ -134,31 +134,31 @@ static GLuint CreateSimpleTextureCubemap(int cube, int w, int h)
 
    if (cube) {
    // Load the cube face - Positive X
-   glTexImage2D ( GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[0]) );
+   glTexImage2D ( GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[0]) );
 
    // Load the cube face - Negative X
-   glTexImage2D ( GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[1]) );
+   glTexImage2D ( GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[1]) );
 
    // Load the cube face - Positive Y
-   glTexImage2D ( GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[2]) );
+   glTexImage2D ( GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[2]) );
 
    // Load the cube face - Negative Y
-   glTexImage2D ( GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[3]) );
+   glTexImage2D ( GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[3]) );
 
    // Load the cube face - Positive Z
-   glTexImage2D ( GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[4]) );
+   glTexImage2D ( GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[4]) );
 
    // Load the cube face - Negative Z
-   glTexImage2D ( GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[5]) );
+   glTexImage2D ( GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[5]) );
    } else {
-   glTexImage2D ( GL_TEXTURE_2D, 0, GL_RGB, w, h, 0,
-                  GL_RGB, GL_UNSIGNED_BYTE, tex(cubePixels[0]) );
+   glTexImage2D ( GL_TEXTURE_2D, 0, fmt, w, h, 0,
+                  fmt, GL_UNSIGNED_BYTE, tex(cubePixels[0]) );
    }
 
    // Set the filtering mode
@@ -206,9 +206,9 @@ void Draw (int cube)
                     GL_UNSIGNED_INT, indices );
 }
 
-static void test_cubemap(int cube, int w, int h)
+static void test_cubemap(int cube, GLenum fmt, int w, int h)
 {
-	RD_START("cubemap", "cube=%d, %dx%d", cube, w, h);
+	RD_START("cubemap", "cube=%d, %s %dx%d", cube, formatname(fmt), w, h);
 
 	display = get_display();
 
@@ -240,7 +240,7 @@ static void test_cubemap(int cube, int w, int h)
 	GCHK(samplerLoc = glGetUniformLocation(programObject, "s_texture"));
 
 	// Load the texture
-	GCHK(textureId = CreateSimpleTextureCubemap(cube, w, h));
+	GCHK(textureId = CreateSimpleTextureCubemap(cube, fmt, w, h));
 
 	// Generate the vertex data
 	numIndices = esGenSphere(20, 0.75f, &vertices, &normals, NULL, &indices);
@@ -248,6 +248,10 @@ static void test_cubemap(int cube, int w, int h)
 	GCHK(glClearColor(0.0f, 0.0f, 0.0f, 0.0f));
 
 	GCHK(Draw(cube));
+
+	GLubyte cubePixels[3] = {6,6,6};
+	GCHK(glTexSubImage2D (GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0, 1, 2, w - 1, h - 2,
+			fmt, GL_UNSIGNED_BYTE, tex(cubePixels)));
 
 	ECHK(eglSwapBuffers(display, surface));
 	GCHK(glFlush());
@@ -267,13 +271,14 @@ static void test_cubemap(int cube, int w, int h)
 int main(int argc, char *argv[])
 {
 	TEST_START();
-	TEST(test_cubemap(0, 1, 1));
-	TEST(test_cubemap(1, 1, 1));
-	TEST(test_cubemap(1, 4, 4));
-	TEST(test_cubemap(1, 40, 40));
-	TEST(test_cubemap(1, 256, 256));
-	TEST(test_cubemap(1, 512, 512));
-	TEST(test_cubemap(1, 1024, 1024));
+	TEST(test_cubemap(0, GL_RGB,   4, 4));
+	TEST(test_cubemap(1, GL_RGB,   4, 4));
+	TEST(test_cubemap(1, GL_RGBA,  40, 40));
+	TEST(test_cubemap(1, GL_ALPHA, 40, 40));
+	TEST(test_cubemap(1, GL_RGB,   40, 40));
+	TEST(test_cubemap(1, GL_RGB,   256, 256));
+	TEST(test_cubemap(1, GL_RGB,   512, 512));
+	TEST(test_cubemap(1, GL_RGB,   1024, 1024));
 	TEST_END();
 	return 0;
 }
