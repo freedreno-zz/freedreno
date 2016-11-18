@@ -1013,6 +1013,7 @@ static void dump_domain(uint32_t *dwords, uint32_t sizedwords, int level,
 
 static uint32_t bin_x1, bin_x2, bin_y1, bin_y2;
 static unsigned mode;
+static unsigned render_mode;
 
 /* well, actually query and script..
  * NOTE: call this before dump_register_summary()
@@ -1775,10 +1776,15 @@ static void cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 	 * 70ec0008 00000001 001c0000 00000000 00000000 00000003 0000000d 001c2000 00000000
 	 *
 	 */
-	assert(sizedwords == 8);
+
 	assert(gpu_id >= 500);
 
-	len = dwords[0];
+	render_mode = dwords[0];
+
+	if (sizedwords == 1)
+		return;
+
+	assert(sizedwords == 8);
 	addr = dwords[1];
 	addr |= ((uint64_t)dwords[2]) << 32;
 
